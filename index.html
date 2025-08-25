@@ -1,0 +1,129 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Expiring Supplies – GC EMS</title>
+<style>
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:#f7f7f7}
+  .wrap{max-width:1100px;margin:0 auto;padding:16px}
+  .card{background:#fff;border:1px solid #ddd;border-radius:12px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+  h1{margin:0 0 8px}
+  .muted{color:#666;font-size:.9rem}
+  .toggle{margin:12px 0}
+  .chip{display:inline-block;padding:4px 8px;border:1px solid #ddd;border-radius:999px;background:#fafafa;cursor:pointer;margin-right:8px}
+  .pill{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid #ddd}
+  .red{background:#ffebee} .orange{background:#fff3e0} .yellow{background:#fffde7} .tan{background:#f7f2e7}
+  table{width:100%;border-collapse:collapse;margin-top:8px}
+  th,td{padding:8px;border-bottom:1px solid #eee;text-align:left}
+  h2{margin:18px 0 6px}
+  .unit-block{margin-top:18px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <h1>Expiring Supplies</h1>
+    <div class="muted">Yellow ≤60d, Orange ≤30d, Red expired. Data live from Google Sheets.</div>
+    <div class="toggle">
+      <span class="chip" data-view="unit">By Unit (default)</span>
+      <span class="chip" data-view="item">All Items (sorted by Item)</span>
+    </div>
+    <div id="content"></div>
+  </div>
+</div>
+
+<script>
+/*** CONFIG: replace these values ***/
+const CSV_INVENTORY = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTsY8xyyVE4V7e39KHEB5Y5fg64JGK7Aslg6s7dF8-QfpM8myyR1henDuhzyorR8pjPjcj5aJJY9Q3T/pubhtml?gid=0&single=true';
+const UPDATE_PAGE   = 'update.html'; // relative path in the same repo
+const UNITS = ["31","36","37","33","35","38","39","847","Fire Command","Fire Trucks"];
+
+let head=[], rows=[];
+const idx = n => head.indexOf(n);
+function parseCSV(text){
+  return text.trim().split(/\r?\n/).map(line=>{
+    const m = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || [];
+    return m.map(s=>s.replace(/^"|"$/g,''));
+  });
+}
+function statusClass(s){ return s==='Expired'?'red':(s==='30d'?'orange':(s==='60d'?'yellow':(s==='90d'?'tan':''))); }
+
+function renderUnitView(){
+  const cont = document.getElementById('content');
+  let html = '';
+  for (const u of UNITS) {
+    const list = rows.filter(r=>String(r[idx('Unit')])===u && ['Expired','30d','60d','90d'].includes(r[idx('Status')]));
+    if (!list.length) continue;
+    // sort by Compartment then DaysToExpire asc
+    list.sort((a,b)=> (a[idx('Compartment')]||'').localeCompare(b[idx('Compartment')]||'') || (+a[idx('DaysToExpire')]||9999) - (+b[idx('DaysToExpire')]||9999));
+    html += `<div class="unit-block"><h2>${u}</h2>
+      <table><thead><tr><th>Item</th><th>Compartment</th><th>Lot</th><th>Qty</th><th>Expiry</th><th>Days</th><th>Status</th><th>Action</th></tr></thead><tbody>`;
+    html += list.map(r=>{
+      const cls = statusClass(r[idx('Status')]);
+      const rn = r[idx('RowNumber')] || '';
+      const link = `${UPDATE_PAGE}?unit=${encodeURIComponent(u)}&item=${encodeURIComponent(r[idx('ItemName')]||'')}`;
+      return `<tr class="${cls}">
+        <td>${r[idx('ItemName')]||''}</td>
+        <td>${r[idx('Compartment')]||''}</td>
+        <td>${r[idx('Lot')]||''}</td>
+        <td>${r[idx('Qty')]||''}</td>
+        <td>${r[idx('Expiry')]||''}</td>
+        <td>${r[idx('DaysToExpire')]||''}</td>
+        <td><span class="pill">${r[idx('Status')]||''}</span></td>
+        <td><a href="${link}">Update</a></td>
+      </tr>`;
+    }).join('');
+    html += `</tbody></table></div>`;
+  }
+  cont.innerHTML = html || '<div class="muted">No items expiring soon 🎉</div>';
+}
+
+function renderItemView(){
+  const cont = document.getElementById('content');
+  const list = rows.filter(r=>['Expired','30d','60d','90d'].includes(r[idx('Status')]));
+  list.sort((a,b)=> (a[idx('ItemName')]||'').localeCompare(b[idx('ItemName')]||'') || (+a[idx('DaysToExpire')]||9999) - (+b[idx('DaysToExpire')]||9999));
+  const html = `<table>
+    <thead><tr><th>Item</th><th>Unit</th><th>Compartment</th><th>Lot</th><th>Qty</th><th>Expiry</th><th>Days</th><th>Status</th><th>Action</th></tr></thead>
+    <tbody>${
+      list.map(r=>{
+        const cls = statusClass(r[idx('Status')]);
+        const link = `${UPDATE_PAGE}?unit=${encodeURIComponent(r[idx('Unit')]||'')}&item=${encodeURIComponent(r[idx('ItemName')]||'')}`;
+        return `<tr class="${cls}">
+          <td>${r[idx('ItemName')]||''}</td>
+          <td>${r[idx('Unit')]||''}</td>
+          <td>${r[idx('Compartment')]||''}</td>
+          <td>${r[idx('Lot')]||''}</td>
+          <td>${r[idx('Qty')]||''}</td>
+          <td>${r[idx('Expiry')]||''}</td>
+          <td>${r[idx('DaysToExpire')]||''}</td>
+          <td><span class="pill">${r[idx('Status')]||''}</span></td>
+          <td><a href="${link}">Update</a></td>
+        </tr>`;
+      }).join('') || '<tr><td colspan="9">No items expiring soon 🎉</td></tr>'
+    }</tbody>
+  </table>`;
+  cont.innerHTML = html;
+}
+
+function boot(){
+  fetch(CSV_INVENTORY).then(r=>r.text()).then(text=>{
+    const all = parseCSV(text);
+    head = all.shift();
+    if (!head.includes('RowNumber')) { head.push('RowNumber'); }
+    rows = all.map((r,i)=> (r.length=head.length-1, r.push(String(i+2)), r));
+    renderUnitView();
+  });
+
+  document.querySelectorAll('.toggle .chip').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const view = btn.dataset.view;
+      if (view==='unit') renderUnitView();
+      else renderItemView();
+    });
+  });
+}
+boot();
+</script>
+</body>
+</html>
