@@ -133,12 +133,24 @@ const TOKEN        = '9mB4zR7kP2fW6vNqE1jH8aLcV5gT_sYx0uI-oZ3pD9bX4wK7eS6hF-EMS'
 let catHead=[], catRows=[], vendors=[], vpHead=[], vpRows=[];
 
 function parseCSV(text){
-  return text.trim().split(/\r?\n/).map(line=>{
+  // strip BOM, trim, drop empty lines
+  const clean = (text || '').replace(/^\uFEFF/, '').trim();
+  if (!clean) return [];
+  const lines = clean.split(/\r?\n/).filter(l => l.trim() !== '');
+  return lines.map(line => {
     const m = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || [];
-    return m.map(s=>s.replace(/^"|"$/g,''));
+    return m.map(s => s.replace(/^"|"$/g,''));
   });
 }
-function toObj(head, row){ const o={}; head.forEach((h,i)=>o[h]=row[i]||''); return o; }
+
+function toObj(head, row){
+  const o = {};
+  for (let i=0; i<head.length; i++) {
+    o[head[i]] = (row && row[i] != null) ? row[i] : '';
+  }
+  return o;
+}
+
 function objToTable(tbody, rows, cols, rowClick){
   tbody.innerHTML = rows.map(r=>`<tr>${cols.map(c=>`<td>${r[c]||''}</td>`).join('')}</tr>`).join('') || '<tr><td colspan="'+cols.length+'">No rows</td></tr>';
   if (rowClick) Array.from(tbody.querySelectorAll('tr')).forEach((tr,i)=> tr.addEventListener('click', ()=> rowClick(rows[i])));
@@ -165,41 +177,59 @@ async function boot(){
   renderCatalog();
 }
 function renderCatalog(){
-  const q = (document.getElementById('catSearch').value||'').toLowerCase();
-  const rows = catRows.filter(r=> r.ItemName.toLowerCase().includes(q) || r.ItemID.toLowerCase().includes(q));
+  const q = (document.getElementById('catSearch').value || '').toLowerCase();
+
+  // guard against missing keys/blank rows
+  const rows = catRows.filter(r => {
+    if (!r || typeof r !== 'object') return false;
+    const name = (r.ItemName || '').toString().toLowerCase();
+    const id   = (r.ItemID   || '').toString().toLowerCase();
+    // keep rows that have *either* id or name
+    if (!name && !id) return false;
+    return !q || name.includes(q) || id.includes(q);
+  });
+
   document.getElementById('catCounts').textContent = `${rows.length} items (of ${catRows.length})`;
-  objToTable(document.querySelector('#catTable tbody'), rows, ['ItemID','ItemName','Category','DefaultUnitOfIssue','MinPAR','Notes'], (r)=>{
-    // load into editor
-    document.getElementById('cItemID').value = r.ItemID;
-    document.getElementById('cItemName').value = r.ItemName;
-    document.getElementById('cCategory').value = r.Category||'';
-    document.getElementById('cUOI').value = r.DefaultUnitOfIssue||'';
-    document.getElementById('cMinPAR').value = r.MinPAR||'';
-    document.getElementById('cNotes').value = r.Notes||'';
-    // also prefill pricing tab item
-    document.getElementById('pItemID').value = r.ItemID;
-    document.getElementById('pItemSearch').value = r.ItemName;
-    renderPricesFor(r.ItemID);
-  });
+
+  objToTable(
+    document.querySelector('#catTable tbody'),
+    rows,
+    ['ItemID','ItemName','Category','DefaultUnitOfIssue','MinPAR','Notes'],
+    (r) => {
+      document.getElementById('cItemID').value   = r.ItemID || '';
+      document.getElementById('cItemName').value = r.ItemName || '';
+      document.getElementById('cCategory').value = r.Category || '';
+      document.getElementById('cUOI').value      = r.DefaultUnitOfIssue || '';
+      document.getElementById('cMinPAR').value   = r.MinPAR || '';
+      document.getElementById('cNotes').value    = r.Notes || '';
+
+      // prefill pricing tab
+      document.getElementById('pItemID').value     = r.ItemID || '';
+      document.getElementById('pItemSearch').value = r.ItemName || '';
+      renderPricesFor(r.ItemID || '');
+    }
+  );
 }
+
 function renderPricesFor(itemId){
-  const rows = vpRows.filter(r=>r.ItemID===itemId);
-  // mark cheapest
+  const rows = vpRows.filter(r => r && r.ItemID === itemId);
+
   let cheapest = null, min = Infinity;
-  rows.forEach(r=> {
-    const n = Number(r.UnitPrice||'');
-    if (!isNaN(n) && n<min){ min=n; cheapest=r; }
+  rows.forEach(r => {
+    const n = Number(r && r.UnitPrice || '');
+    if (!isNaN(n) && n < min){ min = n; cheapest = r; }
   });
+
   const tbody = document.querySelector('#pTable tbody');
   tbody.innerHTML = rows.map(r=>{
-    const isCheapest = cheapest && r===cheapest;
+    const isCheapest = cheapest && r === cheapest;
     return `<tr>
-      <td>${r.VendorID}</td>
-      <td>${r.VendorItemNumber||''}</td>
-      <td>${r.PackSize||''}</td>
-      <td>${r.UnitPrice||''} ${isCheapest?'<span class="pill">cheapest</span>':''}</td>
-      <td>${r.LastChecked||''}</td>
-      <td>${String(r.Preferred||'')}</td>
+      <td>${r.VendorID || ''}</td>
+      <td>${r.VendorItemNumber || ''}</td>
+      <td>${r.PackSize || ''}</td>
+      <td>${r.UnitPrice || ''} ${isCheapest ? '<span class="pill">cheapest</span>' : ''}</td>
+      <td>${r.LastChecked || ''}</td>
+      <td>${String(r.Preferred || '')}</td>
     </tr>`;
   }).join('') || '<tr><td colspan="6">No vendor prices yet</td></tr>';
 }
