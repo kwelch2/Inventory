@@ -1,0 +1,334 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Expiring Supplies – GC EMS</title>
+<style>
+  :root{--bg:#f7f7f7;--card:#fff;--b:#ddd;--muted:#666}
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:var(--bg)}
+  .wrap{max-width:1100px;margin:0 auto;padding:16px}
+  .card{background:var(--card);border:1px solid var(--b);border-radius:12px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+  h1{margin:0 0 8px}
+  .muted{color:var(--muted);font-size:.9rem}
+  .toolbar{display:flex;gap:10px;align-items:center;margin-top:8px;flex-wrap:wrap}
+  select{padding:8px;border:1px solid #ccc;border-radius:8px}
+  a.btn,button.btn{padding:6px 10px;border:1px solid #ccc;border-radius:8px;text-decoration:none;background:#fafafa;cursor:pointer}
+  table{width:100%;border-collapse:collapse;margin-top:8px}
+  th,td{padding:8px;border-bottom:1px solid #eee;text-align:left;vertical-align:middle}
+  h2{margin:18px 0 6px}
+  .unit-block{margin-top:18px}
+  .pill{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid var(--b)}
+  .red{background:#ffebee} .orange{background:#fff3e0} .yellow{background:#fffde7} .tan{background:#f7f2e7}
+  .rowbtns{display:flex;gap:6px;flex-wrap:wrap}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <h1>Expiring Supplies</h1>
+    <div class="muted">Yellow ≤60d, Orange ≤30d, Red expired. (Item names from Catalog; expiries/status from Inventory.)</div>
+
+    <div class="toolbar">
+      <label class="muted">Unit</label>
+      <select id="unitSel"></select>
+
+      <label class="muted">Sort</label>
+      <select id="sortSel">
+        <option value="date">By Expiry Date</option>
+        <option value="item">By Item</option>
+      </select>
+
+      <details>
+        <summary class="muted">Advanced</summary>
+        <div style="margin-top:6px">
+          <label class="muted">Show within</label>
+          <select id="rangeSel">
+            <option value="90">90 days</option>
+            <option value="60">60 days</option>
+            <option value="30">30 days</option>
+          </select>
+        </div>
+      </details>
+
+      <span style="flex:1"></span>
+      <a class="btn" id="viewUnit">By Unit</a>
+      <a class="btn" id="viewAll">All Items</a>
+    </div>
+
+    <div id="content" style="margin-top:8px"></div>
+  </div>
+</div>
+
+<script>
+/*** CONFIG — replace these ***/
+// Inventory: InventoryID, ItemID, Unit, Compartment, Lot, Qty, Expiry, DaysToExpire, Status, Notes, (CrewStatus optional)  :contentReference[oaicite:5]{index=5}
+const CSV_INVENTORY = 'https://docs.google.com/spreadsheets/d/e/XXXX/pub?gid=0&single=true&output=csv';
+// Catalog: ItemID, ItemName, …                                                                                           :contentReference[oaicite:6]{index=6}
+const CSV_CATALOG   = 'https://docs.google.com/spreadsheets/d/e/XXXX/pub?gid=1603897332&single=true&output=csv';
+// Apps Script Web App endpoint + token (matches your script)                                                             
+const WEBAPP_URL    = 'https://script.google.com/macros/s/XXXXXXXX/exec';
+const TOKEN         = 'YOUR-TOKEN-HERE';
+/*** end config ***/
+
+let invHead=[], invRows=[], catHead=[], catRows=[];
+const idx = (h,name) => h.indexOf(name);
+
+function parseCSV(text){
+  const clean = (text||'').replace(/^\uFEFF/,'').trim();
+  if (!clean) return [];
+  return clean.split(/\r?\n/).map(line=>{
+    const m = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || [];
+    return m.map(s=>s.replace(/^"|"$/g,''));
+  });
+}
+function statusClass(s){
+  return s==='Expired' ? 'red' :
+         s==='30d'     ? 'orange' :
+         s==='60d'     ? 'yellow' :
+         s==='90d'     ? 'tan' : '';
+}
+// Stored first-of-next-month → display MM/YYYY (package label month)
+function displayMonthYear(iso){
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d)) return String(iso);
+  d.setMonth(d.getMonth()-1);
+  return String(d.getMonth()+1).padStart(2,'0') + '/' + d.getFullYear();
+}
+function getCrewStatus(h, row){
+  const i = idx(h,'CrewStatus');
+  return i >= 0 ? String(row[i]||'').trim() : '';
+}
+// Build 3 chips: current month label + next 2. Each chip carries ISO = first day of next month.
+function next3MonthChips(){
+  const out = [];
+  const now = new Date(); // Boise users' local time is fine
+  for (let k=0; k<3; k++){
+    const d = new Date(now.getFullYear(), now.getMonth()+k, 1);
+    const label = String(d.getMonth()+1).padStart(2,'0') + '/' + d.getFullYear(); // MM/YYYY
+    // store first-of-next-month
+    const iso = new Date(d.getFullYear(), d.getMonth()+1, 1).toISOString().slice(0,10);
+    out.push({label, iso});
+  }
+  return out;
+}
+
+// Parse user-entered month label like "Sep-2025", "9/25", "09/2025" -> first day of *next* month
+function monthLabelToNextISO(input){
+  if (!input) return '';
+  const t = String(input).trim();
+  // Try MM/YYYY or M/YY, M-YYYY, etc
+  let m = t.match(/^(\d{1,2})\s*[-/]\s*(\d{2,4})$/);
+  if (m){
+    let mm = +m[1], yy = +m[2];
+    if (yy < 100) yy += 2000;
+    return new Date(yy, mm, 1).toISOString().slice(0,10); // first of *next* month
+  }
+  // Try Mon-YYYY
+  const map = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,sept:8,oct:9,nov:10,dec:11};
+  m = t.toLowerCase().match(/^([a-z]{3,5})\s*[-/ ]\s*(\d{2,4})$/);
+  if (m && map.hasOwnProperty(m[1])){
+    let yy = +m[2]; if (yy < 100) yy += 2000;
+    const mm = map[m[1]];
+    return new Date(yy, mm+1, 1).toISOString().slice(0,10);
+  }
+  return '';
+}
+
+function uniqueUnits(h, rows){
+  const u = idx(h,'Unit');
+  return Array.from(new Set(rows.map(r=>r[u]).filter(Boolean))).sort((a,b)=>{
+    const na = Number(a), nb = Number(b);
+    if (!isNaN(na) && !isNaN(nb)) return na-nb;
+    return String(a).localeCompare(String(b));
+  });
+}
+function fillUnitSelect(){
+  const sel = document.getElementById('unitSel');
+  const units = uniqueUnits(invHead, invRows);
+  sel.innerHTML = units.map(u=>`<option value="${u}">${u}</option>`).join('');
+  if (!sel.value && units.length) sel.value = units[0];
+}
+async function postUpdate({itemId, unit, compartment, lot, crewStatus, qty, expiry, notes}){
+  // expiry (optional) must be YYYY-MM-DD (first of NEXT month) if you send it
+  try{
+    await fetch(WEBAPP_URL, {
+      method:'POST', mode:'no-cors',
+      body: JSON.stringify({
+        token: TOKEN,
+        actionType: 'updateInventory',
+        itemId, unit, compartment, lot,
+        qty, expiry,
+        crewStatus,                 // 'Pending' | 'Replaced' | 'Good'
+        action: 'Update',           // appears in ActivityLog
+        notes
+      })
+    });
+  }catch(_){}
+}
+
+function render(view='unit'){
+  const within = Number(document.getElementById('rangeSel').value || '90');
+  const sortBy = document.getElementById('sortSel').value || 'date';
+  const unit   = document.getElementById('unitSel').value;
+
+  // ItemID → ItemName
+  const idCol = idx(catHead,'ItemID'), nmCol = idx(catHead,'ItemName');
+  const nameById = new Map(catRows.map(r => [r[idCol], r[nmCol]]));
+
+  // Filter to needs-attention
+  const H = invHead;
+  const keep = new Set(['Expired','30d','60d','90d']); // window logic uses Status + DaysToExpire
+  let list = invRows.filter(r=>{
+    const crew = getCrewStatus(H, r).toLowerCase(); // '', 'pending','replaced','good'
+    const stat = String(r[idx(H,'Status')]);
+    const dte  = Number(r[idx(H,'DaysToExpire')] || '');
+    const isPending = crew === 'pending';
+    const isCleared = crew === 'replaced' || crew === 'good';
+    const inWindow  = keep.has(stat) && !isNaN(dte) && dte <= within;
+    if (isCleared) return false;
+    return inWindow || isPending;
+  });
+
+  // Sort
+  if (sortBy === 'item'){
+    list.sort((a,b)=>{
+      const aName = nameById.get(a[idx(H,'ItemID')]) || '';
+      const bName = nameById.get(b[idx(H,'ItemID')]) || '';
+      return aName.localeCompare(bName) || (+a[idx(H,'DaysToExpire')]||9999) - (+b[idx(H,'DaysToExpire')]||9999);
+    });
+  } else {
+    list.sort((a,b)=>{
+      const ad = new Date(a[idx(H,'Expiry')]||'2099-12-31');
+      const bd = new Date(b[idx(H,'Expiry')]||'2099-12-31');
+      const t = ad - bd;
+      if (t) return t;
+      return (a[idx(H,'Compartment')]||'').localeCompare(b[idx(H,'Compartment')]||'');
+    });
+  }
+
+  const cont = document.getElementById('content');
+  const byUnit = view==='unit' ? list.filter(r => String(r[idx(H,'Unit')]) === unit) : list;
+
+  const table = `
+    <table>
+      <thead><tr>
+        <th>Item</th>${view==='all'?'<th>Unit</th>':''}
+        <th>Compartment</th><th>Lot</th><th>Qty</th>
+        <th>Expiry</th><th>Days</th><th>Status</th><th>Update</th>
+      </tr></thead>
+      <tbody>
+        ${byUnit.map(r=>{
+          const cls = statusClass(r[idx(H,'Status')]);
+          const itemId = r[idx(H,'ItemID')] || '';
+          const itemName = nameById.get(itemId) || itemId;
+          const u = r[idx(H,'Unit')] || '';
+          const comp = r[idx(H,'Compartment')] || '';
+          const lot  = r[idx(H,'Lot')] || '';
+          const qty  = r[idx(H,'Qty')] || '';
+          const exp  = displayMonthYear(r[idx(H,'Expiry')]||'');
+          const days = r[idx(H,'DaysToExpire')] || '';
+          const badge = getCrewStatus(H,r) || r[idx(H,'Status')] || '';
+          return `<tr class="${cls}">
+            <td>${itemName}</td>
+            ${view==='all'?`<td>${u}</td>`:''}
+            <td>${comp}</td>
+            <td>${lot}</td>
+            <td>${qty}</td>
+            <td>${exp}</td>
+            <td>${days}</td>
+            <td><span class="pill">${badge}</span></td>
+            <td>
+              <div class="rowbtns">
+                <button class="btn" data-act="Pending"  data-item="${itemId}" data-unit="${u||unit}" data-comp="${comp}" data-lot="${lot}">Pending</button>
+                <button class="btn" data-act="Replaced" data-item="${itemId}" data-unit="${u||unit}" data-comp="${comp}" data-lot="${lot}">Replaced</button>
+                <button class="btn" data-act="Good"     data-item="${itemId}" data-unit="${u||unit}" data-comp="${comp}" data-lot="${lot}">Good</button>
+              </div>
+            </td>
+            <td>
+              <div class="rowbtns" style="margin-bottom:6px">
+                <button class="btn" data-act="Pending"  data-item="${itemId}" data-unit="${u||unit}" data-comp="${comp}" data-lot="${lot}">Pending</button>
+                <button class="btn" data-act="Replaced" data-item="${itemId}" data-unit="${u||unit}" data-comp="${comp}" data-lot="${lot}">Replaced</button>
+                <button class="btn" data-act="Good"     data-item="${itemId}" data-unit="${u||unit}" data-comp="${comp}" data-lot="${lot}">Good</button>
+              </div>
+              <div class="rowbtns">
+                ${next3MonthChips().map(ch => 
+                  `<button class="btn" data-exp="${ch.iso}" data-item="${itemId}" data-unit="${u||unit}" data-comp="${comp}" data-lot="${lot}">
+                     ${ch.label}
+                   </button>`).join('')}
+                <button class="btn" data-exp="__other__" data-item="${itemId}" data-unit="${u||unit}" data-comp="${comp}" data-lot="${lot}">
+                  Other…
+                </button>
+              </div>
+            </td>
+
+          </tr>`;
+        }).join('') || '<tr><td colspan="'+(view==='all'?9:8)+'">No items need attention 🎉</td></tr>'}
+      </tbody>
+    </table>
+  `;
+
+  cont.innerHTML = view==='unit'
+    ? `<div class="unit-block"><h2>${unit}</h2>${table}</div>`
+    : table;
+
+  // wire buttons
+  cont.querySelectorAll('button[data-act]').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const crewStatus = btn.dataset.act;
+      const itemId     = btn.dataset.item;
+      const unitVal    = btn.dataset.unit;
+      const compartment= btn.dataset.comp || '';
+      const lot        = btn.dataset.lot || '';
+      await postUpdate({ itemId, unit:unitVal, compartment, lot, crewStatus });
+      // Optimistic refresh: hide row immediately
+      render(view);
+    });
+  });
+  // Quick expiry chips
+cont.querySelectorAll('button[data-exp]').forEach(btn=>{
+  btn.addEventListener('click', async ()=>{
+    let iso = btn.dataset.exp;
+    const itemId      = btn.dataset.item;
+    const unitVal     = btn.dataset.unit;
+    const compartment = btn.dataset.comp || '';
+    const lot         = btn.dataset.lot || '';
+
+    if (iso === '__other__') {
+      const input = prompt('Enter expiry as MM/YYYY or Mon-YYYY (e.g., 09/2025 or Sep-2025):');
+      const tryIso = monthLabelToNextISO(input);
+      if (!tryIso) { alert('Could not parse that month/year.'); return; }
+      iso = tryIso;
+    }
+
+    await postUpdate({ itemId, unit:unitVal, compartment, lot, expiry: iso });
+    // Re-render so Days/Status update on next CSV refresh; optimistic clear not needed here
+    render(view);
+  });
+});
+
+}
+
+async function boot(){
+  const [invText, catText] = await Promise.all([
+    fetch(CSV_INVENTORY).then(r=>r.text()),
+    fetch(CSV_CATALOG).then(r=>r.text())
+  ]);
+
+  const invAll = parseCSV(invText); invHead = invAll.shift() || []; invRows = invAll;
+  const catAll = parseCSV(catText); catHead = catAll.shift() || []; catRows = catAll;
+
+  fillUnitSelect();
+  render('unit');
+
+  document.getElementById('viewUnit').addEventListener('click', ()=>render('unit'));
+  document.getElementById('viewAll').addEventListener('click',  ()=>render('all'));
+  document.getElementById('unitSel').addEventListener('change', ()=>render('unit'));
+  document.getElementById('sortSel').addEventListener('change', ()=>render());
+  document.getElementById('rangeSel').addEventListener('change',()=>render());
+}
+boot();
+</script>
+</body>
+</html>
