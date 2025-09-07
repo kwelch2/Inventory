@@ -1,0 +1,162 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Supply Request – GC EMS</title>
+<style>
+  :root{--bg:#f7f7f7;--card:#fff;--b:#ddd;--muted:#666}
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:var(--bg)}
+  .wrap{max-width:960px;margin:0 auto;padding:16px}
+  .card{background:var(--card);border:1px solid var(--b);border-radius:12px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+  h1,h2{margin:0 0 8px}
+  label{display:block;margin:10px 0 6px;font-weight:600}
+  input,button{width:100%;padding:10px;border:1px solid #ccc;border-radius:8px}
+  .muted{color:var(--muted);font-size:.9rem}
+  table{width:100%;border-collapse:collapse;margin-top:12px}
+  th,td{padding:8px;border-bottom:1px solid #eee;text-align:left}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <h1>Supply Request</h1>
+    
+    <label for="itemSearch">Item from Catalog</label>
+    <input id="itemSearch" list="itemsDatalist" placeholder="Search for an item...">
+    <datalist id="itemsDatalist"></datalist>
+
+    <div style="margin: 8px 0;">
+        <input type="checkbox" id="isOther" style="width:auto;">
+        <label for="isOther" style="display:inline;font-weight:normal;">Or, request an item not in the list</label>
+    </div>
+    <input id="otherItem" placeholder="Enter unlisted item name..." style="display:none;">
+
+    <label for="qty">Quantity (Optional)</label>
+    <input id="qty" type="text" placeholder="e.g., 1 Box or 5 EA">
+
+    <label for="notes">Notes (Optional)</label>
+    <input id="notes" placeholder="e.g., For Unit 31">
+
+    <button id="submitBtn" style="margin-top:12px;">Submit Request</button>
+    <div id="msg" class="muted" style="margin-top:8px;"></div>
+  </div>
+
+  <div class="card" style="margin-top:16px;">
+    <h2>Pending Requests</h2>
+    <table id="pendingTable">
+        <thead><tr><th>Item</th><th>Date</th><th>Qty</th><th>Status</th><th>Notes</th></tr></thead>
+        <tbody><tr><td colspan="5">Loading...</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+/*** CONFIG ***/
+const CSV_CATALOG = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTsY8xyyVE4V7e39KHEB5Y5fg64JGK7Aslg6s7dF8-QfpM8myyR1henDuhzyorR8pjPjcj5aJJY9Q3T/pub?gid=1603897332&single=true&output=csv';
+const CSV_ORDERS  = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTsY8xyyVE4V7e39KHEB5Y5fg64JGK7Aslg6s7dF8-QfpM8myyR1henDuhzyorR8pjPjcj5aJJY9Q3T/pub?gid=708973021&single=true&output=csv';
+const WEBAPP_URL  = 'https://script.google.com/macros/s/AKfycbypxL0KxxXMVRieHHuvX98m9Jx6fYJWTdrMLQNkt99Sgt0vNzRDeyGiDz5fILlORP8wFQ/exec';
+const TOKEN       = '9mB4zR7kP2fW6vNqE1jH8aLcV5gT_sYx0uI-oZ3pD9bX4wK7eS6hF-EMS';
+/*** end config ***/
+
+let catHead=[], catRows=[], orderHead=[], orderRows=[];
+const idx = (h,name) => h.indexOf(name);
+
+function parseCSV(text){
+  const clean = (text||'').replace(/^\uFEFF/,'').trim();
+  if (!clean) return [];
+  return clean.split(/\r?\n/).map(line=>{
+    const m = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || [];
+    return m.map(s=>s.replace(/^"|"$/g,''));
+  });
+}
+
+function renderPending(){
+    const nameById = new Map(catRows.map(r => [r[idx(catHead,'ItemID')], r[idx(catHead,'ItemName')]]));
+    const pending = orderRows.filter(r => ['Requested', 'Ordered'].includes(r[idx(orderHead,'Status')]));
+    
+    const tbody = document.querySelector('#pendingTable tbody');
+    tbody.innerHTML = pending.map(r => {
+        const itemId = r[idx(orderHead,'ItemID')] || '';
+        let itemName = nameById.get(itemId) || itemId;
+        const notes = r[idx(orderHead,'Notes')] || '';
+
+        // Check if it was an "Other" item request
+        if (notes.startsWith('REQUESTED OTHER ITEM:')) {
+            itemName = `<em>${notes.replace('REQUESTED OTHER ITEM: ', '')}</em>`;
+        }
+
+        return `<tr>
+            <td>${itemName}</td>
+            <td>${new Date(r[idx(orderHead,'Timestamp')]).toLocaleDateString()}</td>
+            <td>${r[idx(orderHead,'Qty')] || ''}</td>
+            <td>${r[idx(orderHead,'Status')] || ''}</td>
+            <td>${notes}</td>
+        </tr>`
+    }).join('') || '<tr><td colspan="5">No pending requests.</td></tr>';
+}
+
+async function boot(){
+    const [catText, orderText] = await Promise.all([
+        fetch(CSV_CATALOG).then(r=>r.text()),
+        fetch(CSV_ORDERS).then(r=>r.text())
+    ]);
+
+    const catAll = parseCSV(catText); catHead = catAll.shift() || []; catRows = catAll;
+    const orderAll = parseCSV(orderText); orderHead = orderAll.shift() || []; orderRows = orderAll;
+
+    document.getElementById('itemsDatalist').innerHTML = catRows.map(r => `<option value="${r[idx(catHead,'ItemName')]}">`).join('');
+    
+    renderPending();
+
+    const isOtherCheck = document.getElementById('isOther');
+    const itemSearchInput = document.getElementById('itemSearch');
+    const otherItemInput = document.getElementById('otherItem');
+    isOtherCheck.addEventListener('change', () => {
+        itemSearchInput.style.display = isOtherCheck.checked ? 'none' : 'block';
+        otherItemInput.style.display = isOtherCheck.checked ? 'block' : 'none';
+        itemSearchInput.value = '';
+        otherItemInput.value = '';
+    });
+}
+
+document.getElementById('submitBtn').addEventListener('click', async () => {
+    const isOther = document.getElementById('isOther').checked;
+    const itemName = document.getElementById('itemSearch').value;
+    const otherItemName = document.getElementById('otherItem').value.trim();
+    const qty = document.getElementById('qty').value.trim();
+    const notes = document.getElementById('notes').value.trim();
+    const msg = document.getElementById('msg');
+
+    let payload = { token: TOKEN, actionType: 'createRequest', qty, notes };
+    let catItem;
+
+    if (isOther) {
+        if (!otherItemName) { msg.textContent = 'Please enter the name of the item you are requesting.'; return; }
+        payload.otherItemName = otherItemName;
+    } else {
+        catItem = catRows.find(r => r[idx(catHead,'ItemName')] === itemName);
+        if (!catItem) { msg.textContent = 'Please select a valid item from the list.'; return; }
+        payload.itemId = catItem[idx(catHead,'ItemID')];
+    }
+
+    msg.textContent = 'Submitting...';
+    try {
+        await fetch(WEBAPP_URL, { method:'POST', mode:'no-cors', body: JSON.stringify(payload) });
+        msg.textContent = 'Request submitted successfully!';
+        document.getElementById('itemSearch').value = '';
+        document.getElementById('otherItem').value = '';
+        document.getElementById('qty').value = '';
+        document.getElementById('notes').value = '';
+        document.getElementById('isOther').checked = false;
+        otherItem.style.display = 'none';
+        itemSearch.style.display = 'block';
+    } catch(e) {
+        msg.textContent = 'An error occurred. Please try again.';
+    }
+});
+
+boot();
+</script>
+</body>
+</html>

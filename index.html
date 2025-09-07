@@ -51,6 +51,29 @@
         </div>
       </details>
 
+       <details>
+        <summary class="muted">Add Missing Item</summary>
+        <div style="margin-top:6px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+          <input id="addItem" list="itemsDatalist" placeholder="Select item from Catalog..." style="flex:2;min-width:200px;">
+          <datalist id="itemsDatalist"></datalist>
+          
+          <select id="addCompartment" style="flex:1;min-width:120px;">
+            <option value="">Compartment...</option>
+            <option>Wall</option>
+            <option>Bag</option>
+            <option>Supply RM</option>
+          </select>
+          
+          <div id="addExpiryChips" class="rowbtns" style="flex:2;min-width:250px;"></div>
+          
+          <button id="saveNewItemBtn" class="btn">Save</button>
+        </div>
+      </details>
+
+      <span style="flex:1"></span>
+
+      
+
       <span style="flex:1"></span>
       <a class="btn" id="viewUnit">By Unit</a>
       <a class="btn" id="viewAll">All Items</a>
@@ -327,11 +350,63 @@ async function boot(){
   fillUnitSelect();
   render('unit');
 
+  // Wire up the main filter and view buttons
   document.getElementById('viewUnit').addEventListener('click', ()=>render('unit'));
   document.getElementById('viewAll').addEventListener('click',  ()=>render('all'));
   document.getElementById('unitSel').addEventListener('change', ()=>render('unit'));
   document.getElementById('sortSel').addEventListener('change', ()=>render());
   document.getElementById('rangeSel').addEventListener('change',()=>render());
+  
+  // --- Logic for the "Add Missing Item" form ---
+  const itemDatalist = document.getElementById('itemsDatalist');
+  // Use catRows (from your Catalog sheet) to populate the dropdown
+  itemDatalist.innerHTML = catRows.map(r => `<option value="${r[idx(catHead,'ItemName')]}">`).join('');
+
+  const addExpiryChips = document.getElementById('addExpiryChips');
+  addExpiryChips.innerHTML = next3MonthChips().map(ch => 
+    `<button class="btn" data-exp="${ch.iso}">${ch.label}</button>`
+  ).join('');
+
+  let selectedNewExpiry = '';
+  addExpiryChips.querySelectorAll('button').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+        e.preventDefault(); // Prevent form submission
+        selectedNewExpiry = btn.dataset.exp;
+        // Optional: Add a visual indicator for selection
+        addExpiryChips.querySelectorAll('button').forEach(b => b.style.borderColor = '#ccc');
+        btn.style.borderColor = 'blue';
+    });
+  });
+
+  document.getElementById('saveNewItemBtn').addEventListener('click', async () => {
+    const itemName = document.getElementById('addItem').value;
+    const compartment = document.getElementById('addCompartment').value;
+    const unit = document.getElementById('unitSel').value;
+    
+    // Find the full item details from the Catalog data
+    const catItem = catRows.find(r => r[idx(catHead,'ItemName')] === itemName);
+    
+    // Validation
+    if (!catItem) { alert('Please select a valid item from the list.'); return; }
+    if (!compartment) { alert('Please select a compartment.'); return; }
+    if (!selectedNewExpiry) { alert('Please select an expiry month.'); return; }
+    
+    const itemId = catItem[idx(catHead,'ItemID')];
+    
+    // Use the existing postUpdate function to create the new inventory record
+    await postUpdate({ 
+        itemId: itemId, 
+        unit: unit, 
+        compartment: compartment, 
+        expiry: selectedNewExpiry,
+        lot: `NEW-${Date.now()}` // Add a unique lot to ensure it creates a new row
+    });
+    
+    // Clear form and give feedback
+    document.getElementById('addItem').value = '';
+    alert(`'${itemName}' was added to Unit ${unit}. The page will now refresh.`);
+    location.reload(); // Reload the page to show the new item
+  });
 }
 boot();
 </script>
