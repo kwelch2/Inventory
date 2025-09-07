@@ -64,16 +64,19 @@
 /*** CONFIG — replace these ***/
 // Inventory: InventoryID, ItemID, Unit, Compartment, Lot, Qty, Expiry, DaysToExpire, Status, Notes, (CrewStatus optional)
 const CSV_INVENTORY = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTsY8xyyVE4V7e39KHEB5Y5fg64JGK7Aslg6s7dF8-QfpM8myyR1henDuhzyorR8pjPjcj5aJJY9Q3T/pub?gid=0&single=true&output=csv';                                                                                 
+/*** CONFIG — replace these ***/
+// Inventory: InventoryID, ItemID, Unit, Compartment, Lot, Qty, Expiry, DaysToExpire, Status, Notes, (CrewStatus optional)
+const CSV_INVENTORY = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTsY8xyyVE4V7e39KHEB5Y5fg64JGK7Aslg6s7dF8-QfpM8myyR1henDuhzyorR8pjPjcj5aJJY9Q3T/pub?gid=0&single=true&output=csv';
 const CSV_CATALOG   = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTsY8xyyVE4V7e39KHEB5Y5fg64JGK7Aslg6s7dF8-QfpM8myyR1henDuhzyorR8pjPjcj5aJJY9Q3T/pub?gid=1603897332&single=true&output=csv';
 const CSV_VENDORPR = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTsY8xyyVE4V7e39KHEB5Y5fg64JGK7Aslg6s7dF8-QfpM8myyR1henDuhzyorR8pjPjcj5aJJY9Q3T/pub?gid=1795212434&single=true&output=csv';
 const CSV_VENDORS  = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTsY8xyyVE4V7e39KHEB5Y5fg64JGK7Aslg6s7dF8-QfpM8myyR1henDuhzyorR8pjPjcj5aJJY9Q3T/pub?gid=1079994552&single=true&output=csv';
 const CSV_UNITS = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTsY8xyyVE4V7e39KHEB5Y5fg64JGK7Aslg6s7dF8-QfpM8myyR1henDuhzyorR8pjPjcj5aJJY9Q3T/pub?gid=767202807&single=true&output=csv';
 const CSV_ACTIVITYLOG = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTsY8xyyVE4V7e39KHEB5Y5fg64JGK7Aslg6s7dF8-QfpM8myyR1henDuhzyorR8pjPjcj5aJJY9Q3T/pub?gid=1791453005&single=true&output=csv';
 const WEBAPP_URL   = 'https://script.google.com/macros/s/AKfycbypxL0KxxXMVRieHHuvX98m9Jx6fYJWTdrMLQNkt99Sgt0vNzRDeyGiDz5fILlORP8wFQ/exec';
-const TOKEN        = '9mB4zR7kP2fW6vNqE1jH8aLcV5gT_sYx0uI-oZ3pD9bX4wK7eS6hF-EMS'; 
+const TOKEN        = '9mB4zR7kP2fW6vNqE1jH8aLcV5gT_sYx0uI-oZ3pD9bX4wK7eS6hF-EMS';
 /*** end config ***/
 
-let invHead=[], invRows=[], catHead=[], catRows=[];
+let invHead=[], invRows=[], catHead=[], catRows=[], unitHead=[], unitRows=[], unitNameById=new Map();
 const idx = (h,name) => h.indexOf(name);
 
 function parseCSV(text){
@@ -138,19 +141,24 @@ function monthLabelToNextISO(input){
   return '';
 }
 
-function uniqueUnits(h, rows){
-  const u = idx(h,'Unit');
-  return Array.from(new Set(rows.map(r=>r[u]).filter(Boolean))).sort((a,b)=>{
-    const na = Number(a), nb = Number(b);
-    if (!isNaN(na) && !isNaN(nb)) return na-nb;
-    return String(a).localeCompare(String(b));
-  });
-}
 function fillUnitSelect(){
   const sel = document.getElementById('unitSel');
-  const units = uniqueUnits(invHead, invRows);
-  sel.innerHTML = units.map(u=>`<option value="${u}">${u}</option>`).join('');
-  if (!sel.value && units.length) sel.value = units[0];
+  const unitIdCol = idx(unitHead, 'Unit');
+  const unitDisplayCol = idx(unitHead, 'Display');
+
+  // Sort units based on the raw ID
+  unitRows.sort((a, b) => {
+    const idA = Number(a[unitIdCol]);
+    const idB = Number(b[unitIdCol]);
+    if (!isNaN(idA) && !isNaN(idB)) return idA - idB;
+    return String(a[unitDisplayCol]).localeCompare(String(b[unitDisplayCol]));
+  });
+
+  sel.innerHTML = unitRows.map(r =>
+    `<option value="${r[unitIdCol]}">${r[unitDisplayCol]}</option>`
+  ).join('');
+
+  if (!sel.value && unitRows.length) sel.value = unitRows[0][unitIdCol];
 }
 async function postUpdate({itemId, unit, compartment, lot, crewStatus, qty, expiry, notes}){
   // expiry (optional) must be YYYY-MM-DD (first of NEXT month) if you send it
@@ -162,8 +170,8 @@ async function postUpdate({itemId, unit, compartment, lot, crewStatus, qty, expi
         actionType: 'updateInventory',
         itemId, unit, compartment, lot,
         qty, expiry,
-        crewStatus,                 // 'Pending' | 'Replaced' | 'Good'
-        action: 'Update',           // appears in ActivityLog
+        crewStatus,         // 'Pending' | 'Replaced' | 'Good'
+        action: 'Update',   // appears in ActivityLog
         notes
       })
     });
@@ -234,7 +242,7 @@ function render(view='unit'){
           const badge = getCrewStatus(H,r) || r[idx(H,'Status')] || '';
           return `<tr class="${cls}">
             <td>${itemName}</td>
-            ${view==='all'?`<td>${u}</td>`:''}
+            ${view==='all'?`<td>${unitNameById.get(u) || u}</td>`:''}
             <td>${comp}</td>
             <td>${lot}</td>
             <td>${qty}</td>
@@ -242,23 +250,21 @@ function render(view='unit'){
             <td>${days}</td>
             <td><span class="pill">${badge}</span></td>
             <td>
-              <div class="rowbtns" style="margin-bottom:6px">
+              <div class="rowbtns">
                 <button class="btn" data-act="Pending"  data-item="${itemId}" data-unit="${u||unit}" data-comp="${comp}" data-lot="${lot}">Pending</button>
                 <button class="btn" data-act="Replaced" data-item="${itemId}" data-unit="${u||unit}" data-comp="${comp}" data-lot="${lot}">Replaced</button>
                 <button class="btn" data-act="Good"     data-item="${itemId}" data-unit="${u||unit}" data-comp="${comp}" data-lot="${lot}">Good</button>
               </div>
-              </td>
-              <div class="rowbtns">
+              <div class="rowbtns" style="margin-top:6px">
                 ${next3MonthChips().map(ch => 
                   `<button class="btn" data-exp="${ch.iso}" data-item="${itemId}" data-unit="${u||unit}" data-comp="${comp}" data-lot="${lot}">
-                     ${ch.label}
-                   </button>`).join('')}
+                      ${ch.label}
+                    </button>`).join('')}
                 <button class="btn" data-exp="__other__" data-item="${itemId}" data-unit="${u||unit}" data-comp="${comp}" data-lot="${lot}">
                   Other…
                 </button>
               </div>
             </td>
-
           </tr>`;
         }).join('') || '<tr><td colspan="'+(view==='all'?9:8)+'">No items need attention 🎉</td></tr>'}
       </tbody>
@@ -266,7 +272,7 @@ function render(view='unit'){
   `;
 
   cont.innerHTML = view==='unit'
-    ? `<div class="unit-block"><h2>${unit}</h2>${table}</div>`
+    ? `<div class="unit-block"><h2>${unitNameById.get(unit) || unit}</h2>${table}</div>`
     : table;
 
   // wire buttons
@@ -283,37 +289,43 @@ function render(view='unit'){
     });
   });
   // Quick expiry chips
-cont.querySelectorAll('button[data-exp]').forEach(btn=>{
-  btn.addEventListener('click', async ()=>{
-    let iso = btn.dataset.exp;
-    const itemId      = btn.dataset.item;
-    const unitVal     = btn.dataset.unit;
-    const compartment = btn.dataset.comp || '';
-    const lot         = btn.dataset.lot || '';
+  cont.querySelectorAll('button[data-exp]').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      let iso = btn.dataset.exp;
+      const itemId      = btn.dataset.item;
+      const unitVal     = btn.dataset.unit;
+      const compartment = btn.dataset.comp || '';
+      const lot         = btn.dataset.lot || '';
 
-    if (iso === '__other__') {
-      const input = prompt('Enter expiry as MM/YYYY or Mon-YYYY (e.g., 09/2025 or Sep-2025):');
-      const tryIso = monthLabelToNextISO(input);
-      if (!tryIso) { alert('Could not parse that month/year.'); return; }
-      iso = tryIso;
-    }
+      if (iso === '__other__') {
+        const input = prompt('Enter expiry as MM/YYYY or Mon-YYYY (e.g., 09/2025 or Sep-2025):');
+        const tryIso = monthLabelToNextISO(input);
+        if (!tryIso) { alert('Could not parse that month/year.'); return; }
+        iso = tryIso;
+      }
 
-    await postUpdate({ itemId, unit:unitVal, compartment, lot, expiry: iso });
-    // Re-render so Days/Status update on next CSV refresh; optimistic clear not needed here
-    render(view);
+      await postUpdate({ itemId, unit:unitVal, compartment, lot, expiry: iso });
+      // Re-render so Days/Status update on next CSV refresh; optimistic clear not needed here
+      render(view);
+    });
   });
-});
-
 }
 
 async function boot(){
-  const [invText, catText] = await Promise.all([
+  const [invText, catText, unitText] = await Promise.all([
     fetch(CSV_INVENTORY).then(r=>r.text()),
-    fetch(CSV_CATALOG).then(r=>r.text())
+    fetch(CSV_CATALOG).then(r=>r.text()),
+    fetch(CSV_UNITS).then(r=>r.text())
   ]);
 
   const invAll = parseCSV(invText); invHead = invAll.shift() || []; invRows = invAll;
   const catAll = parseCSV(catText); catHead = catAll.shift() || []; catRows = catAll;
+  const unitAll = parseCSV(unitText); unitHead = unitAll.shift() || []; unitRows = unitAll;
+
+  // Create a map for easy lookup: Unit ID -> Display Name
+  const unitIdCol = idx(unitHead, 'Unit');
+  const unitDisplayCol = idx(unitHead, 'Display');
+  unitNameById = new Map(unitRows.map(r => [r[unitIdCol], r[unitDisplayCol]]));
 
   fillUnitSelect();
   render('unit');
