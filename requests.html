@@ -96,65 +96,80 @@ function renderPending(){
     }).join('') || '<tr><td colspan="5">No pending requests.</td></tr>';
 }
 
-async function boot(){
-    const [catText, orderText] = await Promise.all([
-        fetch(CSV_CATALOG).then(r=>r.text()),
-        fetch(CSV_ORDERS).then(r=>r.text())
-    ]);
+async function boot() {
+    try {
+        const [catResponse, orderResponse] = await Promise.all([
+            fetch(CSV_CATALOG),
+            fetch(CSV_ORDERS)
+        ]);
 
-    const catAll = parseCSV(catText); catHead = catAll.shift() || []; catRows = catAll;
-    const orderAll = parseCSV(orderText); orderHead = orderAll.shift() || []; orderRows = orderAll;
-
-    document.getElementById('itemsDatalist').innerHTML = catRows.map(r => `<option value="${r[idx(catHead,'ItemName')]}">`).join('');
-    
-    renderPending();
-
-    const isOtherCheck = document.getElementById('isOther');
-    const itemSearchInput = document.getElementById('itemSearch');
-    const otherItemInput = document.getElementById('otherItem');
-    isOtherCheck.addEventListener('change', () => {
-        itemSearchInput.style.display = isOtherCheck.checked ? 'none' : 'block';
-        otherItemInput.style.display = isOtherCheck.checked ? 'block' : 'none';
-        itemSearchInput.value = '';
-        otherItemInput.value = '';
-    });
-
-    // --- PASTE THE SUBMIT BUTTON LOGIC HERE ---
-    document.getElementById('submitBtn').addEventListener('click', async () => {
-        const isOther = document.getElementById('isOther').checked;
-        const itemName = document.getElementById('itemSearch').value;
-        const otherItemName = document.getElementById('otherItem').value.trim();
-        const qty = document.getElementById('qty').value.trim();
-        const notes = document.getElementById('notes').value.trim();
-        const msg = document.getElementById('msg');
-
-        let payload = { token: TOKEN, actionType: 'createRequest', qty, notes };
-        let catItem;
-
-        if (isOther) {
-            if (!otherItemName) { msg.textContent = 'Please enter the name of the item you are requesting.'; return; }
-            payload.otherItemName = otherItemName;
-        } else {
-            catItem = catRows.find(r => r[idx(catHead,'ItemName')] === itemName);
-            if (!catItem) { msg.textContent = 'Please select a valid item from the list.'; return; }
-            payload.itemId = catItem[idx(catHead,'ItemID')];
+        if (!catResponse.ok) {
+            throw new Error(`Failed to load Catalog sheet. Status: ${catResponse.status} ${catResponse.statusText}`);
+        }
+        if (!orderResponse.ok) {
+            throw new Error(`Failed to load Orders sheet. Status: ${orderResponse.status} ${orderResponse.statusText}`);
         }
 
-        msg.textContent = 'Submitting...';
-        try {
-            await fetch(WEBAPP_URL, { method:'POST', mode:'no-cors', body: JSON.stringify(payload) });
-            msg.textContent = 'Request submitted successfully!';
-            document.getElementById('itemSearch').value = '';
-            document.getElementById('otherItem').value = '';
-            document.getElementById('qty').value = '';
-            document.getElementById('notes').value = '';
-            document.getElementById('isOther').checked = false;
-            otherItemInput.style.display = 'none';
-            itemSearchInput.style.display = 'block';
-        } catch(e) {
-            msg.textContent = 'An error occurred. Please try again.';
-        }
-    });
+        const [catText, orderText] = await Promise.all([
+            catResponse.text(),
+            orderResponse.text()
+        ]);
+
+        const catAll = parseCSV(catText); catHead = catAll.shift() || []; catRows = catAll;
+        const orderAll = parseCSV(orderText); orderHead = orderAll.shift() || []; orderRows = orderAll;
+
+        document.getElementById('itemsDatalist').innerHTML = catRows.map(r => `<option value="${r[idx(catHead,'ItemName')]}">`).join('');
+        
+        renderPending();
+
+        const isOtherCheck = document.getElementById('isOther');
+        const itemSearchInput = document.getElementById('itemSearch');
+        const otherItemInput = document.getElementById('otherItem');
+        isOtherCheck.addEventListener('change', () => {
+            itemSearchInput.style.display = isOtherCheck.checked ? 'none' : 'block';
+            otherItemInput.style.display = isOtherCheck.checked ? 'block' : 'none';
+            itemSearchInput.value = '';
+            otherItemInput.value = '';
+        });
+
+        document.getElementById('submitBtn').addEventListener('click', async () => {
+            const isOther = document.getElementById('isOther').checked;
+            const itemName = document.getElementById('itemSearch').value;
+            const otherItemName = document.getElementById('otherItem').value.trim();
+            const qty = document.getElementById('qty').value.trim();
+            const notes = document.getElementById('notes').value.trim();
+            const msg = document.getElementById('msg');
+            let payload = { token: TOKEN, actionType: 'createRequest', qty, notes };
+            let catItem;
+            if (isOther) {
+                if (!otherItemName) { msg.textContent = 'Please enter the item name.'; return; }
+                payload.otherItemName = otherItemName;
+            } else {
+                catItem = catRows.find(r => r[idx(catHead,'ItemName')] === itemName);
+                if (!catItem) { msg.textContent = 'Please select a valid item.'; return; }
+                payload.itemId = catItem[idx(catHead,'ItemID')];
+            }
+            msg.textContent = 'Submitting...';
+            try {
+                await fetch(WEBAPP_URL, { method:'POST', mode:'no-cors', body: JSON.stringify(payload) });
+                msg.textContent = 'Request submitted!';
+                document.getElementById('itemSearch').value = '';
+                document.getElementById('otherItem').value = '';
+                document.getElementById('qty').value = '';
+                document.getElementById('notes').value = '';
+                isOtherCheck.checked = false;
+                otherItemInput.style.display = 'none';
+                itemSearchInput.style.display = 'block';
+            } catch(e) {
+                msg.textContent = 'An error occurred.';
+            }
+        });
+
+    } catch (error) {
+        console.error("Error loading spreadsheet data:", error);
+        const tbody = document.querySelector('#pendingTable tbody');
+        tbody.innerHTML = `<tr><td colspan="5" style="color:red; font-weight:bold;">ERROR: Could not load data from Google Sheets. This may be due to an organizational sharing policy. Please see the console for details.</td></tr>`;
+    }
 }
 boot();
 </script>
