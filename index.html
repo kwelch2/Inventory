@@ -203,39 +203,46 @@ function render(view='unit'){
   const sortBy = document.getElementById('sortSel').value || 'date';
   const unit   = document.getElementById('unitSel').value;
 
-  // ItemID → ItemName
   const idCol = idx(catHead,'ItemID'), nmCol = idx(catHead,'ItemName');
   const nameById = new Map(catRows.map(r => [r[idCol], r[nmCol]]));
 
-  // Filter to needs-attention
   const H = invHead;
-  const keep = new Set(['Expired','30d','60d','90d']); // window logic uses Status + DaysToExpire
-  let list = invRows.filter(r=>{
-    const crew = getCrewStatus(H, r).toLowerCase(); // '', 'pending','replaced','good'
-    const stat = String(r[idx(H,'Status')]);
-    const dte  = Number(r[idx(H,'DaysToExpire')] || '');
-    const isPending = crew === 'pending';
-    const isCleared = crew === 'replaced' || crew === 'good';
-    const inWindow  = keep.has(stat) && !isNaN(dte) && dte <= within;
-    if (isCleared) return false;
-    return inWindow || isPending;
+  let list = invRows.filter(r => {
+    // --- NEW: Calculate status directly from the 'Expiry' date ---
+    const expiryDateStr = r[idx(H, 'Expiry')];
+    if (!expiryDateStr) return false;
+
+    const expiryDate = new Date(expiryDateStr);
+    if (isNaN(expiryDate)) return false;
+
+    const daysToExpire = Math.floor((expiryDate.getTime() - new Date().getTime()) / (1000 * 3600 * 24));
+    
+    // Determine if the item is within the user's selected window (e.g., 90 days)
+    if (daysToExpire > within) return false;
+
+    // Filter out items that the crew has already cleared
+    const crewStatus = getCrewStatus(H, r).toLowerCase();
+    if (crewStatus === 'replaced' || crewStatus === 'good') return false;
+
+    // Add the calculated days and status to the item for later use
+    r.daysToExpire = daysToExpire;
+    if (daysToExpire <= 0) r.status = 'Expired';
+    else if (daysToExpire <= 30) r.status = '30d';
+    else if (daysToExpire <= 60) r.status = '60d';
+    else r.status = '90d';
+
+    return true; // Keep this item in the list
   });
 
   // Sort
   if (sortBy === 'item'){
-    list.sort((a,b)=>{
+    list.sort((a,b) => {
       const aName = nameById.get(a[idx(H,'ItemID')]) || '';
       const bName = nameById.get(b[idx(H,'ItemID')]) || '';
-      return aName.localeCompare(bName) || (+a[idx(H,'DaysToExpire')]||9999) - (+b[idx(H,'DaysToExpire')]||9999);
+      return aName.localeCompare(bName) || (a.daysToExpire || 9999) - (b.daysToExpire || 9999);
     });
   } else {
-    list.sort((a,b)=>{
-      const ad = new Date(a[idx(H,'Expiry')]||'2099-12-31');
-      const bd = new Date(b[idx(H,'Expiry')]||'2099-12-31');
-      const t = ad - bd;
-      if (t) return t;
-      return (a[idx(H,'Compartment')]||'').localeCompare(b[idx(H,'Compartment')]||'');
-    });
+    list.sort((a,b) => (new Date(a[idx(H,'Expiry')]) - new Date(b[idx(H,'Expiry')])));
   }
 
   const cont = document.getElementById('content');
@@ -250,7 +257,7 @@ function render(view='unit'){
       </tr></thead>
       <tbody>
         ${byUnit.map(r=>{
-          const cls = statusClass(r[idx(H,'Status')]);
+          const cls = statusClass(r.status);
           const itemId = r[idx(H,'ItemID')] || '';
           const itemName = nameById.get(itemId) || itemId;
           const u = r[idx(H,'Unit')] || '';
@@ -258,8 +265,7 @@ function render(view='unit'){
           const lot  = r[idx(H,'Lot')] || '';
           const qty  = r[idx(H,'Qty')] || '';
           const exp  = displayMonthYear(r[idx(H,'Expiry')]||'');
-          const days = r[idx(H,'DaysToExpire')] || '';
-          const badge = getCrewStatus(H,r) || r[idx(H,'Status')] || '';
+          const badge = getCrewStatus(H,r) || r.status || '';
           return `<tr class="${cls}">
             <td>${itemName}</td>
             ${view==='all'?`<td>${unitNameById.get(u) || u}</td>`:''}
@@ -267,7 +273,7 @@ function render(view='unit'){
             <td>${lot}</td>
             <td>${qty}</td>
             <td>${exp}</td>
-            <td>${days}</td>
+            <td>${r.daysToExpire}</td>
             <td><span class="pill">${badge}</span></td>
             <td>
               <div class="rowbtns">
@@ -276,7 +282,7 @@ function render(view='unit'){
                 <button class="btn" data-act="Good"     data-item="${itemId}" data-unit="${u||unit}" data-comp="${comp}" data-lot="${lot}">Good</button>
               </div>
               <div class="rowbtns" style="margin-top:6px">
-                ${next3MonthChips().map(ch => 
+                ${next3MonthChips().map(ch =>
                   `<button class="btn" data-exp="${ch.iso}" data-item="${itemId}" data-unit="${u||unit}" data-comp="${comp}" data-lot="${lot}">
                       ${ch.label}
                     </button>`).join('')}
@@ -294,89 +300,48 @@ function render(view='unit'){
   cont.innerHTML = view==='unit'
     ? `<div class="unit-block"><h2>${unitNameById.get(unit) || unit}</h2>${table}</div>`
     : table;
-
-  // wire buttons
-  cont.querySelectorAll('button[data-act]').forEach(btn=>{
-    btn.addEventListener('click', async ()=>{
-      const crewStatus = btn.dataset.act;
-      const itemId     = btn.dataset.item;
-      const unitVal    = btn.dataset.unit;
-      const compartment= btn.dataset.comp || '';
-      const lot        = btn.dataset.lot || '';
-      await postUpdate({ itemId, unit:unitVal, compartment, lot, crewStatus });
-      // Optimistic refresh: hide row immediately
-      render(view);
-    });
-  });
-  // Quick expiry chips
-  cont.querySelectorAll('button[data-exp]').forEach(btn=>{
-    btn.addEventListener('click', async ()=>{
-      let iso = btn.dataset.exp;
-      const itemId      = btn.dataset.item;
-      const unitVal     = btn.dataset.unit;
-      const compartment = btn.dataset.comp || '';
-      const lot         = btn.dataset.lot || '';
-
-      if (iso === '__other__') {
-        const input = prompt('Enter expiry as MM/YYYY or Mon-YYYY (e.g., 09/2025 or Sep-2025):');
-        const tryIso = monthLabelToNextISO(input);
-        if (!tryIso) { alert('Could not parse that month/year.'); return; }
-        iso = tryIso;
-      }
-
-      await postUpdate({ itemId, unit:unitVal, compartment, lot, expiry: iso });
-      // Re-render so Days/Status update on next CSV refresh; optimistic clear not needed here
-      render(view);
-    });
-  });
+  
+  // Re-wire buttons after render
+  wireButtons(view);
 }
 
-async function boot(){
-  const [invText, catText, unitText] = await Promise.all([
-    fetch(CSV_INVENTORY).then(r=>r.text()),
-    fetch(CSV_CATALOG).then(r=>r.text()),
-    fetch(CSV_UNITS).then(r=>r.text())
-  ]);
-
-  const invAll = parseCSV(invText); invHead = invAll.shift() || []; invRows = invAll;
-  const catAll = parseCSV(catText); catHead = catAll.shift() || []; catRows = catAll;
-  const unitAll = parseCSV(unitText); unitHead = unitAll.shift() || []; unitRows = unitAll;
-
-  // Create a map for easy lookup: Unit ID -> Display Name
-  const unitIdCol = idx(unitHead, 'Unit');
-  const unitDisplayCol = idx(unitHead, 'Display');
-  unitNameById = new Map(unitRows.map(r => [r[unitIdCol], r[unitDisplayCol]]));
-
-  fillUnitSelect();
-  render('unit');
-
-  // Wire up the main filter and view buttons
-  document.getElementById('viewUnit').addEventListener('click', ()=>render('unit'));
-  document.getElementById('viewAll').addEventListener('click',  ()=>render('all'));
-  document.getElementById('unitSel').addEventListener('change', ()=>render('unit'));
-  document.getElementById('sortSel').addEventListener('change', ()=>render());
-  document.getElementById('rangeSel').addEventListener('change',()=>render());
-  
-  // --- Logic for the "Add Missing Item" form ---
-  const itemDatalist = document.getElementById('itemsDatalist');
-  // Use catRows (from your Catalog sheet) to populate the dropdown
-  itemDatalist.innerHTML = catRows.map(r => `<option value="${r[idx(catHead,'ItemName')]}">`).join('');
-
-  const addExpiryChips = document.getElementById('addExpiryChips');
-  addExpiryChips.innerHTML = next3MonthChips().map(ch => 
-    `<button class="btn" data-exp="${ch.iso}">${ch.label}</button>`
-  ).join('');
-
-  let selectedNewExpiry = '';
-  addExpiryChips.querySelectorAll('button').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-        e.preventDefault(); // Prevent form submission
-        selectedNewExpiry = btn.dataset.exp;
-        // Optional: Add a visual indicator for selection
-        addExpiryChips.querySelectorAll('button').forEach(b => b.style.borderColor = '#ccc');
-        btn.style.borderColor = 'blue';
+function wireButtons(view) {
+    const cont = document.getElementById('content');
+    cont.querySelectorAll('button[data-act]').forEach(btn=>{
+        btn.addEventListener('click', async ()=>{
+            const crewStatus = btn.dataset.act;
+            const itemId = btn.dataset.item;
+            const unitVal = btn.dataset.unit;
+            const compartment= btn.dataset.comp || '';
+            const lot = btn.dataset.lot || '';
+            await postUpdate({ itemId, unit:unitVal, compartment, lot, crewStatus });
+            render(view);
+        });
     });
-  });
+    cont.querySelectorAll('button[data-exp]').forEach(btn=>{
+        btn.addEventListener('click', async ()=>{
+            let iso = btn.dataset.exp;
+            const itemId = btn.dataset.item;
+            const unitVal = btn.dataset.unit;
+            const compartment = btn.dataset.comp || '';
+            const lot = btn.dataset.lot || '';
+            if (iso === '__other__') {
+                const input = prompt('Enter expiry as MM/YYYY or Mon-YYYY (e.g., 09/2025 or Sep-2025):');
+                const tryIso = monthLabelToNextISO(input);
+                if (!tryIso) { alert('Could not parse that month/year.'); return; }
+                iso = tryIso;
+            }
+            await postUpdate({ itemId, unit:unitVal, compartment, lot, expiry: iso });
+            render(view);
+        });
+    });
+
+
+// Replace the old wireButtons logic in your boot() function with this simple call
+// document.getElementById('...').addEventListener(...);
+// And also replace it inside the render function
+// cont.querySelectorAll(...).forEach(...) with wireButtons(view);
+// Ensure you have a wireButtons function defined as above
 
   document.getElementById('saveNewItemBtn').addEventListener('click', async () => {
     const itemName = document.getElementById('addItem').value;
