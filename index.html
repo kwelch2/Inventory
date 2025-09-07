@@ -63,12 +63,13 @@
 <script>
 /*** CONFIG — replace these ***/
 // Inventory: InventoryID, ItemID, Unit, Compartment, Lot, Qty, Expiry, DaysToExpire, Status, Notes, (CrewStatus optional)  :contentReference[oaicite:5]{index=5}
-const CSV_INVENTORY = 'https://docs.google.com/spreadsheets/d/e/XXXX/pub?gid=0&single=true&output=csv';
-// Catalog: ItemID, ItemName, …                                                                                           :contentReference[oaicite:6]{index=6}
-const CSV_CATALOG   = 'https://docs.google.com/spreadsheets/d/e/XXXX/pub?gid=1603897332&single=true&output=csv';
-// Apps Script Web App endpoint + token (matches your script)                                                             
-const WEBAPP_URL    = 'https://script.google.com/macros/s/XXXXXXXX/exec';
-const TOKEN         = 'YOUR-TOKEN-HERE';
+const CSV_INVENTORY = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTsY8xyyVE4V7e39KHEB5Y5fg64JGK7Aslg6s7dF8-QfpM8myyR1henDuhzyorR8pjPjcj5aJJY9Q3T/pub?gid=0&single=true&output=csv';                                                                                    :contentReference[oaicite:6]{index=6}
+const CSV_CATALOG   = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTsY8xyyVE4V7e39KHEB5Y5fg64JGK7Aslg6s7dF8-QfpM8myyR1henDuhzyorR8pjPjcj5aJJY9Q3T/pub?gid=1603897332&single=true&output=csv';
+const CSV_VENDORPR = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTsY8xyyVE4V7e39KHEB5Y5fg64JGK7Aslg6s7dF8-QfpM8myyR1henDuhzyorR8pjPjcj5aJJY9Q3T/pub?gid=1795212434&single=true&output=csv';
+const CSV_VENDORS  = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTsY8xyyVE4V7e39KHEB5Y5fg64JGK7Aslg6s7dF8-QfpM8myyR1henDuhzyorR8pjPjcj5aJJY9Q3T/pub?gid=1079994552&single=true&output=csv';
+const CSV_ACTIVITYLOG = 'hhttps://docs.google.com/spreadsheets/d/e/2PACX-1vTsY8xyyVE4V7e39KHEB5Y5fg64JGK7Aslg6s7dF8-QfpM8myyR1henDuhzyorR8pjPjcj5aJJY9Q3T/pub?gid=1791453005&single=true&output=csv';
+const WEBAPP_URL   = 'https://script.google.com/macros/s/AKfycbypxL0KxxXMVRieHHuvX98m9Jx6fYJWTdrMLQNkt99Sgt0vNzRDeyGiDz5fILlORP8wFQ/exec';
+const TOKEN        = '9mB4zR7kP2fW6vNqE1jH8aLcV5gT_sYx0uI-oZ3pD9bX4wK7eS6hF-EMS'; 
 /*** end config ***/
 
 let invHead=[], invRows=[], catHead=[], catRows=[];
@@ -240,18 +241,12 @@ function render(view='unit'){
             <td>${days}</td>
             <td><span class="pill">${badge}</span></td>
             <td>
-              <div class="rowbtns">
-                <button class="btn" data-act="Pending"  data-item="${itemId}" data-unit="${u||unit}" data-comp="${comp}" data-lot="${lot}">Pending</button>
-                <button class="btn" data-act="Replaced" data-item="${itemId}" data-unit="${u||unit}" data-comp="${comp}" data-lot="${lot}">Replaced</button>
-                <button class="btn" data-act="Good"     data-item="${itemId}" data-unit="${u||unit}" data-comp="${comp}" data-lot="${lot}">Good</button>
-              </div>
-            </td>
-            <td>
               <div class="rowbtns" style="margin-bottom:6px">
                 <button class="btn" data-act="Pending"  data-item="${itemId}" data-unit="${u||unit}" data-comp="${comp}" data-lot="${lot}">Pending</button>
                 <button class="btn" data-act="Replaced" data-item="${itemId}" data-unit="${u||unit}" data-comp="${comp}" data-lot="${lot}">Replaced</button>
                 <button class="btn" data-act="Good"     data-item="${itemId}" data-unit="${u||unit}" data-comp="${comp}" data-lot="${lot}">Good</button>
               </div>
+              </td>
               <div class="rowbtns">
                 ${next3MonthChips().map(ch => 
                   `<button class="btn" data-exp="${ch.iso}" data-item="${itemId}" data-unit="${u||unit}" data-comp="${comp}" data-lot="${lot}">
