@@ -113,7 +113,6 @@ function statusClass(s){
          s==='60d'     ? 'yellow' :
          s==='90d'     ? 'tan' : '';
 }
-// Stored first-of-next-month → display MM/YYYY (package label month)
 function displayMonthYear(iso){
   if (!iso) return '';
   const d = new Date(iso);
@@ -125,32 +124,26 @@ function getCrewStatus(h, row){
   const i = idx(h,'CrewStatus');
   return i >= 0 ? String(row[i]||'').trim() : '';
 }
-// Build 3 chips: current month label + next 2. Each chip carries ISO = first day of next month.
 function next3MonthChips(){
   const out = [];
-  const now = new Date(); // Boise users' local time is fine
+  const now = new Date();
   for (let k=0; k<3; k++){
     const d = new Date(now.getFullYear(), now.getMonth()+k, 1);
-    const label = String(d.getMonth()+1).padStart(2,'0') + '/' + d.getFullYear(); // MM/YYYY
-    // store first-of-next-month
+    const label = String(d.getMonth()+1).padStart(2,'0') + '/' + d.getFullYear();
     const iso = new Date(d.getFullYear(), d.getMonth()+1, 1).toISOString().slice(0,10);
     out.push({label, iso});
   }
   return out;
 }
-
-// Parse user-entered month label like "Sep-2025", "9/25", "09/2025" -> first day of *next* month
 function monthLabelToNextISO(input){
   if (!input) return '';
   const t = String(input).trim();
-  // Try MM/YYYY or M/YY, M-YYYY, etc
   let m = t.match(/^(\d{1,2})\s*[-/]\s*(\d{2,4})$/);
   if (m){
     let mm = +m[1], yy = +m[2];
     if (yy < 100) yy += 2000;
-    return new Date(yy, mm, 1).toISOString().slice(0,10); // first of *next* month
+    return new Date(yy, mm, 1).toISOString().slice(0,10);
   }
-  // Try Mon-YYYY
   const map = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,sept:8,oct:9,nov:10,dec:11};
   m = t.toLowerCase().match(/^([a-z]{3,5})\s*[-/ ]\s*(\d{2,4})$/);
   if (m && map.hasOwnProperty(m[1])){
@@ -160,28 +153,22 @@ function monthLabelToNextISO(input){
   }
   return '';
 }
-
 function fillUnitSelect(){
   const sel = document.getElementById('unitSel');
   const unitIdCol = idx(unitHead, 'Unit');
   const unitDisplayCol = idx(unitHead, 'Display');
-
-  // Sort units based on the raw ID
   unitRows.sort((a, b) => {
     const idA = Number(a[unitIdCol]);
     const idB = Number(b[unitIdCol]);
     if (!isNaN(idA) && !isNaN(idB)) return idA - idB;
     return String(a[unitDisplayCol]).localeCompare(String(b[unitDisplayCol]));
   });
-
   sel.innerHTML = unitRows.map(r =>
     `<option value="${r[unitIdCol]}">${r[unitDisplayCol]}</option>`
   ).join('');
-
   if (!sel.value && unitRows.length) sel.value = unitRows[0][unitIdCol];
 }
 async function postUpdate({itemId, unit, compartment, lot, crewStatus, qty, expiry, notes}){
-  // expiry (optional) must be YYYY-MM-DD (first of NEXT month) if you send it
   try{
     await fetch(WEBAPP_URL, {
       method:'POST', mode:'no-cors',
@@ -190,8 +177,8 @@ async function postUpdate({itemId, unit, compartment, lot, crewStatus, qty, expi
         actionType: 'updateInventory',
         itemId, unit, compartment, lot,
         qty, expiry,
-        crewStatus,         // 'Pending' | 'Replaced' | 'Good'
-        action: 'Update',   // appears in ActivityLog
+        crewStatus,
+        action: 'Update',
         notes
       })
     });
@@ -208,33 +195,27 @@ function render(view='unit'){
 
   const H = invHead;
   let list = invRows.filter(r => {
-    // --- NEW: Calculate status directly from the 'Expiry' date ---
     const expiryDateStr = r[idx(H, 'Expiry')];
     if (!expiryDateStr) return false;
-
     const expiryDate = new Date(expiryDateStr);
     if (isNaN(expiryDate)) return false;
 
-    const daysToExpire = Math.floor((expiryDate.getTime() - new Date().getTime()) / (1000 * 3600 * 24));
+    const daysToExpire = Math.ceil((expiryDate.getTime() - new Date().getTime()) / (1000 * 3600 * 24));
     
-    // Determine if the item is within the user's selected window (e.g., 90 days)
     if (daysToExpire > within) return false;
 
-    // Filter out items that the crew has already cleared
     const crewStatus = getCrewStatus(H, r).toLowerCase();
     if (crewStatus === 'replaced' || crewStatus === 'good') return false;
 
-    // Add the calculated days and status to the item for later use
     r.daysToExpire = daysToExpire;
     if (daysToExpire <= 0) r.status = 'Expired';
     else if (daysToExpire <= 30) r.status = '30d';
     else if (daysToExpire <= 60) r.status = '60d';
     else r.status = '90d';
 
-    return true; // Keep this item in the list
+    return true;
   });
 
-  // Sort
   if (sortBy === 'item'){
     list.sort((a,b) => {
       const aName = nameById.get(a[idx(H,'ItemID')]) || '';
@@ -296,83 +277,110 @@ function render(view='unit'){
       </tbody>
     </table>
   `;
-
+  
   cont.innerHTML = view==='unit'
     ? `<div class="unit-block"><h2>${unitNameById.get(unit) || unit}</h2>${table}</div>`
     : table;
   
-  // Re-wire buttons after render
-  wireButtons(view);
-}
+  // Wire up all the buttons on the table
+  const allButtons = cont.querySelectorAll('button[data-act], button[data-exp]');
+  allButtons.forEach(btn => {
+    btn.addEventListener('click', async () => {
+        let payload = {
+            itemId: btn.dataset.item,
+            unit: btn.dataset.unit,
+            compartment: btn.dataset.comp || '',
+            lot: btn.dataset.lot || ''
+        };
 
-function wireButtons(view) {
-    const cont = document.getElementById('content');
-    cont.querySelectorAll('button[data-act]').forEach(btn=>{
-        btn.addEventListener('click', async ()=>{
-            const crewStatus = btn.dataset.act;
-            const itemId = btn.dataset.item;
-            const unitVal = btn.dataset.unit;
-            const compartment= btn.dataset.comp || '';
-            const lot = btn.dataset.lot || '';
-            await postUpdate({ itemId, unit:unitVal, compartment, lot, crewStatus });
-            render(view);
-        });
-    });
-    cont.querySelectorAll('button[data-exp]').forEach(btn=>{
-        btn.addEventListener('click', async ()=>{
+        if (btn.dataset.act) {
+            payload.crewStatus = btn.dataset.act;
+        }
+
+        if (btn.dataset.exp) {
             let iso = btn.dataset.exp;
-            const itemId = btn.dataset.item;
-            const unitVal = btn.dataset.unit;
-            const compartment = btn.dataset.comp || '';
-            const lot = btn.dataset.lot || '';
             if (iso === '__other__') {
                 const input = prompt('Enter expiry as MM/YYYY or Mon-YYYY (e.g., 09/2025 or Sep-2025):');
                 const tryIso = monthLabelToNextISO(input);
                 if (!tryIso) { alert('Could not parse that month/year.'); return; }
                 iso = tryIso;
             }
-            await postUpdate({ itemId, unit:unitVal, compartment, lot, expiry: iso });
-            render(view);
-        });
+            payload.expiry = iso;
+        }
+        await postUpdate(payload);
+        render(view);
     });
+  });
+}
 
+async function boot(){
+  const [invText, catText, unitText] = await Promise.all([
+    fetch(CSV_INVENTORY).then(r=>r.text()),
+    fetch(CSV_CATALOG).then(r=>r.text()),
+    fetch(CSV_UNITS).then(r=>r.text())
+  ]);
 
-// Replace the old wireButtons logic in your boot() function with this simple call
-// document.getElementById('...').addEventListener(...);
-// And also replace it inside the render function
-// cont.querySelectorAll(...).forEach(...) with wireButtons(view);
-// Ensure you have a wireButtons function defined as above
+  const invAll = parseCSV(invText); invHead = invAll.shift() || []; invRows = invAll;
+  const catAll = parseCSV(catText); catHead = catAll.shift() || []; catRows = catAll;
+  const unitAll = parseCSV(unitText); unitHead = unitAll.shift() || []; unitRows = unitAll;
+
+  const unitIdCol = idx(unitHead, 'Unit');
+  const unitDisplayCol = idx(unitHead, 'Display');
+  unitNameById = new Map(unitRows.map(r => [r[unitIdCol], r[unitDisplayCol]]));
+
+  fillUnitSelect();
+  render('unit');
+
+  document.getElementById('viewUnit').addEventListener('click', ()=>render('unit'));
+  document.getElementById('viewAll').addEventListener('click',  ()=>render('all'));
+  document.getElementById('unitSel').addEventListener('change', ()=>render('unit'));
+  document.getElementById('sortSel').addEventListener('change', ()=>render());
+  document.getElementById('rangeSel').addEventListener('change',()=>render());
+  
+  const itemDatalist = document.getElementById('itemsDatalist');
+  itemDatalist.innerHTML = catRows.map(r => `<option value="${r[idx(catHead,'ItemName')]}">`).join('');
+
+  const addExpiryChips = document.getElementById('addExpiryChips');
+  addExpiryChips.innerHTML = next3MonthChips().map(ch => 
+    `<button class="btn" data-exp="${ch.iso}">${ch.label}</button>`
+  ).join('');
+
+  let selectedNewExpiry = '';
+  addExpiryChips.querySelectorAll('button').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        selectedNewExpiry = btn.dataset.exp;
+        addExpiryChips.querySelectorAll('button').forEach(b => b.style.borderColor = '#ccc');
+        btn.style.borderColor = 'blue';
+    });
+  });
 
   document.getElementById('saveNewItemBtn').addEventListener('click', async () => {
     const itemName = document.getElementById('addItem').value;
     const compartment = document.getElementById('addCompartment').value;
     const unit = document.getElementById('unitSel').value;
-    
-    // Find the full item details from the Catalog data
     const catItem = catRows.find(r => r[idx(catHead,'ItemName')] === itemName);
     
-    // Validation
     if (!catItem) { alert('Please select a valid item from the list.'); return; }
     if (!compartment) { alert('Please select a compartment.'); return; }
     if (!selectedNewExpiry) { alert('Please select an expiry month.'); return; }
     
     const itemId = catItem[idx(catHead,'ItemID')];
     
-    // Use the existing postUpdate function to create the new inventory record
     await postUpdate({ 
         itemId: itemId, 
         unit: unit, 
         compartment: compartment, 
         expiry: selectedNewExpiry,
-        lot: `NEW-${Date.now()}` // Add a unique lot to ensure it creates a new row
+        lot: `NEW-${Date.now()}`
     });
     
-    // Clear form and give feedback
     document.getElementById('addItem').value = '';
     alert(`'${itemName}' was added to Unit ${unit}. The page will now refresh.`);
-    location.reload(); // Reload the page to show the new item
+    location.reload();
   });
 }
+
 boot();
 </script>
 </body>
