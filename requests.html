@@ -117,11 +117,14 @@ function renderPending(){
                     <table class="vendor-table">
                         <thead><tr><th>Vendor</th><th>Price</th><th>Item#</th></tr></thead>
                         <tbody>
-                            ${vendorPrices.map(vp => `<tr>
-                                <td>${vp[idx(vpHead,'VendorID')]}</td>
-                                <td>$${Number(vp[idx(vpHead,'UnitPrice')]).toFixed(2)}</td>
-                                <td>${vp[idx(vpHead,'VendorItemNumber')]}</td>
-                            </tr>`).join('') || '<tr><td colspan="3">No pricing info</td></tr>'}
+                            ${vendorPrices.map(vp => {
+                                const price = parseFloat(vp[idx(vpHead,'UnitPrice')]);
+                                return `<tr>
+                                    <td>${vp[idx(vpHead,'VendorID')]}</td>
+                                    <td>${!isNaN(price) ? `$${price.toFixed(2)}` : 'N/A'}</td>
+                                    <td>${vp[idx(vpHead,'VendorItemNumber')]}</td>
+                                </tr>`
+                            }).join('') || '<tr><td colspan="3">No pricing info</td></tr>'}
                         </tbody>
                     </table>
                 </details>
