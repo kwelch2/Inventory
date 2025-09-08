@@ -70,45 +70,28 @@
 
 <script>
 /*** CONFIG ***/
-const CSV_CATALOG   = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTsY8xyyVE4V7e39KHEB5Y5fg64JGK7Aslg6s7dF8-QfpM8myyR1henDuhzyorR8pjPjcj5aJJY9Q3T/pub?gid=1603897332&single=true&output=csv';
-const CSV_ORDERS    = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTsY8xyyVE4V7e39KHEB5Y5fg64JGK7Aslg6s7dF8-QfpM8myyR1henDuhzyorR8pjPjcj5aJJY9Q3T/pub?gid=708973021&single=true&output=csv';
-const CSV_VENDORPR  = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTsY8xyyVE4V7e39KHEB5Y5fg64JGK7Aslg6s7dF8-QfpM8myyR1henDuhzyorR8pjPjcj5aJJY9Q3T/pub?gid=1795212434&single=true&output=csv';
 const WEBAPP_URL    = 'https://script.google.com/macros/s/AKfycbypxL0KxxXMVRieHHuvX98m9Jx6fYJWTdrMLQNkt99Sgt0vNzRDeyGiDz5fILlORP8wFQ/exec';
 const TOKEN         = '9mB4zR7kP2fW6vNqE1jH8aLcV5gT_sYx0uI-oZ3pD9bX4wK7eS6hF-EMS';
 /*** end config ***/
 
-let catHead=[], catRows=[], orderHead=[], orderRows=[], vpHead=[], vpRows=[];
-const idx = (h,name) => h.indexOf(name);
-
-function parseCSV(text){
-    const clean = (text||'').replace(/^\uFEFF/,'').trim();
-    if (!clean) return [];
-    return clean.split(/\r?\n/).map(line => {
-        const m = line.match(/(".*?"|[^",]+)(?=\s*,|\s*$)/g) || [];
-        return m.map(s => s.replace(/^"|"$/g, ''));
-    });
-}
+let catRows=[], orderRows=[], vpRows=[];
 
 function renderPending(){
-    const nameById = new Map(catRows.map(r => [r[idx(catHead,'ItemID')], {name: r[idx(catHead,'ItemName')], alt: r[idx(catHead,'ItemNameAlt')]}]));
-    const pending = orderRows.filter(r => ['Requested', 'Ordered'].includes(r[idx(orderHead,'Status')]));
+    const nameById = new Map(catRows.map(r => [r.ItemID, {name: r.ItemName, alt: r.ItemNameAlt}]));
+    const pending = orderRows.filter(r => ['Requested', 'Ordered'].includes(r.Status));
     
     const tbody = document.querySelector('#pendingTable tbody');
     tbody.innerHTML = pending.map(r => {
-        const itemId = r[idx(orderHead,'ItemID')] || '';
-        const orderId = r[idx(orderHead,'OrderID')] || '';
-        const itemInfo = nameById.get(itemId);
-        let itemName = itemInfo ? itemInfo.name : itemId;
+        const itemInfo = nameById.get(r.ItemID);
+        let itemName = itemInfo ? itemInfo.name : r.ItemID;
         const itemAltName = itemInfo ? itemInfo.alt : '';
-        const notes = r[idx(orderHead,'Notes')] || '';
-        const currentStatus = r[idx(orderHead,'Status')] || '';
 
-        if (!itemName && notes.startsWith('REQUESTED OTHER ITEM:')) {
-            itemName = `<em>${notes.replace('REQUESTED OTHER ITEM: ', '').split(' -- ')[0]}</em>`;
+        if (!itemName && r.Notes.startsWith('REQUESTED OTHER ITEM:')) {
+            itemName = `<em>${r.Notes.replace('REQUESTED OTHER ITEM: ', '').split(' -- ')[0]}</em>`;
         }
 
-        const vendorPrices = vpRows.filter(vp => vp[idx(vpHead, 'ItemID')] === itemId)
-                                 .sort((a,b) => parseFloat(a[idx(vpHead,'UnitPrice')]) - parseFloat(b[idx(vpHead,'UnitPrice')]));
+        const vendorPrices = vpRows.filter(vp => vp.ItemID === r.ItemID)
+                                 .sort((a,b) => parseFloat(a.UnitPrice) - parseFloat(b.UnitPrice));
 
         return `<tr>
             <td>
@@ -118,24 +101,24 @@ function renderPending(){
                         <thead><tr><th>Vendor</th><th>Price</th><th>Item#</th></tr></thead>
                         <tbody>
                             ${vendorPrices.map(vp => {
-                                const price = parseFloat(vp[idx(vpHead,'UnitPrice')]);
+                                const price = parseFloat(vp.UnitPrice);
                                 return `<tr>
-                                    <td>${vp[idx(vpHead,'VendorID')]}</td>
+                                    <td>${vp.VendorID || ''}</td>
                                     <td>${!isNaN(price) ? `$${price.toFixed(2)}` : 'N/A'}</td>
-                                    <td>${vp[idx(vpHead,'VendorItemNumber')]}</td>
+                                    <td>${vp.VendorItemNumber || ''}</td>
                                 </tr>`
                             }).join('') || '<tr><td colspan="3">No pricing info</td></tr>'}
                         </tbody>
                     </table>
                 </details>
             </td>
-            <td>${r[idx(orderHead,'Qty')] || ''}</td>
+            <td>${r.Qty || ''}</td>
             <td class="status-btns">
-                <button class="btn ${currentStatus === 'Requested' ? 'active' : ''}" data-orderid="${orderId}" data-status="Requested">Pending</button>
-                <button class="btn ${currentStatus === 'Ordered' ? 'active' : ''}" data-orderid="${orderId}" data-status="Ordered">Ordered</button>
-                <button class="btn" data-orderid="${orderId}" data-status="Received">Received</button>
+                <button class="btn ${r.Status === 'Requested' ? 'active' : ''}" data-orderid="${r.OrderID}" data-status="Requested">Pending</button>
+                <button class="btn ${r.Status === 'Ordered' ? 'active' : ''}" data-orderid="${r.OrderID}" data-status="Ordered">Ordered</button>
+                <button class="btn" data-orderid="${r.OrderID}" data-status="Received">Received</button>
             </td>
-            <td>${notes}</td>
+            <td>${r.Notes || ''}</td>
         </tr>`;
     }).join('') || '<tr><td colspan="4">No pending requests.</td></tr>';
     
@@ -145,47 +128,46 @@ function renderPending(){
             const status = btn.dataset.status;
             await fetch(WEBAPP_URL, {method:'POST', mode:'no-cors', body: JSON.stringify({token: TOKEN, actionType: 'updateOrderStatus', orderId, status})});
             
-            const orderRow = orderRows.find(r => r[idx(orderHead,'OrderID')] === orderId);
-            if (orderRow) orderRow[idx(orderHead,'Status')] = status;
+            const orderRow = orderRows.find(r => r.OrderID === orderId);
+            if (orderRow) orderRow.Status = status;
             renderPending();
         });
     });
 }
 
 function renderHistory(days, query = '') {
-    const nameById = new Map(catRows.map(r => [r[idx(catHead,'ItemID')], r[idx(catHead,'ItemName')]]));
-    const received = orderRows.filter(r => r[idx(orderHead,'Status')] === 'Received');
+    const nameById = new Map(catRows.map(r => [r.ItemID, r.ItemName]));
+    const received = orderRows.filter(r => r.Status === 'Received');
     
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - days);
 
     const filtered = received.filter(r => {
-        const ts = new Date(r[idx(orderHead,'Timestamp')]);
-        const itemName = nameById.get(r[idx(orderHead,'ItemID')]) || '';
+        const ts = new Date(r.Timestamp);
+        const itemName = nameById.get(r.ItemID) || '';
         return ts >= cutoff && (!query || itemName.toLowerCase().includes(query.toLowerCase()));
     });
 
     const tbody = document.querySelector('#historyTable tbody');
     tbody.innerHTML = filtered.map(r => `<tr>
-        <td>${nameById.get(r[idx(orderHead,'ItemID')]) || 'Other Item'}</td>
-        <td>${new Date(r[idx(orderHead,'Timestamp')]).toLocaleDateString()}</td>
-        <td>${r[idx(orderHead,'Notes')] || ''}</td>
+        <td>${nameById.get(r.ItemID) || 'Other Item'}</td>
+        <td>${new Date(r.Timestamp).toLocaleDateString()}</td>
+        <td>${r.Notes || ''}</td>
     </tr>`).join('') || `<tr><td colspan="3">No history in the last ${days} days.</td></tr>`;
 }
 
 async function boot() {
     try {
-        const [catText, orderText, vpText] = await Promise.all([
-            fetch(CSV_CATALOG).then(r => r.text()),
-            fetch(CSV_ORDERS).then(r => r.text()),
-            fetch(CSV_VENDORPR).then(r => r.text())
-        ]);
+        const response = await fetch(`${WEBAPP_URL}?action=getRequestPageData`);
+        const data = await response.json();
 
-        catHead = parseCSV(catText).shift() || []; catRows = parseCSV(catText).slice(1);
-        orderHead = parseCSV(orderText).shift() || []; orderRows = parseCSV(orderText).slice(1);
-        vpHead = parseCSV(vpText).shift() || []; vpRows = parseCSV(vpText).slice(1);
+        if (!data.ok) throw new Error("Failed to load data from script.");
         
-        document.getElementById('itemsDatalist').innerHTML = catRows.map(r => `<option value="${r[idx(catHead,'ItemName')]}">${r[idx(catHead,'ItemNameAlt')] || ''}</option>`).join('');
+        catRows = data.catalog;
+        orderRows = data.orders;
+        vpRows = data.vendorPricing;
+        
+        document.getElementById('itemsDatalist').innerHTML = catRows.map(r => `<option value="${r.ItemName}">${r.ItemNameAlt || ''}</option>`).join('');
         
         renderPending();
 
@@ -218,9 +200,9 @@ async function boot() {
                 if (!otherItemName) { msg.textContent = 'Please enter the item name.'; return; }
                 payload.otherItemName = otherItemName;
             } else {
-                catItem = catRows.find(r => r[idx(catHead,'ItemName')] === itemName);
+                catItem = catRows.find(r => r.ItemName === itemName);
                 if (!catItem) { msg.textContent = 'Please select a valid item.'; return; }
-                payload.itemId = catItem[idx(catHead,'ItemID')];
+                payload.itemId = catItem.ItemID;
             }
             msg.textContent = 'Submitting...';
             try {
