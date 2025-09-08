@@ -323,7 +323,15 @@ async function boot(){
   const invAll = parseCSV(invText); invHead = invAll.shift() || []; invRows = invAll;
   const catAll = parseCSV(catText); catHead = catAll.shift() || []; catRows = catAll;
   const unitAll = parseCSV(unitText); unitHead = unitAll.shift() || []; unitRows = unitAll;
-
+  const nameById = new Map(catRows.map(r => [r[idx(catHead,'ItemID')], r[idx(catHead,'ItemName')]]));
+  if (!invHead.includes('ItemName')) {
+      invHead.push('ItemName');
+  }
+  const itemIdCol = idx(invHead, 'ItemID');
+  const itemNameCol = idx(invHead, 'ItemName');
+  invRows.forEach(r => {
+      r[itemNameCol] = nameById.get(r[itemIdCol]) || 'Unknown Item';
+  });
   const unitIdCol = idx(unitHead, 'Unit');
   const unitDisplayCol = idx(unitHead, 'Display');
   unitNameById = new Map(unitRows.map(r => [r[unitIdCol], r[unitDisplayCol]]));
