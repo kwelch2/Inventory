@@ -99,13 +99,27 @@ const TOKEN        = '9mB4zR7kP2fW6vNqE1jH8aLcV5gT_sYx0uI-oZ3pD9bX4wK7eS6hF-EMS'
 let invHead=[], invRows=[], catHead=[], catRows=[], unitHead=[], unitRows=[], unitNameById=new Map();
 const idx = (h,name) => h.indexOf(name);
 
-function parseCSV(text){
-  const clean = (text||'').replace(/^\uFEFF/,'').trim();
-  if (!clean) return [];
-  return clean.split(/\r?\n/).map(line=>{
-    const m = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || [];
-    return m.map(s=>s.replace(/^"|"$/g,''));
-  });
+function parseCSV(text) {
+    const clean = (text || '').replace(/^\uFEFF/, '').trim();
+    if (!clean) return [];
+    const lines = clean.split(/\r?\n/);
+    return lines.map(line => {
+        const values = [];
+        let inQuote = false;
+        let value = '';
+        for (let char of line) {
+            if (char === '"') {
+                inQuote = !inQuote;
+            } else if (char === ',' && !inQuote) {
+                values.push(value.trim());
+                value = '';
+            } else {
+                value += char;
+            }
+        }
+        values.push(value.trim());
+        return values;
+    });
 }
 function statusClass(s){
   return s==='Expired' ? 'red' :
