@@ -12,15 +12,15 @@
   h1,h2{margin:0 0 8px}
   label{display:block;margin:10px 0 6px;font-weight:600}
   input,button,select{width:100%;padding:10px;border:1px solid #ccc;border-radius:8px}
-  button.btn, a.btn{width:auto;padding:6px 10px;}
+  button.btn{width:auto;padding:6px 10px;}
   .muted{color:var(--muted);font-size:.9rem}
   table{width:100%;border-collapse:collapse;margin-top:12px}
   th,td{padding:8px;border-bottom:1px solid #eee;text-align:left;vertical-align:top;}
-  .status-btns button{width:auto; margin-right:5px;}
-  .status-btns .active{background-color:#4CAF50;color:white;border-color:#4CAF50;}
-  .vendor-table{font-size:0.9em; margin-top:8px;}
+  .status-btns button{width:auto; margin-right:5px; cursor:pointer;}
+  .status-btns .active{background-color:#0275d8;color:white;border-color:#0275d8;}
+  .vendor-table{font-size:0.9em; margin-top:8px; background-color:#fafafa;}
   .vendor-table th, .vendor-table td {padding:4px;}
-  summary {cursor:pointer;}
+  summary {cursor:pointer; font-weight:bold;}
 </style>
 </head>
 <body>
@@ -54,7 +54,7 @@
   <div class="card" style="margin-top:16px;">
     <details>
         <summary style="font-size:1.5em;font-weight:bold;">View Order History</summary>
-        <div class="toolbar" style="margin-top:12px;">
+        <div style="display:flex; gap:10px; margin-top:12px; flex-wrap:wrap;">
             <button class="btn" data-days="30">Last 30 Days</button>
             <button class="btn" data-days="60">Last 60 Days</button>
             <button class="btn" data-days="90">Last 90 Days</button>
@@ -84,7 +84,7 @@ function parseCSV(text){
     const clean = (text||'').replace(/^\uFEFF/,'').trim();
     if (!clean) return [];
     return clean.split(/\r?\n/).map(line => {
-        const m = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || [];
+        const m = line.match(/(".*?"|[^",]+)(?=\s*,|\s*$)/g) || [];
         return m.map(s => s.replace(/^"|"$/g, ''));
     });
 }
@@ -97,28 +97,29 @@ function renderPending(){
     tbody.innerHTML = pending.map(r => {
         const itemId = r[idx(orderHead,'ItemID')] || '';
         const orderId = r[idx(orderHead,'OrderID')] || '';
-        let itemInfo = nameById.get(itemId);
+        const itemInfo = nameById.get(itemId);
         let itemName = itemInfo ? itemInfo.name : itemId;
         const itemAltName = itemInfo ? itemInfo.alt : '';
         const notes = r[idx(orderHead,'Notes')] || '';
         const currentStatus = r[idx(orderHead,'Status')] || '';
 
-        if (notes.startsWith('REQUESTED OTHER ITEM:')) {
-            itemName = `<em>${notes.replace('REQUESTED OTHER ITEM: ', '').split('--')[0]}</em>`;
+        if (!itemName && notes.startsWith('REQUESTED OTHER ITEM:')) {
+            itemName = `<em>${notes.replace('REQUESTED OTHER ITEM: ', '').split(' -- ')[0]}</em>`;
         }
 
-        const vendorPrices = vpRows.filter(vp => vp[idx(vpHead, 'ItemID')] === itemId).sort((a,b) => a[idx(vpHead,'UnitPrice')] - b[idx(vpHead,'UnitPrice')]);
+        const vendorPrices = vpRows.filter(vp => vp[idx(vpHead, 'ItemID')] === itemId)
+                                 .sort((a,b) => Number(a[idx(vpHead,'UnitPrice')]) - Number(b[idx(vpHead,'UnitPrice')]));
 
         return `<tr>
             <td>
                 <details>
-                    <summary><strong>${itemName}</strong> <span class="muted">${itemAltName || ''}</span></summary>
+                    <summary>${itemName} <span class="muted">${itemAltName || ''}</span></summary>
                     <table class="vendor-table">
                         <thead><tr><th>Vendor</th><th>Price</th><th>Item#</th></tr></thead>
                         <tbody>
                             ${vendorPrices.map(vp => `<tr>
                                 <td>${vp[idx(vpHead,'VendorID')]}</td>
-                                <td>$${vp[idx(vpHead,'UnitPrice')]}</td>
+                                <td>$${Number(vp[idx(vpHead,'UnitPrice')]).toFixed(2)}</td>
                                 <td>${vp[idx(vpHead,'VendorItemNumber')]}</td>
                             </tr>`).join('') || '<tr><td colspan="3">No pricing info</td></tr>'}
                         </tbody>
@@ -140,7 +141,7 @@ function renderPending(){
             const orderId = btn.dataset.orderid;
             const status = btn.dataset.status;
             await fetch(WEBAPP_URL, {method:'POST', mode:'no-cors', body: JSON.stringify({token: TOKEN, actionType: 'updateOrderStatus', orderId, status})});
-            // Optimistic update
+            
             const orderRow = orderRows.find(r => r[idx(orderHead,'OrderID')] === orderId);
             if (orderRow) orderRow[idx(orderHead,'Status')] = status;
             renderPending();
@@ -163,34 +164,74 @@ function renderHistory(days, query = '') {
 
     const tbody = document.querySelector('#historyTable tbody');
     tbody.innerHTML = filtered.map(r => `<tr>
-        <td>${nameById.get(r[idx(orderHead,'ItemID')]) || 'Other'}</td>
+        <td>${nameById.get(r[idx(orderHead,'ItemID')]) || 'Other Item'}</td>
         <td>${new Date(r[idx(orderHead,'Timestamp')]).toLocaleDateString()}</td>
         <td>${r[idx(orderHead,'Notes')] || ''}</td>
     </tr>`).join('') || `<tr><td colspan="3">No history in the last ${days} days.</td></tr>`;
 }
 
 async function boot() {
-    const [catText, orderText, vpText] = await Promise.all([
-        fetch(CSV_CATALOG).then(r=>r.text()),
-        fetch(CSV_ORDERS).then(r=>r.text()),
-        fetch(CSV_VENDORPR).then(r=>r.text())
-    ]);
+    try {
+        const [catText, orderText, vpText] = await Promise.all([
+            fetch(CSV_CATALOG).then(r => r.text()),
+            fetch(CSV_ORDERS).then(r => r.text()),
+            fetch(CSV_VENDORPR).then(r => r.text())
+        ]);
 
-    const catAll = parseCSV(catText); catHead = catAll.shift() || []; catRows = catAll;
-    const orderAll = parseCSV(orderText); orderHead = orderAll.shift() || []; orderRows = orderAll;
-    const vpAll = parseCSV(vpText); vpHead = vpAll.shift() || []; vpRows = vpAll;
-    
-    document.getElementById('itemsDatalist').innerHTML = catRows.map(r => `<option value="${r[idx(catHead,'ItemName')]}">${r[idx(catHead,'ItemNameAlt')] || ''}</option>`).join('');
-    
-    renderPending();
+        catHead = parseCSV(catText).shift() || []; catRows = parseCSV(catText).slice(1);
+        orderHead = parseCSV(orderText).shift() || []; orderRows = parseCSV(orderText).slice(1);
+        vpHead = parseCSV(vpText).shift() || []; vpRows = parseCSV(vpText).slice(1);
+        
+        document.getElementById('itemsDatalist').innerHTML = catRows.map(r => `<option value="${r[idx(catHead,'ItemName')]}">${r[idx(catHead,'ItemNameAlt')] || ''}</option>`).join('');
+        
+        renderPending();
 
-    document.querySelectorAll('.toolbar button[data-days]').forEach(btn => btn.addEventListener('click', () => renderHistory(btn.dataset.days)));
-    document.getElementById('historySearch').addEventListener('input', (e) => {
-        const selectedDays = document.querySelector('.toolbar button.active')?.dataset.days || 30;
-        renderHistory(selectedDays, e.target.value);
-    });
+        document.querySelectorAll('div.toolbar button[data-days]').forEach(btn => btn.addEventListener('click', () => renderHistory(btn.dataset.days)));
+        document.getElementById('historySearch').addEventListener('input', (e) => {
+            const selectedDays = 30; // Default or find active button
+            renderHistory(selectedDays, e.target.value);
+        });
 
-    // ... (rest of boot function for request form)
+        const isOtherCheck = document.getElementById('isOther');
+        const itemSearchInput = document.getElementById('itemSearch');
+        const otherItemInput = document.getElementById('otherItem');
+        isOtherCheck.addEventListener('change', () => {
+            itemSearchInput.style.display = isOtherCheck.checked ? 'none' : 'block';
+            otherItemInput.style.display = isOtherCheck.checked ? 'block' : 'none';
+            itemSearchInput.value = '';
+            otherItemInput.value = '';
+        });
+
+        document.getElementById('submitBtn').addEventListener('click', async () => {
+            const isOther = isOtherCheck.checked;
+            const itemName = itemSearchInput.value;
+            const otherItemName = otherItemInput.value.trim();
+            const qty = document.getElementById('qty').value.trim();
+            const notes = document.getElementById('notes').value.trim();
+            const msg = document.getElementById('msg');
+            let payload = { token: TOKEN, actionType: 'createRequest', qty, notes };
+            let catItem;
+            if (isOther) {
+                if (!otherItemName) { msg.textContent = 'Please enter the item name.'; return; }
+                payload.otherItemName = otherItemName;
+            } else {
+                catItem = catRows.find(r => r[idx(catHead,'ItemName')] === itemName);
+                if (!catItem) { msg.textContent = 'Please select a valid item.'; return; }
+                payload.itemId = catItem[idx(catHead,'ItemID')];
+            }
+            msg.textContent = 'Submitting...';
+            try {
+                await fetch(WEBAPP_URL, { method:'POST', mode:'no-cors', body: JSON.stringify(payload) });
+                msg.textContent = 'Request submitted! Refreshing...';
+                setTimeout(() => location.reload(), 1000);
+            } catch(e) {
+                msg.textContent = 'An error occurred.';
+            }
+        });
+    } catch(e) {
+        console.error(e);
+        document.querySelector('#pendingTable tbody').innerHTML = `<tr><td colspan="4" style="color:red;font-weight:bold;">Error loading data. Please check browser console (F12).</td></tr>`;
+    }
 }
 boot();
 </script>
