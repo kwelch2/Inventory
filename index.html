@@ -12,33 +12,33 @@
   h1{margin:0 0 8px}
   .muted{color:var(--muted);font-size:.9rem}
   .toolbar{display:flex;gap:10px;align-items:center;margin-top:8px;flex-wrap:wrap}
-  select{padding:8px;border:1px solid #ccc;border-radius:8px}
-  a.btn,button.btn{padding:6px 10px;border:1px solid #ccc;border-radius:8px;text-decoration:none;background:#fafafa;cursor:pointer}
+  select,input,button{padding:8px;border:1px solid #ccc;border-radius:8px}
+  a.btn,button.btn{padding:6px 10px;text-decoration:none;background:#fafafa;cursor:pointer}
   table{width:100%;border-collapse:collapse;margin-top:8px}
   th,td{padding:8px;border-bottom:1px solid #eee;text-align:left;vertical-align:middle}
   h2{margin:18px 0 6px}
-  .unit-block{margin-top:18px}
-  .pill{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid var(--b)}
-  .red{background:#ffebee} .orange{background:#fff3e0} .yellow{background:#fffde7} .tan{background:#f7f2e7}
-  .rowbtns{display:flex;gap:6px;flex-wrap:wrap}
+  .unit-display{text-align:center;padding:10px;border:1px solid var(--b);border-radius:8px; margin-top:16px; font-size:1.2em; font-weight:bold;}
+  .status-btns button{width:auto; margin-right:5px; background-color:#f0f0f0; cursor:pointer;}
+  .status-btns .active{background-color:#0275d8;color:white;border-color:#0275d8;}
+  .red{background:#ffebee} .orange{background:#fff3e0} .yellow{background:#fffde7}
+  .modal{display:none;position:fixed;z-index:100;left:0;top:0;width:100%;height:100%;overflow:auto;background-color:rgba(0,0,0,0.4);}
+  .modal-content{background-color:#fefefe;margin:15% auto;padding:20px;border:1px solid #888;width:80%;max-width:500px;border-radius:12px;}
+  .close-btn{color:#aaa;float:right;font-size:28px;font-weight:bold;cursor:pointer;}
 </style>
 </head>
 <body>
 <div class="wrap">
   <div class="card">
     <h1>Expiring Supplies</h1>
-    <div class="muted">Yellow ≤60d, Orange ≤30d, Red expired. (Item names from Catalog; expiries/status from Inventory.)</div>
-
+    <div class="muted">Yellow ≤60d, Orange ≤30d, Red expired.</div>
     <div class="toolbar">
       <label class="muted">Unit</label>
       <select id="unitSel"></select>
-
       <label class="muted">Sort</label>
       <select id="sortSel">
         <option value="date">By Expiry Date</option>
         <option value="item">By Item</option>
       </select>
-
       <details>
         <summary class="muted">Advanced</summary>
         <div style="margin-top:6px">
@@ -50,97 +50,59 @@
           </select>
         </div>
       </details>
-
-       <details>
-        <summary class="muted">Add Missing Item</summary>
-        <div style="margin-top:6px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
-          <input id="addItem" list="itemsDatalist" placeholder="Select item from Catalog..." style="flex:2;min-width:200px;">
-          <datalist id="itemsDatalist"></datalist>
-          
-          <select id="addCompartment" style="flex:1;min-width:120px;">
-            <option value="">Compartment...</option>
-            <option>Wall</option>
-            <option>Bag</option>
-            <option>Supply RM</option>
-          </select>
-          
-          <div id="addExpiryChips" class="rowbtns" style="flex:2;min-width:250px;"></div>
-          
-          <button id="saveNewItemBtn" class="btn">Save</button>
-        </div>
-      </details>
-
       <span style="flex:1"></span>
-
-      
-
-      <span style="flex:1"></span>
-      <a class="btn" id="viewUnit">By Unit</a>
-      <a class="btn" id="viewAll">All Items</a>
+      <button id="showAddItemModal" class="btn">Add Expiring Item</button>
     </div>
-
+    <div id="unitDisplay" class="unit-display" style="display:none;"></div>
     <div id="content" style="margin-top:8px"></div>
   </div>
 </div>
 
+<div id="addItemModal" class="modal">
+  <div class="modal-content">
+    <span class="close-btn">&times;</span>
+    <h2>Add Missing Expiring Item</h2>
+    <label>Item</label>
+    <input id="addItemInput" list="itemsDatalist" placeholder="Select item from Catalog...">
+    <datalist id="itemsDatalist"></datalist>
+    <label>Compartment</label>
+    <select id="addCompartmentSelect">
+        <option value="">Select Compartment...</option>
+        <option>Wall</option>
+        <option>Bag</option>
+        <option>Supply RM</option>
+    </select>
+    <label>Expiry Month</label>
+    <div id="addExpiryChips" style="display:flex; gap:6px;"></div>
+    <button id="saveNewItemBtn" class="btn" style="width:100%; margin-top:16px;">Save Item</button>
+  </div>
+</div>
+
 <script>
-/*** CONFIG — replace these ***/
-// Inventory: InventoryID, ItemID, Unit, Compartment, Lot, Qty, Expiry, DaysToExpire, Status, Notes, (CrewStatus optional)
-const CSV_INVENTORY   = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTsY8xyyVE4V7e39KHEB5Y5fg64JGK7Aslg6s7dF8-QfpM8myyR1henDuhzyorR8pjPjcj5aJJY9Q3T/pub?gid=0&single=true&output=csv';
-const CSV_CATALOG     = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTsY8xyyVE4V7e39KHEB5Y5fg64JGK7Aslg6s7dF8-QfpM8myyR1henDuhzyorR8pjPjcj5aJJY9Q3T/pub?gid=1603897332&single=true&output=csv';
-const CSV_UNITS       = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTsY8xyyVE4V7e39KHEB5Y5fg64JGK7Aslg6s7dF8-QfpM8myyR1henDuhzyorR8pjPjcj5aJJY9Q3T/pub?gid=767202807&single=true&output=csv';
-const CSV_VENDORPR = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTsY8xyyVE4V7e39KHEB5Y5fg64JGK7Aslg6s7dF8-QfpM8myyR1henDuhzyorR8pjPjcj5aJJY9Q3T/pub?gid=1795212434&single=true&output=csv';
-const CSV_VENDORS  = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTsY8xyyVE4V7e39KHEB5Y5fg64JGK7Aslg6s7dF8-QfpM8myyR1henDuhzyorR8pjPjcj5aJJY9Q3T/pub?gid=1079994552&single=true&output=csv';
-const CSV_ACTIVITYLOG = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTsY8xyyVE4V7e39KHEB5Y5fg64JGK7Aslg6s7dF8-QfpM8myyR1henDuhzyorR8pjPjcj5aJJY9Q3T/pub?gid=1791453005&single=true&output=csv';
-const WEBAPP_URL   = 'https://script.google.com/macros/s/AKfycbypxL0KxxXMVRieHHuvX98m9Jx6fYJWTdrMLQNkt99Sgt0vNzRDeyGiDz5fILlORP8wFQ/exec';
-const TOKEN        = '9mB4zR7kP2fW6vNqE1jH8aLcV5gT_sYx0uI-oZ3pD9bX4wK7eS6hF-EMS';
+/*** CONFIG ***/
+const CSV_INVENTORY = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTsY8xyyVE4V7e39KHEB5Y5fg64JGK7Aslg6s7dF8-QfpM8myyR1henDuhzyorR8pjPjcj5aJJY9Q3T/pub?gid=0&single=true&output=csv';
+const CSV_CATALOG   = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTsY8xyyVE4V7e39KHEB5Y5fg64JGK7Aslg6s7dF8-QfpM8myyR1henDuhzyorR8pjPjcj5aJJY9Q3T/pub?gid=1603897332&single=true&output=csv';
+const CSV_UNITS     = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTsY8xyyVE4V7e39KHEB5Y5fg64JGK7Aslg6s7dF8-QfpM8myyR1henDuhzyorR8pjPjcj5aJJY9Q3T/pub?gid=767202807&single=true&output=csv';
+const WEBAPP_URL    = 'https://script.google.com/macros/s/AKfycbypxL0KxxXMVRieHHuvX98m9Jx6fYJWTdrMLQNkt99Sgt0vNzRDeyGiDz5fILlORP8wFQ/exec';
+const TOKEN         = '9mB4zR7kP2fW6vNqE1jH8aLcV5gT_sYx0uI-oZ3pD9bX4wK7eS6hF-EMS';
 /*** end config ***/
 
 let invHead=[], invRows=[], catHead=[], catRows=[], unitHead=[], unitRows=[], unitNameById=new Map();
 const idx = (h,name) => h.indexOf(name);
 
-function parseCSV(text) {
-    const clean = (text || '').replace(/^\uFEFF/, '').trim();
+function parseCSV(text){
+    const clean = (text||'').replace(/^\uFEFF/,'').trim();
     if (!clean) return [];
-    const lines = clean.split(/\r?\n/);
-    return lines.map(line => {
-        const values = [];
-        let inQuote = false;
-        let value = '';
-        for (let char of line) {
-            if (char === '"') {
-                inQuote = !inQuote;
-            } else if (char === ',' && !inQuote) {
-                values.push(value.trim());
-                value = '';
-            } else {
-                value += char;
-            }
-        }
-        values.push(value.trim());
-        return values;
+    return clean.split(/\r?\n/).map(line => {
+        const m = line.match(/(".*?"|[^",]+)(?=\s*,|\s*$)/g) || [];
+        return m.map(s => s.replace(/^"|"$/g, ''));
     });
 }
-function statusClass(s){
-  return s==='Expired' ? 'red' :
-         s==='30d'     ? 'orange' :
-         s==='60d'     ? 'yellow' :
-         s==='90d'     ? 'tan' : '';
-}
-function displayMonthYear(iso){
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (isNaN(d)) return String(iso);
-  d.setMonth(d.getMonth()-1);
-  return String(d.getMonth()+1).padStart(2,'0') + '/' + d.getFullYear();
-}
-function getCrewStatus(h, row){
-  const i = idx(h,'CrewStatus');
-  return i >= 0 ? String(row[i]||'').trim() : '';
-}
+function statusClass(s){ return s==='Expired'?'red':s==='30d'?'orange':s==='60d'?'yellow':''; }
+function getCrewStatus(h, row){ return String(row[idx(h,'CrewStatus')]||'').trim(); }
+
 function next3MonthChips(){
-  const out = [];
-  const now = new Date();
+  const out = []; const now = new Date();
   for (let k=0; k<3; k++){
     const d = new Date(now.getFullYear(), now.getMonth()+k, 1);
     const label = String(d.getMonth()+1).padStart(2,'0') + '/' + d.getFullYear();
@@ -149,63 +111,31 @@ function next3MonthChips(){
   }
   return out;
 }
-function monthLabelToNextISO(input){
-  if (!input) return '';
-  const t = String(input).trim();
-  let m = t.match(/^(\d{1,2})\s*[-/]\s*(\d{2,4})$/);
-  if (m){
-    let mm = +m[1], yy = +m[2];
-    if (yy < 100) yy += 2000;
-    return new Date(yy, mm, 1).toISOString().slice(0,10);
-  }
-  const map = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,sept:8,oct:9,nov:10,dec:11};
-  m = t.toLowerCase().match(/^([a-z]{3,5})\s*[-/ ]\s*(\d{2,4})$/);
-  if (m && map.hasOwnProperty(m[1])){
-    let yy = +m[2]; if (yy < 100) yy += 2000;
-    const mm = map[m[1]];
-    return new Date(yy, mm+1, 1).toISOString().slice(0,10);
-  }
-  return '';
-}
+
 function fillUnitSelect(){
   const sel = document.getElementById('unitSel');
-  const unitIdCol = idx(unitHead, 'Unit');
-  const unitDisplayCol = idx(unitHead, 'Display');
-  unitRows.sort((a, b) => {
-    const idA = Number(a[unitIdCol]);
-    const idB = Number(b[unitIdCol]);
-    if (!isNaN(idA) && !isNaN(idB)) return idA - idB;
-    return String(a[unitDisplayCol]).localeCompare(String(b[unitDisplayCol]));
-  });
-  sel.innerHTML = unitRows.map(r =>
-    `<option value="${r[unitIdCol]}">${r[unitDisplayCol]}</option>`
-  ).join('');
-  if (!sel.value && unitRows.length) sel.value = unitRows[0][unitIdCol];
+  let options = '<option value="ALL">-- All Items --</option>';
+  unitRows.sort((a, b) => (Number(a[idx(unitHead,'Unit')])||0) - (Number(b[idx(unitHead,'Unit')])||0));
+  options += unitRows.map(r => `<option value="${r[idx(unitHead,'Unit')]}">${r[idx(unitHead,'Display')]}</option>`).join('');
+  sel.innerHTML = options;
 }
-async function postUpdate({itemId, unit, compartment, lot, crewStatus, qty, expiry, notes}){
+
+async function postUpdate(payload){
+  payload.token = TOKEN;
+  payload.actionType = 'updateInventory';
   try{
-    await fetch(WEBAPP_URL, {
-      method:'POST', mode:'no-cors',
-      body: JSON.stringify({
-        token: TOKEN,
-        actionType: 'updateInventory',
-        itemId, unit, compartment, lot,
-        qty, expiry,
-        crewStatus,
-        action: 'Update',
-        notes
-      })
-    });
-  }catch(_){}
+    await fetch(WEBAPP_URL, {method:'POST', mode:'no-cors', body: JSON.stringify(payload)});
+  }catch(e){ console.error("Post failed", e); }
 }
 
-function render(view='unit'){
-  const within = Number(document.getElementById('rangeSel').value || '90');
-  const sortBy = document.getElementById('sortSel').value || 'date';
-  const unit   = document.getElementById('unitSel').value;
-
-  const idCol = idx(catHead,'ItemID'), nmCol = idx(catHead,'ItemName');
-  const nameById = new Map(catRows.map(r => [r[idCol], r[nmCol]]));
+function render(){
+  const unit = document.getElementById('unitSel').value;
+  const sortBy = document.getElementById('sortSel').value;
+  const within = Number(document.getElementById('rangeSel').value);
+  
+  const unitDisplay = document.getElementById('unitDisplay');
+  unitDisplay.textContent = (unit === 'ALL') ? 'Viewing All Units' : `Viewing ${unitNameById.get(unit) || unit}`;
+  unitDisplay.style.display = 'block';
 
   const H = invHead;
   let list = invRows.filter(r => {
@@ -213,194 +143,128 @@ function render(view='unit'){
     if (!expiryDateStr) return false;
     const expiryDate = new Date(expiryDateStr);
     if (isNaN(expiryDate)) return false;
-
     const daysToExpire = Math.ceil((expiryDate.getTime() - new Date().getTime()) / (1000 * 3600 * 24));
-    
     if (daysToExpire > within) return false;
-
     const crewStatus = getCrewStatus(H, r).toLowerCase();
     if (crewStatus === 'replaced' || crewStatus === 'good') return false;
-
     r.daysToExpire = daysToExpire;
-    if (daysToExpire <= 0) r.status = 'Expired';
-    else if (daysToExpire <= 30) r.status = '30d';
-    else if (daysToExpire <= 60) r.status = '60d';
-    else r.status = '90d';
-
+    r.status = daysToExpire <= 0 ? 'Expired' : daysToExpire <= 30 ? '30d' : daysToExpire <= 60 ? '60d' : '90d';
     return true;
   });
 
-  if (sortBy === 'item'){
-    list.sort((a,b) => {
-      const aName = nameById.get(a[idx(H,'ItemID')]) || '';
-      const bName = nameById.get(b[idx(H,'ItemID')]) || '';
-      return aName.localeCompare(bName) || (a.daysToExpire || 9999) - (b.daysToExpire || 9999);
-    });
+  if (sortBy === 'item') {
+    list.sort((a,b) => (a[idx(H,'ItemName')]||'').localeCompare(b[idx(H,'ItemName')]||''));
   } else {
     list.sort((a,b) => (new Date(a[idx(H,'Expiry')]) - new Date(b[idx(H,'Expiry')])));
   }
 
+  const filteredList = (unit === 'ALL') ? list : list.filter(r => String(r[idx(H,'Unit')]) === unit);
+  
   const cont = document.getElementById('content');
-  const byUnit = view==='unit' ? list.filter(r => String(r[idx(H,'Unit')]) === unit) : list;
-
-  const table = `
+  cont.innerHTML = `
     <table>
       <thead><tr>
-        <th>Item</th>${view==='all'?'<th>Unit</th>':''}
-        <th>Compartment</th><th>Lot</th><th>Qty</th>
-        <th>Expiry</th><th>Days</th><th>Status</th><th>Update</th>
+        <th>Item</th> ${unit === 'ALL' ? '<th>Unit</th>' : ''}
+        <th>Compartment</th><th>Lot / Qty</th><th>Expiry</th><th>Status</th>
       </tr></thead>
       <tbody>
-        ${byUnit.map(r=>{
-          const cls = statusClass(r.status);
+        ${filteredList.map(r=>{
           const itemId = r[idx(H,'ItemID')] || '';
-          const itemName = nameById.get(itemId) || itemId;
           const u = r[idx(H,'Unit')] || '';
           const comp = r[idx(H,'Compartment')] || '';
           const lot  = r[idx(H,'Lot')] || '';
           const qty  = r[idx(H,'Qty')] || '';
-          const exp  = displayMonthYear(r[idx(H,'Expiry')]||'');
-          const badge = getCrewStatus(H,r) || r.status || '';
-          return `<tr class="${cls}">
-            <td>${itemName}</td>
-            ${view==='all'?`<td>${unitNameById.get(u) || u}</td>`:''}
+          const crewStatus = getCrewStatus(H, r);
+          return `<tr class="${statusClass(r.status)}">
+            <td>${r[idx(H,'ItemName')] || itemId}</td>
+            ${unit === 'ALL' ? `<td>${unitNameById.get(u) || u}</td>` : ''}
             <td>${comp}</td>
-            <td>${lot}</td>
-            <td>${qty}</td>
-            <td>${exp}</td>
-            <td>${r.daysToExpire}</td>
-            <td><span class="pill">${badge}</span></td>
-            <td>
-              <div class="rowbtns">
-                <button class="btn" data-act="Pending"  data-item="${itemId}" data-unit="${u||unit}" data-comp="${comp}" data-lot="${lot}">Pending</button>
-                <button class="btn" data-act="Replaced" data-item="${itemId}" data-unit="${u||unit}" data-comp="${comp}" data-lot="${lot}">Replaced</button>
-                <button class="btn" data-act="Good"     data-item="${itemId}" data-unit="${u||unit}" data-comp="${comp}" data-lot="${lot}">Good</button>
-              </div>
-              <div class="rowbtns" style="margin-top:6px">
-                ${next3MonthChips().map(ch =>
-                  `<button class="btn" data-exp="${ch.iso}" data-item="${itemId}" data-unit="${u||unit}" data-comp="${comp}" data-lot="${lot}">
-                      ${ch.label}
-                    </button>`).join('')}
-                <button class="btn" data-exp="__other__" data-item="${itemId}" data-unit="${u||unit}" data-comp="${comp}" data-lot="${lot}">
-                  Other…
-                </button>
-              </div>
+            <td>${lot} <span class="muted">${qty ? `(Qty: ${qty})` : ''}</span></td>
+            <td>${r.daysToExpire} days</td>
+            <td class="status-btns">
+              <button class="btn ${crewStatus.toLowerCase() === 'pending' ? 'active' : ''}" data-act="Pending" data-item="${itemId}" data-unit="${u}" data-lot="${lot}">Pending</button>
+              <button class="btn" data-act="Replaced" data-item="${itemId}" data-unit="${u}" data-lot="${lot}">Replaced</button>
+              <button class="btn" data-act="Good" data-item="${itemId}" data-unit="${u}" data-lot="${lot}">Good</button>
             </td>
           </tr>`;
-        }).join('') || '<tr><td colspan="'+(view==='all'?9:8)+'">No items need attention 🎉</td></tr>'}
+        }).join('') || `<tr><td colspan="6">No items need attention.</td></tr>`}
       </tbody>
-    </table>
-  `;
+    </table>`;
   
-  cont.innerHTML = view==='unit'
-    ? `<div class="unit-block"><h2>${unitNameById.get(unit) || unit}</h2>${table}</div>`
-    : table;
-  
-  // Wire up all the buttons on the table
-  const allButtons = cont.querySelectorAll('button[data-act], button[data-exp]');
-  allButtons.forEach(btn => {
+  cont.querySelectorAll('.status-btns button').forEach(btn => {
     btn.addEventListener('click', async () => {
-        let payload = {
-            itemId: btn.dataset.item,
-            unit: btn.dataset.unit,
-            compartment: btn.dataset.comp || '',
-            lot: btn.dataset.lot || ''
-        };
-
-        if (btn.dataset.act) {
-            payload.crewStatus = btn.dataset.act;
-        }
-
-        if (btn.dataset.exp) {
-            let iso = btn.dataset.exp;
-            if (iso === '__other__') {
-                const input = prompt('Enter expiry as MM/YYYY or Mon-YYYY (e.g., 09/2025 or Sep-2025):');
-                const tryIso = monthLabelToNextISO(input);
-                if (!tryIso) { alert('Could not parse that month/year.'); return; }
-                iso = tryIso;
-            }
-            payload.expiry = iso;
-        }
-        await postUpdate(payload);
-        render(view);
+      await postUpdate({itemId: btn.dataset.item, unit: btn.dataset.unit, lot: btn.dataset.lot, crewStatus: btn.dataset.act});
+      render();
     });
   });
 }
 
 async function boot(){
-  const [invText, catText, unitText] = await Promise.all([
-    fetch(CSV_INVENTORY).then(r=>r.text()),
-    fetch(CSV_CATALOG).then(r=>r.text()),
-    fetch(CSV_UNITS).then(r=>r.text())
-  ]);
+  try {
+    const [invText, catText, unitText] = await Promise.all([
+      fetch(CSV_INVENTORY).then(r=>r.text()), 
+      fetch(CSV_CATALOG).then(r=>r.text()), 
+      fetch(CSV_UNITS).then(r=>r.text())
+    ]);
+    invHead = parseCSV(invText).shift() || []; invRows = parseCSV(invText).slice(1);
+    catHead = parseCSV(catText).shift() || []; catRows = parseCSV(catText).slice(1);
+    unitHead = parseCSV(unitText).shift() || []; unitRows = parseCSV(unitText).slice(1);
 
-  const invAll = parseCSV(invText); invHead = invAll.shift() || []; invRows = invAll;
-  const catAll = parseCSV(catText); catHead = catAll.shift() || []; catRows = catAll;
-  const unitAll = parseCSV(unitText); unitHead = unitAll.shift() || []; unitRows = unitAll;
-  const nameById = new Map(catRows.map(r => [r[idx(catHead,'ItemID')], r[idx(catHead,'ItemName')]]));
-  if (!invHead.includes('ItemName')) {
-      invHead.push('ItemName');
-  }
-  const itemIdCol = idx(invHead, 'ItemID');
-  const itemNameCol = idx(invHead, 'ItemName');
-  invRows.forEach(r => {
-      r[itemNameCol] = nameById.get(r[itemIdCol]) || 'Unknown Item';
-  });
-  const unitIdCol = idx(unitHead, 'Unit');
-  const unitDisplayCol = idx(unitHead, 'Display');
-  unitNameById = new Map(unitRows.map(r => [r[unitIdCol], r[unitDisplayCol]]));
+    const nameById = new Map(catRows.map(r => [r[idx(catHead,'ItemID')], r[idx(catHead,'ItemName')]]));
+    if (!invHead.includes('ItemName')) invHead.push('ItemName');
+    invRows.forEach(r => { r[idx(invHead,'ItemName')] = nameById.get(r[idx(invHead,'ItemID')]) || 'Unknown Item'; });
+    
+    unitNameById = new Map(unitRows.map(r => [r[idx(unitHead,'Unit')], r[idx(unitHead,'Display')]]));
 
-  fillUnitSelect();
-  render('unit');
+    fillUnitSelect();
+    render();
 
-  document.getElementById('viewUnit').addEventListener('click', ()=>render('unit'));
-  document.getElementById('viewAll').addEventListener('click',  ()=>render('all'));
-  document.getElementById('unitSel').addEventListener('change', ()=>render('unit'));
-  document.getElementById('sortSel').addEventListener('change', ()=>render());
-  document.getElementById('rangeSel').addEventListener('change',()=>render());
-  
-  const itemDatalist = document.getElementById('itemsDatalist');
-  itemDatalist.innerHTML = catRows.map(r => `<option value="${r[idx(catHead,'ItemName')]}">`).join('');
+    document.getElementById('unitSel').addEventListener('change', render);
+    document.getElementById('sortSel').addEventListener('change', render);
+    document.getElementById('rangeSel').addEventListener('change', render);
 
-  const addExpiryChips = document.getElementById('addExpiryChips');
-  addExpiryChips.innerHTML = next3MonthChips().map(ch => 
-    `<button class="btn" data-exp="${ch.iso}">${ch.label}</button>`
-  ).join('');
+    // --- Logic for the Add Item Modal ---
+    const modal = document.getElementById('addItemModal');
+    document.getElementById('showAddItemModal').addEventListener('click', () => modal.style.display = 'block');
+    document.querySelector('.close-btn').addEventListener('click', () => modal.style.display = 'none');
+    window.addEventListener('click', (event) => { if (event.target == modal) modal.style.display = 'none'; });
 
-  let selectedNewExpiry = '';
-  addExpiryChips.querySelectorAll('button').forEach(btn => {
-    btn.addEventListener('click', (e) => {
+    document.getElementById('itemsDatalist').innerHTML = catRows.map(r => `<option value="${r[idx(catHead,'ItemName')]}">`).join('');
+    
+    const addExpiryChips = document.getElementById('addExpiryChips');
+    addExpiryChips.innerHTML = next3MonthChips().map(ch => `<button class="btn" data-exp="${ch.iso}">${ch.label}</button>`).join('');
+    
+    let selectedNewExpiry = '';
+    addExpiryChips.querySelectorAll('button').forEach(btn => {
+      btn.addEventListener('click', (e) => {
         e.preventDefault();
         selectedNewExpiry = btn.dataset.exp;
         addExpiryChips.querySelectorAll('button').forEach(b => b.style.borderColor = '#ccc');
         btn.style.borderColor = 'blue';
+      });
     });
-  });
 
-  document.getElementById('saveNewItemBtn').addEventListener('click', async () => {
-    const itemName = document.getElementById('addItem').value;
-    const compartment = document.getElementById('addCompartment').value;
-    const unit = document.getElementById('unitSel').value;
-    const catItem = catRows.find(r => r[idx(catHead,'ItemName')] === itemName);
-    
-    if (!catItem) { alert('Please select a valid item from the list.'); return; }
-    if (!compartment) { alert('Please select a compartment.'); return; }
-    if (!selectedNewExpiry) { alert('Please select an expiry month.'); return; }
-    
-    const itemId = catItem[idx(catHead,'ItemID')];
-    
-    await postUpdate({ 
-        itemId: itemId, 
-        unit: unit, 
-        compartment: compartment, 
-        expiry: selectedNewExpiry,
-        lot: `NEW-${Date.now()}`
+    document.getElementById('saveNewItemBtn').addEventListener('click', async () => {
+      const itemName = document.getElementById('addItemInput').value;
+      const compartment = document.getElementById('addCompartmentSelect').value;
+      const unit = document.getElementById('unitSel').value === 'ALL' ? prompt('This item will be added to ALL units. Which unit is this item for? (e.g., 31, 33)') : document.getElementById('unitSel').value;
+      const catItem = catRows.find(r => r[idx(catHead,'ItemName')] === itemName);
+      
+      if (!catItem || !compartment || !selectedNewExpiry || !unit) { 
+        alert('Please fill out all fields, including selecting a unit.'); 
+        return; 
+      }
+      
+      await postUpdate({itemId: catItem[idx(catHead,'ItemID')], unit, compartment, expiry: selectedNewExpiry, lot: `NEW-${Date.now()}`});
+      
+      modal.style.display = 'none';
+      alert(`'${itemName}' was added. The page will now refresh.`);
+      location.reload();
     });
-    
-    document.getElementById('addItem').value = '';
-    alert(`'${itemName}' was added to Unit ${unit}. The page will now refresh.`);
-    location.reload();
-  });
+  } catch(e) {
+    document.getElementById('content').innerHTML = `<p style="color:red;font-weight:bold;">Error: Could not load data. Please ensure the Google Sheets are shared correctly and check the console (F12) for details.</p>`;
+    console.error(e);
+  }
 }
 
 boot();

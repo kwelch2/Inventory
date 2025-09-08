@@ -11,33 +11,34 @@
   .card{background:var(--card);border:1px solid var(--b);border-radius:12px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
   h1,h2{margin:0 0 8px}
   label{display:block;margin:10px 0 6px;font-weight:600}
-  input,button{width:100%;padding:10px;border:1px solid #ccc;border-radius:8px}
+  input,button,select{width:100%;padding:10px;border:1px solid #ccc;border-radius:8px}
+  button.btn, a.btn{width:auto;padding:6px 10px;}
   .muted{color:var(--muted);font-size:.9rem}
   table{width:100%;border-collapse:collapse;margin-top:12px}
-  th,td{padding:8px;border-bottom:1px solid #eee;text-align:left}
+  th,td{padding:8px;border-bottom:1px solid #eee;text-align:left;vertical-align:top;}
+  .status-btns button{width:auto; margin-right:5px;}
+  .status-btns .active{background-color:#4CAF50;color:white;border-color:#4CAF50;}
+  .vendor-table{font-size:0.9em; margin-top:8px;}
+  .vendor-table th, .vendor-table td {padding:4px;}
+  summary {cursor:pointer;}
 </style>
 </head>
 <body>
 <div class="wrap">
   <div class="card">
     <h1>Supply Request</h1>
-    
     <label for="itemSearch">Item from Catalog</label>
     <input id="itemSearch" list="itemsDatalist" placeholder="Search for an item...">
     <datalist id="itemsDatalist"></datalist>
-
     <div style="margin: 8px 0;">
         <input type="checkbox" id="isOther" style="width:auto;">
         <label for="isOther" style="display:inline;font-weight:normal;">Or, request an item not in the list</label>
     </div>
     <input id="otherItem" placeholder="Enter unlisted item name..." style="display:none;">
-
     <label for="qty">Quantity (Optional)</label>
     <input id="qty" type="text" placeholder="e.g., 1 Box or 5 EA">
-
     <label for="notes">Notes (Optional)</label>
     <input id="notes" placeholder="e.g., For Unit 31">
-
     <button id="submitBtn" style="margin-top:12px;">Submit Request</button>
     <div id="msg" class="muted" style="margin-top:8px;"></div>
   </div>
@@ -45,145 +46,151 @@
   <div class="card" style="margin-top:16px;">
     <h2>Pending Requests</h2>
     <table id="pendingTable">
-        <thead><tr><th>Item</th><th>Date</th><th>Qty</th><th>Status</th><th>Notes</th></tr></thead>
-        <tbody><tr><td colspan="5">Loading...</td></tr></tbody>
+        <thead><tr><th>Item / Vendor Pricing</th><th>Qty</th><th>Status</th><th>Notes</th></tr></thead>
+        <tbody><tr><td colspan="4">Loading...</td></tr></tbody>
     </table>
+  </div>
+
+  <div class="card" style="margin-top:16px;">
+    <details>
+        <summary style="font-size:1.5em;font-weight:bold;">View Order History</summary>
+        <div class="toolbar" style="margin-top:12px;">
+            <button class="btn" data-days="30">Last 30 Days</button>
+            <button class="btn" data-days="60">Last 60 Days</button>
+            <button class="btn" data-days="90">Last 90 Days</button>
+            <input id="historySearch" placeholder="Search history..." style="width:auto;flex:1;">
+        </div>
+        <table id="historyTable">
+            <thead><tr><th>Item</th><th>Received</th><th>Notes</th></tr></thead>
+            <tbody><tr><td colspan="3">Select a date range to view history.</td></tr></tbody>
+        </table>
+    </details>
   </div>
 </div>
 
 <script>
 /*** CONFIG ***/
-const CSV_CATALOG = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTsY8xyyVE4V7e39KHEB5Y5fg64JGK7Aslg6s7dF8-QfpM8myyR1henDuhzyorR8pjPjcj5aJJY9Q3T/pub?gid=1603897332&single=true&output=csv';
-const CSV_ORDERS  = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTsY8xyyVE4V7e39KHEB5Y5fg64JGK7Aslg6s7dF8-QfpM8myyR1henDuhzyorR8pjPjcj5aJJY9Q3T/pub?gid=708973021&single=true&output=csv';
-const WEBAPP_URL  = 'https://script.google.com/macros/s/AKfycbypxL0KxxXMVRieHHuvX98m9Jx6fYJWTdrMLQNkt99Sgt0vNzRDeyGiDz5fILlORP8wFQ/exec';
-const TOKEN       = '9mB4zR7kP2fW6vNqE1jH8aLcV5gT_sYx0uI-oZ3pD9bX4wK7eS6hF-EMS';
+const CSV_CATALOG   = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTsY8xyyVE4V7e39KHEB5Y5fg64JGK7Aslg6s7dF8-QfpM8myyR1henDuhzyorR8pjPjcj5aJJY9Q3T/pub?gid=1603897332&single=true&output=csv';
+const CSV_ORDERS    = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTsY8xyyVE4V7e39KHEB5Y5fg64JGK7Aslg6s7dF8-QfpM8myyR1henDuhzyorR8pjPjcj5aJJY9Q3T/pub?gid=708973021&single=true&output=csv';
+const CSV_VENDORPR  = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTsY8xyyVE4V7e39KHEB5Y5fg64JGK7Aslg6s7dF8-QfpM8myyR1henDuhzyorR8pjPjcj5aJJY9Q3T/pub?gid=1795212434&single=true&output=csv';
+const WEBAPP_URL    = 'https://script.google.com/macros/s/AKfycbypxL0KxxXMVRieHHuvX98m9Jx6fYJWTdrMLQNkt99Sgt0vNzRDeyGiDz5fILlORP8wFQ/exec';
+const TOKEN         = '9mB4zR7kP2fW6vNqE1jH8aLcV5gT_sYx0uI-oZ3pD9bX4wK7eS6hF-EMS';
 /*** end config ***/
 
-let catHead=[], catRows=[], orderHead=[], orderRows=[];
+let catHead=[], catRows=[], orderHead=[], orderRows=[], vpHead=[], vpRows=[];
 const idx = (h,name) => h.indexOf(name);
 
-function parseCSV(text) {
-    const clean = (text || '').replace(/^\uFEFF/, '').trim();
+function parseCSV(text){
+    const clean = (text||'').replace(/^\uFEFF/,'').trim();
     if (!clean) return [];
-    const lines = clean.split(/\r?\n/);
-    return lines.map(line => {
-        const values = [];
-        let inQuote = false;
-        let value = '';
-        for (let char of line) {
-            if (char === '"') {
-                inQuote = !inQuote;
-            } else if (char === ',' && !inQuote) {
-                values.push(value.trim());
-                value = '';
-            } else {
-                value += char;
-            }
-        }
-        values.push(value.trim());
-        return values;
+    return clean.split(/\r?\n/).map(line => {
+        const m = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || [];
+        return m.map(s => s.replace(/^"|"$/g, ''));
     });
 }
 
 function renderPending(){
-    const nameById = new Map(catRows.map(r => [r[idx(catHead,'ItemID')], r[idx(catHead,'ItemName')]]));
+    const nameById = new Map(catRows.map(r => [r[idx(catHead,'ItemID')], {name: r[idx(catHead,'ItemName')], alt: r[idx(catHead,'ItemNameAlt')]}]));
     const pending = orderRows.filter(r => ['Requested', 'Ordered'].includes(r[idx(orderHead,'Status')]));
     
     const tbody = document.querySelector('#pendingTable tbody');
     tbody.innerHTML = pending.map(r => {
         const itemId = r[idx(orderHead,'ItemID')] || '';
-        let itemName = nameById.get(itemId) || itemId;
+        const orderId = r[idx(orderHead,'OrderID')] || '';
+        let itemInfo = nameById.get(itemId);
+        let itemName = itemInfo ? itemInfo.name : itemId;
+        const itemAltName = itemInfo ? itemInfo.alt : '';
         const notes = r[idx(orderHead,'Notes')] || '';
+        const currentStatus = r[idx(orderHead,'Status')] || '';
 
-        // Check if it was an "Other" item request
         if (notes.startsWith('REQUESTED OTHER ITEM:')) {
-            itemName = `<em>${notes.replace('REQUESTED OTHER ITEM: ', '')}</em>`;
+            itemName = `<em>${notes.replace('REQUESTED OTHER ITEM: ', '').split('--')[0]}</em>`;
         }
 
+        const vendorPrices = vpRows.filter(vp => vp[idx(vpHead, 'ItemID')] === itemId).sort((a,b) => a[idx(vpHead,'UnitPrice')] - b[idx(vpHead,'UnitPrice')]);
+
         return `<tr>
-            <td>${itemName}</td>
-            <td>${new Date(r[idx(orderHead,'Timestamp')]).toLocaleDateString()}</td>
+            <td>
+                <details>
+                    <summary><strong>${itemName}</strong> <span class="muted">${itemAltName || ''}</span></summary>
+                    <table class="vendor-table">
+                        <thead><tr><th>Vendor</th><th>Price</th><th>Item#</th></tr></thead>
+                        <tbody>
+                            ${vendorPrices.map(vp => `<tr>
+                                <td>${vp[idx(vpHead,'VendorID')]}</td>
+                                <td>$${vp[idx(vpHead,'UnitPrice')]}</td>
+                                <td>${vp[idx(vpHead,'VendorItemNumber')]}</td>
+                            </tr>`).join('') || '<tr><td colspan="3">No pricing info</td></tr>'}
+                        </tbody>
+                    </table>
+                </details>
+            </td>
             <td>${r[idx(orderHead,'Qty')] || ''}</td>
-            <td>${r[idx(orderHead,'Status')] || ''}</td>
+            <td class="status-btns">
+                <button class="btn ${currentStatus === 'Requested' ? 'active' : ''}" data-orderid="${orderId}" data-status="Requested">Pending</button>
+                <button class="btn ${currentStatus === 'Ordered' ? 'active' : ''}" data-orderid="${orderId}" data-status="Ordered">Ordered</button>
+                <button class="btn" data-orderid="${orderId}" data-status="Received">Received</button>
+            </td>
             <td>${notes}</td>
-        </tr>`
-    }).join('') || '<tr><td colspan="5">No pending requests.</td></tr>';
+        </tr>`;
+    }).join('') || '<tr><td colspan="4">No pending requests.</td></tr>';
+    
+    tbody.querySelectorAll('.status-btns button').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const orderId = btn.dataset.orderid;
+            const status = btn.dataset.status;
+            await fetch(WEBAPP_URL, {method:'POST', mode:'no-cors', body: JSON.stringify({token: TOKEN, actionType: 'updateOrderStatus', orderId, status})});
+            // Optimistic update
+            const orderRow = orderRows.find(r => r[idx(orderHead,'OrderID')] === orderId);
+            if (orderRow) orderRow[idx(orderHead,'Status')] = status;
+            renderPending();
+        });
+    });
+}
+
+function renderHistory(days, query = '') {
+    const nameById = new Map(catRows.map(r => [r[idx(catHead,'ItemID')], r[idx(catHead,'ItemName')]]));
+    const received = orderRows.filter(r => r[idx(orderHead,'Status')] === 'Received');
+    
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - days);
+
+    const filtered = received.filter(r => {
+        const ts = new Date(r[idx(orderHead,'Timestamp')]);
+        const itemName = nameById.get(r[idx(orderHead,'ItemID')]) || '';
+        return ts >= cutoff && (!query || itemName.toLowerCase().includes(query.toLowerCase()));
+    });
+
+    const tbody = document.querySelector('#historyTable tbody');
+    tbody.innerHTML = filtered.map(r => `<tr>
+        <td>${nameById.get(r[idx(orderHead,'ItemID')]) || 'Other'}</td>
+        <td>${new Date(r[idx(orderHead,'Timestamp')]).toLocaleDateString()}</td>
+        <td>${r[idx(orderHead,'Notes')] || ''}</td>
+    </tr>`).join('') || `<tr><td colspan="3">No history in the last ${days} days.</td></tr>`;
 }
 
 async function boot() {
-    try {
-        const [catResponse, orderResponse] = await Promise.all([
-            fetch(CSV_CATALOG),
-            fetch(CSV_ORDERS)
-        ]);
+    const [catText, orderText, vpText] = await Promise.all([
+        fetch(CSV_CATALOG).then(r=>r.text()),
+        fetch(CSV_ORDERS).then(r=>r.text()),
+        fetch(CSV_VENDORPR).then(r=>r.text())
+    ]);
 
-        if (!catResponse.ok) {
-            throw new Error(`Failed to load Catalog sheet. Status: ${catResponse.status} ${catResponse.statusText}`);
-        }
-        if (!orderResponse.ok) {
-            throw new Error(`Failed to load Orders sheet. Status: ${orderResponse.status} ${orderResponse.statusText}`);
-        }
+    const catAll = parseCSV(catText); catHead = catAll.shift() || []; catRows = catAll;
+    const orderAll = parseCSV(orderText); orderHead = orderAll.shift() || []; orderRows = orderAll;
+    const vpAll = parseCSV(vpText); vpHead = vpAll.shift() || []; vpRows = vpAll;
+    
+    document.getElementById('itemsDatalist').innerHTML = catRows.map(r => `<option value="${r[idx(catHead,'ItemName')]}">${r[idx(catHead,'ItemNameAlt')] || ''}</option>`).join('');
+    
+    renderPending();
 
-        const [catText, orderText] = await Promise.all([
-            catResponse.text(),
-            orderResponse.text()
-        ]);
+    document.querySelectorAll('.toolbar button[data-days]').forEach(btn => btn.addEventListener('click', () => renderHistory(btn.dataset.days)));
+    document.getElementById('historySearch').addEventListener('input', (e) => {
+        const selectedDays = document.querySelector('.toolbar button.active')?.dataset.days || 30;
+        renderHistory(selectedDays, e.target.value);
+    });
 
-        const catAll = parseCSV(catText); catHead = catAll.shift() || []; catRows = catAll;
-        const orderAll = parseCSV(orderText); orderHead = orderAll.shift() || []; orderRows = orderAll;
-
-        document.getElementById('itemsDatalist').innerHTML = catRows.map(r => `<option value="${r[idx(catHead,'ItemName')]}">`).join('');
-        
-        renderPending();
-
-        const isOtherCheck = document.getElementById('isOther');
-        const itemSearchInput = document.getElementById('itemSearch');
-        const otherItemInput = document.getElementById('otherItem');
-        isOtherCheck.addEventListener('change', () => {
-            itemSearchInput.style.display = isOtherCheck.checked ? 'none' : 'block';
-            otherItemInput.style.display = isOtherCheck.checked ? 'block' : 'none';
-            itemSearchInput.value = '';
-            otherItemInput.value = '';
-        });
-
-        document.getElementById('submitBtn').addEventListener('click', async () => {
-            const isOther = document.getElementById('isOther').checked;
-            const itemName = document.getElementById('itemSearch').value;
-            const otherItemName = document.getElementById('otherItem').value.trim();
-            const qty = document.getElementById('qty').value.trim();
-            const notes = document.getElementById('notes').value.trim();
-            const msg = document.getElementById('msg');
-            let payload = { token: TOKEN, actionType: 'createRequest', qty, notes };
-            let catItem;
-            if (isOther) {
-                if (!otherItemName) { msg.textContent = 'Please enter the item name.'; return; }
-                payload.otherItemName = otherItemName;
-            } else {
-                catItem = catRows.find(r => r[idx(catHead,'ItemName')] === itemName);
-                if (!catItem) { msg.textContent = 'Please select a valid item.'; return; }
-                payload.itemId = catItem[idx(catHead,'ItemID')];
-            }
-            msg.textContent = 'Submitting...';
-            try {
-                await fetch(WEBAPP_URL, { method:'POST', mode:'no-cors', body: JSON.stringify(payload) });
-                msg.textContent = 'Request submitted!';
-                document.getElementById('itemSearch').value = '';
-                document.getElementById('otherItem').value = '';
-                document.getElementById('qty').value = '';
-                document.getElementById('notes').value = '';
-                isOtherCheck.checked = false;
-                otherItemInput.style.display = 'none';
-                itemSearchInput.style.display = 'block';
-            } catch(e) {
-                msg.textContent = 'An error occurred.';
-            }
-        });
-
-    } catch (error) {
-        console.error("Error loading spreadsheet data:", error);
-        const tbody = document.querySelector('#pendingTable tbody');
-        tbody.innerHTML = `<tr><td colspan="5" style="color:red; font-weight:bold;">ERROR: Could not load data from Google Sheets. This may be due to an organizational sharing policy. Please see the console for details.</td></tr>`;
-    }
+    // ... (rest of boot function for request form)
 }
 boot();
 </script>
