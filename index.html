@@ -13,10 +13,9 @@
   .muted{color:var(--muted);font-size:.9rem}
   .toolbar{display:flex;gap:10px;align-items:center;margin-top:8px;flex-wrap:wrap}
   select,input,button{padding:8px;border:1px solid #ccc;border-radius:8px}
-  a.btn,button.btn{padding:6px 10px;text-decoration:none;background:#fafafa;cursor:pointer}
+  button.btn{padding:6px 10px;text-decoration:none;background:#fafafa;cursor:pointer}
   table{width:100%;border-collapse:collapse;margin-top:8px}
   th,td{padding:8px;border-bottom:1px solid #eee;text-align:left;vertical-align:middle}
-  h2{margin:18px 0 6px}
   .unit-display{text-align:center;padding:10px;border:1px solid var(--b);border-radius:8px; margin-top:16px; font-size:1.2em; font-weight:bold;}
   .status-btns button{width:auto; margin-right:5px; background-color:#f0f0f0; cursor:pointer;}
   .status-btns .active{background-color:#0275d8;color:white;border-color:#0275d8;}
@@ -206,9 +205,10 @@ async function boot(){
       fetch(CSV_CATALOG).then(r=>r.text()), 
       fetch(CSV_UNITS).then(r=>r.text())
     ]);
-    invHead = parseCSV(invText).shift() || []; invRows = parseCSV(invText).slice(1);
-    catHead = parseCSV(catText).shift() || []; catRows = parseCSV(catText).slice(1);
-    unitHead = parseCSV(unitText).shift() || []; unitRows = parseCSV(unitText).slice(1);
+
+    const invAll = parseCSV(invText); invHead = invAll.shift() || []; invRows = invAll;
+    const catAll = parseCSV(catText); catHead = catAll.shift() || []; catRows = catAll;
+    const unitAll = parseCSV(unitText); unitHead = unitAll.shift() || []; unitRows = unitAll;
 
     const nameById = new Map(catRows.map(r => [r[idx(catHead,'ItemID')], r[idx(catHead,'ItemName')]]));
     if (!invHead.includes('ItemName')) invHead.push('ItemName');
@@ -247,7 +247,11 @@ async function boot(){
     document.getElementById('saveNewItemBtn').addEventListener('click', async () => {
       const itemName = document.getElementById('addItemInput').value;
       const compartment = document.getElementById('addCompartmentSelect').value;
-      const unit = document.getElementById('unitSel').value === 'ALL' ? prompt('This item will be added to ALL units. Which unit is this item for? (e.g., 31, 33)') : document.getElementById('unitSel').value;
+      let unit = document.getElementById('unitSel').value;
+      if (unit === 'ALL') {
+          unit = prompt('"All Items" is selected. Please specify which unit this item is for (e.g., 31, 33):');
+      }
+      
       const catItem = catRows.find(r => r[idx(catHead,'ItemName')] === itemName);
       
       if (!catItem || !compartment || !selectedNewExpiry || !unit) { 
