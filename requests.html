@@ -108,7 +108,7 @@ function renderPending(){
         }
 
         const vendorPrices = vpRows.filter(vp => vp[idx(vpHead, 'ItemID')] === itemId)
-                                 .sort((a,b) => Number(a[idx(vpHead,'UnitPrice')]) - Number(b[idx(vpHead,'UnitPrice')]));
+                                 .sort((a,b) => parseFloat(a[idx(vpHead,'UnitPrice')]) - parseFloat(b[idx(vpHead,'UnitPrice')]));
 
         return `<tr>
             <td>
@@ -186,9 +186,9 @@ async function boot() {
         
         renderPending();
 
-        document.querySelectorAll('div.toolbar button[data-days]').forEach(btn => btn.addEventListener('click', () => renderHistory(btn.dataset.days)));
+        document.querySelectorAll('div[style*="margin-top:12px"] button[data-days]').forEach(btn => btn.addEventListener('click', () => renderHistory(btn.dataset.days)));
         document.getElementById('historySearch').addEventListener('input', (e) => {
-            const selectedDays = 30; // Default or find active button
+            const selectedDays = 30;
             renderHistory(selectedDays, e.target.value);
         });
 
