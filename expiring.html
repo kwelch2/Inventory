@@ -104,10 +104,22 @@
 
 <script>
 /*** CONFIG — keep your current Web App + token (same as Requests page) ***/
-const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbypxL0KxxXMVRieHHuvX98m9Jx6fYJWTdrMLQNkt99Sgt0vNzRDeyGiDz5fILlORP8wFQ/exec';
+//const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbypxL0KxxXMVRieHHuvX98m9Jx6fYJWTdrMLQNkt99Sgt0vNzRDeyGiDz5fILlORP8wFQ/exec';
+const PROXY_URL = 'https://ems-inventory-proxy.kylewelch33.workers.dev/';
 const TOKEN      = '9mB4zR7kP2fW6vNqE1jH8aLcV5gT_sYx0uI-oZ3pD9bX4wK7eS6hF-EMS';
 
 /*** UTIL ***/
+const within = 90;
+const inv = await fetch(`${PROXY_URL}?action=expiring&within=${within}`).then(r=>r.json());
+const cat = await fetch(`${PROXY_URL}?action=listcatalog`).then(r=>r.json());
+const un  = await fetch(`${PROXY_URL}?action=listunits`).then(r=>r.json());
+
+// writes (unchanged payload, just change URL)
+await fetch(PROXY_URL, {
+  method:'POST',
+  headers:{'Content-Type':'application/json'},
+  body: JSON.stringify({ token: TOKEN, actionType:'updateInventory', ...payload })
+})
 const $ = s => document.querySelector(s);
 const escapeHtml = s => (s??'').toString().replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;' }[m]));
 const debounce = (fn,ms)=>{ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),ms); }; };
