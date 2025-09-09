@@ -98,15 +98,12 @@ function parseCSV(text){
     });
 }
 
-// --- NEW, MORE FLEXIBLE DATE PARSING FUNCTION ---
 function parseExpiryDate(dateStr) {
     if (!dateStr) return null;
-    // First, try the standard JavaScript parser which handles MM/DD/YYYY
     let d = new Date(dateStr);
     if (!isNaN(d.getTime())) {
         return new Date(d.getFullYear(), d.getMonth(), 1);
     }
-    // If that failed, try our custom MMM-YY parser
     const monthMap = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
     const parts = dateStr.toLowerCase().split(/[-\/]/);
     if (parts.length !== 2) return null;
@@ -159,13 +156,15 @@ function render(){
   const H = invHead;
   let list = invRows.filter(r => {
     const expiryDateStr = r[idx(H, 'Expiry')];
-    const expiryDate = parseExpiryDate(expiryDateStr); // --- USE THE NEW PARSER ---
+    const expiryDate = parseExpiryDate(expiryDateStr);
     if (!expiryDate) return false;
     
     const daysToExpire = Math.ceil((expiryDate.getTime() - new Date().getTime()) / (1000 * 3600 * 24));
     if (daysToExpire > within) return false;
+    
     const crewStatus = getCrewStatus(H, r).toLowerCase();
     if (crewStatus === 'replaced' || crewStatus === 'good') return false;
+    
     r.daysToExpire = daysToExpire;
     r.status = daysToExpire <= 0 ? 'Expired' : daysToExpire <= 30 ? '30d' : daysToExpire <= 60 ? '60d' : '90d';
     return true;
@@ -226,9 +225,12 @@ async function boot(){
       fetch(CSV_UNITS).then(r=>r.text())
     ]);
     
-    invHead = parseCSV(invText).shift() || []; invRows = parseCSV(invText).slice(1);
-    catHead = parseCSV(catText).shift() || []; catRows = parseCSV(catText).slice(1);
-    unitHead = parseCSV(unitText).shift() || []; unitRows = parseCSV(unitText).slice(1);
+    invHead = parseCSV(invText).shift() || [];
+    invRows = parseCSV(invText).slice(1);
+    catHead = parseCSV(catText).shift() || [];
+    catRows = parseCSV(catText).slice(1);
+    unitHead = parseCSV(unitText).shift() || [];
+    unitRows = parseCSV(unitText).slice(1);
 
     const nameById = new Map(catRows.map(r => [r[idx(catHead,'ItemID')], r[idx(catHead,'ItemName')]]));
     if (!invHead.includes('ItemName')) invHead.push('ItemName');
