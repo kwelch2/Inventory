@@ -98,21 +98,22 @@ function parseCSV(text){
     });
 }
 
-// --- NEW HELPER FUNCTION TO PARSE DATES LIKE "Sep-25" ---
+// --- NEW, MORE FLEXIBLE DATE PARSING FUNCTION ---
 function parseExpiryDate(dateStr) {
     if (!dateStr) return null;
+    // First, try the standard JavaScript parser which handles MM/DD/YYYY
+    let d = new Date(dateStr);
+    if (!isNaN(d.getTime())) {
+        return new Date(d.getFullYear(), d.getMonth(), 1);
+    }
+    // If that failed, try our custom MMM-YY parser
     const monthMap = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
     const parts = dateStr.toLowerCase().split(/[-\/]/);
     if (parts.length !== 2) return null;
-    
     const month = monthMap[parts[0].substring(0,3)];
     let year = parseInt(parts[1], 10);
-    
     if (isNaN(year) || month === undefined) return null;
-
-    if (year < 100) year += 2000; // Convert '25' to 2025
-    
-    // Returns the first day of the expiry month
+    if (year < 100) year += 2000;
     return new Date(year, month, 1);
 }
 
@@ -267,7 +268,7 @@ async function boot(){
       const compartment = document.getElementById('addCompartmentSelect').value;
       let unit = document.getElementById('unitSel').value;
       if (unit === 'ALL') {
-          unit = prompt('When viewing "All Items", please specify which unit this item is for (e.g., 31, 33):');
+          unit = prompt('When viewing "All Items", please specify which unit this new item is for (e.g., 31, 33):');
       }
       
       const catItem = catRows.find(r => r[idx(catHead,'ItemName')] === itemName);
