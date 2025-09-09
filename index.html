@@ -89,7 +89,6 @@ const TOKEN         = '9mB4zR7kP2fW6vNqE1jH8aLcV5gT_sYx0uI-oZ3pD9bX4wK7eS6hF-EMS
 let invHead=[], invRows=[], catHead=[], catRows=[], unitHead=[], unitRows=[], unitNameById=new Map();
 const idx = (h,name) => h.indexOf(name);
 
-// A more reliable CSV parsing function
 function parseCSV(text){
     const clean = (text||'').replace(/^\uFEFF/,'').trim();
     if (!clean) return [];
@@ -98,6 +97,25 @@ function parseCSV(text){
         return m.map(s => s.replace(/^"|"$/g, ''));
     });
 }
+
+// --- NEW HELPER FUNCTION TO PARSE DATES LIKE "Sep-25" ---
+function parseExpiryDate(dateStr) {
+    if (!dateStr) return null;
+    const monthMap = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
+    const parts = dateStr.toLowerCase().split(/[-\/]/);
+    if (parts.length !== 2) return null;
+    
+    const month = monthMap[parts[0].substring(0,3)];
+    let year = parseInt(parts[1], 10);
+    
+    if (isNaN(year) || month === undefined) return null;
+
+    if (year < 100) year += 2000; // Convert '25' to 2025
+    
+    // Returns the first day of the expiry month
+    return new Date(year, month, 1);
+}
+
 function statusClass(s){ return s==='Expired'?'red':s==='30d'?'orange':s==='60d'?'yellow':''; }
 function getCrewStatus(h, row){ return String(row[idx(h,'CrewStatus')]||'').trim(); }
 
@@ -140,20 +158,13 @@ function render(){
   const H = invHead;
   let list = invRows.filter(r => {
     const expiryDateStr = r[idx(H, 'Expiry')];
-    if (!expiryDateStr) return false;
-    const expiryDate = new Date(expiryDateStr);
-    if (isNaN(expiryDate)) return false;
+    const expiryDate = parseExpiryDate(expiryDateStr); // --- USE THE NEW PARSER ---
+    if (!expiryDate) return false;
     
     const daysToExpire = Math.ceil((expiryDate.getTime() - new Date().getTime()) / (1000 * 3600 * 24));
-    
-    // --- THIS IS THE NEW DEBUGGING LINE ---
-    console.log(`Item: ${r[idx(H,'ItemName')]}, Expires in: ${daysToExpire} days, Show within: ${within} days. ---> Should show? ${daysToExpire <= within}`);
-
     if (daysToExpire > within) return false;
-
     const crewStatus = getCrewStatus(H, r).toLowerCase();
     if (crewStatus === 'replaced' || crewStatus === 'good') return false;
-    
     r.daysToExpire = daysToExpire;
     r.status = daysToExpire <= 0 ? 'Expired' : daysToExpire <= 30 ? '30d' : daysToExpire <= 60 ? '60d' : '90d';
     return true;
@@ -162,7 +173,7 @@ function render(){
   if (sortBy === 'item') {
     list.sort((a,b) => (a[idx(H,'ItemName')]||'').localeCompare(b[idx(H,'ItemName')]||''));
   } else {
-    list.sort((a,b) => (new Date(a[idx(H,'Expiry')]) - new Date(b[idx(H,'Expiry')])));
+    list.sort((a,b) => (parseExpiryDate(a[idx(H,'Expiry')]) - parseExpiryDate(b[idx(H,'Expiry')])));
   }
 
   const filteredList = (unit === 'ALL') ? list : list.filter(r => String(r[idx(H,'Unit')]) === unit);
@@ -214,9 +225,9 @@ async function boot(){
       fetch(CSV_UNITS).then(r=>r.text())
     ]);
     
-    const invAll = parseCSV(invText); invHead = invAll.shift() || []; invRows = invAll;
-    const catAll = parseCSV(catText); catHead = catAll.shift() || []; catRows = catAll;
-    const unitAll = parseCSV(unitText); unitHead = unitAll.shift() || []; unitRows = unitAll;
+    invHead = parseCSV(invText).shift() || []; invRows = parseCSV(invText).slice(1);
+    catHead = parseCSV(catText).shift() || []; catRows = parseCSV(catText).slice(1);
+    unitHead = parseCSV(unitText).shift() || []; unitRows = parseCSV(unitText).slice(1);
 
     const nameById = new Map(catRows.map(r => [r[idx(catHead,'ItemID')], r[idx(catHead,'ItemName')]]));
     if (!invHead.includes('ItemName')) invHead.push('ItemName');
@@ -231,7 +242,6 @@ async function boot(){
     document.getElementById('sortSel').addEventListener('change', render);
     document.getElementById('rangeSel').addEventListener('change', render);
 
-    // --- Logic for the Add Item Modal ---
     const modal = document.getElementById('addItemModal');
     document.getElementById('showAddItemModal').addEventListener('click', () => modal.style.display = 'block');
     document.querySelector('.close-btn').addEventListener('click', () => modal.style.display = 'none');
@@ -257,7 +267,7 @@ async function boot(){
       const compartment = document.getElementById('addCompartmentSelect').value;
       let unit = document.getElementById('unitSel').value;
       if (unit === 'ALL') {
-          unit = prompt('When viewing "All Items", please specify which unit this new item is for (e.g., 31, 33):');
+          unit = prompt('When viewing "All Items", please specify which unit this item is for (e.g., 31, 33):');
       }
       
       const catItem = catRows.find(r => r[idx(catHead,'ItemName')] === itemName);
@@ -278,7 +288,6 @@ async function boot(){
     console.error(e);
   }
 }
-
 boot();
 </script>
 </body>
