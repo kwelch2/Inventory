@@ -352,9 +352,9 @@ function render(){
       const lot = decodeURIComponent(btn.dataset.lot||'');
       const statusMap = { replace:'Replace', ordered:'Ordered', ok:'OK' };
       const newStatus = statusMap[action] || 'OK';
-        try{
+      try{
           // NOTE: Apps Script expects 'crewStatus', not 'status'
-        await postUpdate({ itemId, unit: unitVal, lot, crewStatus: newStatus });
+      await postUpdate({ itemId, unit: unitVal, lot, crewStatus: newStatus });
       const badge = btn.closest('tr').querySelector('.badge');
         if (badge) badge.textContent = newStatus;
       }catch(err){
