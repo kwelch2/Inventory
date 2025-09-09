@@ -143,10 +143,17 @@ function render(){
     if (!expiryDateStr) return false;
     const expiryDate = new Date(expiryDateStr);
     if (isNaN(expiryDate)) return false;
+    
     const daysToExpire = Math.ceil((expiryDate.getTime() - new Date().getTime()) / (1000 * 3600 * 24));
+    
+    // --- THIS IS THE NEW DEBUGGING LINE ---
+    console.log(`Item: ${r[idx(H,'ItemName')]}, Expires in: ${daysToExpire} days, Show within: ${within} days. ---> Should show? ${daysToExpire <= within}`);
+
     if (daysToExpire > within) return false;
+
     const crewStatus = getCrewStatus(H, r).toLowerCase();
     if (crewStatus === 'replaced' || crewStatus === 'good') return false;
+    
     r.daysToExpire = daysToExpire;
     r.status = daysToExpire <= 0 ? 'Expired' : daysToExpire <= 30 ? '30d' : daysToExpire <= 60 ? '60d' : '90d';
     return true;
