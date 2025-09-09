@@ -15,248 +15,383 @@
   .toolbar{display:flex;gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap}
   select,button,input{padding:8px 10px;border:1px solid var(--b);border-radius:10px;background:#fff}
   button{cursor:pointer}
-  .grid{display:grid;gap:14px}
-  .unit{border:1px solid var(--b);border-radius:12px;overflow:hidden}
-  .unit>h3{margin:0;padding:10px 12px;background:#fafafa;border-bottom:1px solid var(--b)}
   table{width:100%;border-collapse:collapse}
   th,td{padding:8px 10px;border-bottom:1px solid #eee;text-align:left;vertical-align:top}
   th{font-weight:600;background:#fafafa}
   tbody tr:last-child td{border-bottom:none}
   .badge{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid var(--b);font-size:.8rem}
-  .right{text-align:right}
   .ok{background:var(--ok)}
   .warn{background:var(--warn)}
   .bad{background:var(--bad)}
-  .empty{padding:10px 12px;color:var(--muted)}
+  .actions{display:flex;gap:6px;flex-wrap:wrap}
+  .btn{padding:6px 10px;border:1px solid var(--b);border-radius:10px;background:#fafafa}
+  .btn.red{border-color:#c00}
+  .btn.yellow{border-color:#c90}
+  .btn.green{border-color:#090}
+  .right{text-align:right}
+  .flex{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .spacer{flex:1}
+  /* Modal */
+  .modal{display:none;position:fixed;z-index:99;left:0;top:0;width:100%;height:100%;overflow:auto;background:rgba(0,0,0,.35)}
+  .modal-content{background:#fff;margin:10% auto;padding:16px;border:1px solid var(--b);width:min(540px,92%);border-radius:12px}
+  .close-btn{float:right;font-size:24px;cursor:pointer}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .chipbar{display:flex;gap:6px;flex-wrap:wrap}
 </style>
 </head>
 <body>
-  <div class="wrap">
-    <div class="card">
-      <h1>Expiring Supplies</h1>
-      <div class="muted">Pulled live from Inventory via Apps Script; Catalog & Units merged for names.</div>
-      <div class="toolbar">
-        <label>Window
-          <select id="rangeSel">
-            <option value="30">30 days</option>
-            <option value="60">60 days</option>
-            <option value="90" selected>90 days</option>
-            <option value="120">120 days</option>
-          </select>
-        </label>
-        <label>Status filter
-          <select id="statusSel">
-            <option value="">All</option>
-            <option value="OK">OK</option>
-            <option value="Needs Action">Needs Action</option>
-            <option value="Ordered">Ordered</option>
-            <option value="Replace">Replace</option>
-            <option value="Expired">Expired</option>
-          </select>
-        </label>
-        <input id="searchBox" placeholder="Search item, lot, compartment…" />
-        <button id="refreshBtn">Refresh</button>
-        <span id="count" class="muted"></span>
-      </div>
+<div class="wrap">
+  <div class="card">
+    <h1>Expiring Supplies</h1>
+    <div class="muted">Loads Inventory via CSV, computes Days to Expire locally, merges Catalog & Units, supports status updates and quick add.</div>
+    <div class="toolbar">
+      <label>Window
+        <select id="rangeSel">
+          <option value="30">30 days</option>
+          <option value="60">60 days</option>
+          <option value="90" selected>90 days</option>
+          <option value="120">120 days</option>
+        </select>
+      </label>
+      <label>Unit
+        <select id="unitSel"><option value="ALL">ALL</option></select>
+      </label>
+      <label>Status
+        <select id="statusSel">
+          <option value="">All</option>
+          <option value="Expired">Expired</option>
+          <option value="Replace">Replace</option>
+          <option value="Ordered">Ordered</option>
+          <option value="OK">OK</option>
+        </select>
+      </label>
+      <input id="searchBox" placeholder="Search item, lot, compartment…"/>
+      <button class="btn" id="refreshBtn">Refresh</button>
+      <span class="spacer"></span>
+      <button class="btn" id="showAddItemModal">+ Add Item</button>
+      <span id="count" class="muted"></span>
     </div>
-
-    <div id="content" class="grid" style="margin-top:12px;"></div>
   </div>
 
-<script>
-/*** ─────────────────────────────────────────────────────────────
- *  CONFIG: EDIT THESE TWO CONSTANTS ONLY
- *  1) WEBAPP_URL → your deployed Apps Script web app URL
- *  2) CSV_CATALOG / CSV_UNITS → your existing, working publish-to-web CSV links
- *  ──────────────────────────────────────────────────────────── */
-const WEBAPP_URL   = 'https://script.google.com/macros/s/AKfycbypxL0KxxXMVRieHHuvX98m9Jx6fYJWTdrMLQNkt99Sgt0vNzRDeyGiDz5fILlORP8wFQ/exec'; // <-- EDIT
-const CSV_CATALOG  = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTsY8xyyVE4V7e39KHEB5Y5fg64JGK7Aslg6s7dF8-QfpM8myyR1henDuhzyorR8pjPjcj5aJJY9Q3T/pub?gid=1603897332&single=true&output=csv'; // <-- keep your working link
-const CSV_UNITS    = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTsY8xyyVE4V7e39KHEB5Y5fg64JGK7Aslg6s7dF8-QfpM8myyR1henDuhzyorR8pjPjcj5aJJY9Q3T/pub?gid=767202807&single=true&output=csv';   // <-- keep your working link
+  <div id="content" class="card"></div>
+</div>
 
-/*** UTILITIES ***/
-const $ = q => document.querySelector(q);
-const by = (h, n) => h.indexOf(n);
-const firstOfMonth = d => new Date(d.getFullYear(), d.getMonth(), 1);
-const todayFOM = firstOfMonth(new Date()); // normalize to month start for consistent comparisons
+<!-- Add Item Modal -->
+<div id="addItemModal" class="modal">
+  <div class="modal-content">
+    <span class="close-btn">&times;</span>
+    <h3>Add Item to Inventory</h3>
+    <div class="grid2">
+      <div>
+        <label>Item</label>
+        <input id="addItemInput" list="itemsDatalist" placeholder="Start typing name…" />
+        <datalist id="itemsDatalist"></datalist>
+      </div>
+      <div>
+        <label>Compartment</label>
+        <select id="addCompartmentSelect">
+          <option value="">Select…</option>
+          <option>Wall</option>
+          <option>Bag</option>
+          <option>Supply RM</option>
+        </select>
+      </div>
+      <div>
+        <label>Expiry Month</label>
+        <div id="addExpiryChips" class="chipbar"></div>
+      </div>
+      <div>
+        <label>Quantity</label>
+        <input id="addQty" type="number" min="1" step="1" value="1"/>
+      </div>
+    </div>
+    <button id="saveNewItemBtn" class="btn" style="width:100%;margin-top:12px;">Save Item</button>
+  </div>
+</div>
+
+<script>
+/*** ========== CONFIG: EDIT THESE ========== ***/
+const CSV_INVENTORY = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTsY8xyyVE4V7e39KHEB5Y5fg64JGK7Aslg6s7dF8-QfpM8myyR1henDuhzyorR8pjPjcj5aJJY9Q3T/pub?gid=0&single=true&output=csv';
+const CSV_CATALOG   = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTsY8xyyVE4V7e39KHEB5Y5fg64JGK7Aslg6s7dF8-QfpM8myyR1henDuhzyorR8pjPjcj5aJJY9Q3T/pub?gid=1603897332&single=true&output=csv';
+const CSV_UNITS     = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTsY8xyyVE4V7e39KHEB5Y5fg64JGK7Aslg6s7dF8-QfpM8myyR1henDuhzyorR8pjPjcj5aJJY9Q3T/pub?gid=767202807&single=true&output=csv';
+const WEBAPP_URL    = 'https://script.google.com/macros/s/AKfycbypxL0KxxXMVRieHHuvX98m9Jx6fYJWTdrMLQNkt99Sgt0vNzRDeyGiDz5fILlORP8wFQ/exec';
+const TOKEN         = '9mB4zR7kP2fW6vNqE1jH8aLcV5gT_sYx0uI-oZ3pD9bX4wK7eS6hF-EMS';
+
+/*** ========== HELPERS ========== ***/
+const $ = s => document.querySelector(s);
+const idx = (h, n) => h.indexOf(n);
+function escapeHtml(s){ return (s??'').toString().replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;' }[m])); }
 function parseCSV(text){
-  // tiny CSV parser that supports quoted fields and commas
-  const rows=[]; let cur=[], val='', q=false;
-  for(let i=0;i<text.length;i++){
-    const c=text[i], n=text[i+1];
-    if(c === '"' ){ if(q && n === '"'){ val+='"'; i++; } else q=!q; continue; }
-    if(!q && (c === ',')){ cur.push(val); val=''; continue; }
-    if(!q && (c === '\n' || c === '\r')){ if(val!==''||cur.length){ cur.push(val); rows.push(cur); cur=[]; val=''; }
-      if(c === '\r' && n === '\n'){ i++; } continue; }
-    val += c;
-  }
-  if(val!==''||cur.length){ cur.push(val); rows.push(cur); }
-  return rows;
+  const clean = (text||'').replace(/^\uFEFF/,'').trim();
+  if (!clean) return [];
+  return clean.split(/\r?\n/).map(line => {
+    const m = line.match(/(".*?"|[^",]+)(?=\s*,|\s*$)/g) || [];
+    return m.map(s => s.replace(/^"|"$/g, ''));
+  });
 }
-async function fetchText(u){ const r = await fetch(u); if(!r.ok) throw new Error(`HTTP ${r.status}`); return r.text(); }
-async function fetchJSON(u){ const r = await fetch(u); if(!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }
-function safeInt(x){ const n = Number(x); return Number.isFinite(n) ? n : null; }
-function normStr(x){ return (x ?? '').toString().trim(); }
-function computeDaysToExpire(expStr){
-  // Accepts "YYYY-MM-DD" or "M/D/YYYY" or similar; compare first-of-month
-  if(!expStr) return null;
-  let d;
-  if(/^\d{4}-\d{2}-\d{2}/.test(expStr)) d = new Date(expStr);
-  else d = new Date(expStr);
-  if(isNaN(d)) return null;
-  const diffMs = firstOfMonth(d) - todayFOM;
-  return Math.ceil(diffMs / 86400000);
+function parseExpiryDate(s){
+  if (!s) return null;
+  // accept YYYY-MM or YYYY-MM-DD or M/D/YYYY; normalize to first of month
+  if (/^\d{4}-\d{2}(-\d{2})?$/.test(s)) {
+    const [y,m] = s.split('-'); return new Date(parseInt(y,10), parseInt(m,10)-1, 1);
+  }
+  const d = new Date(s); if (isNaN(d)) return null;
+  return new Date(d.getFullYear(), d.getMonth(), 1);
+}
+function daysFromTodayFOM(d){
+  if (!d) return null;
+  const t = new Date(); const todayFOM = new Date(t.getFullYear(), t.getMonth(), 1);
+  return Math.ceil((d - todayFOM)/86400000);
 }
 function statusClass(days, status){
   const s = (status||'').toLowerCase();
-  if(s.includes('expired')) return 'bad';
-  if(s.includes('replace')) return 'bad';
-  if(s.includes('ordered')) return 'warn';
-  if(s.includes('needs')) return 'warn';
-  if(days != null){
-    if(days < 0) return 'bad';
-    if(days <= 30) return 'warn';
+  if (s.includes('expired')) return 'bad';
+  if (s.includes('replace')) return 'bad';
+  if (s.includes('ordered')) return 'warn';
+  if (days != null){
+    if (days < 0) return 'bad';
+    if (days <= 30) return 'warn';
   }
   return 'ok';
 }
-
-/*** DATA LOAD ***/
-async function boot(){
-  const within = $('#rangeSel').value;
-  const statusFilter = $('#statusSel').value;
-  const q = $('#searchBox').value.toLowerCase();
-
-  try{
-    // 1) Inventory (JSON) — guaranteed correct sheet
-    const invJson = await fetchJSON(`${WEBAPP_URL}?action=expiring&within=${encodeURIComponent(within)}`);
-    const invRows = (invJson.rows || []).map(o => ({
-      ItemID: normStr(o.ItemID),
-      Unit: normStr(o.Unit),
-      Compartment: normStr(o.Compartment),
-      Lot: normStr(o.Lot),
-      Qty: normStr(o.Qty),
-      Expiry: normStr(o.Expiry),
-      DaysToExpire: safeInt(o.DaysToExpire) ?? computeDaysToExpire(o.Expiry),
-      Status: normStr(o.Status),
-      CrewStatus: normStr(o.CrewStatus)
-    }));
-
-    // 2) Catalog & Units (CSV)
-    const [catText, unitText] = await Promise.all([ fetchText(CSV_CATALOG), fetchText(CSV_UNITS) ]);
-    const cat = parseCSV(catText);  const ch = cat[0]||[];  const cr = cat.slice(1);
-    const units = parseCSV(unitText);const uh = units[0]||[];const ur = units.slice(1);
-
-    // 3) Build lookups
-    const catNameById = new Map(cr.map(r => [ normStr(r[by(ch,'ItemID')]), normStr(r[by(ch,'ItemName')]) ]));
-    const unitDispById = new Map(ur.map(r => [ normStr(r[by(uh,'Unit')]),     normStr(r[by(uh,'Display')])   ]));
-
-    // 4) Enrich rows
-    const rows = invRows.map(r => ({
-      ...r,
-      ItemName: catNameById.get(r.ItemID) || r.ItemID,
-      UnitDisplay: unitDispById.get(r.Unit) || r.Unit
-    }));
-
-    // 5) Filter (status + search + within window)
-    const withinDays = parseInt(within,10);
-    const filtered = rows.filter(r => {
-      const inWindow = (r.DaysToExpire == null) ? true : r.DaysToExpire <= withinDays;
-      const matchesStatus = statusFilter ? (r.Status === statusFilter) : true;
-      const s = `${r.ItemName} ${r.ItemID} ${r.UnitDisplay} ${r.Compartment} ${r.Lot}`.toLowerCase();
-      const matchesSearch = q ? s.includes(q) : true;
-      return inWindow && matchesStatus && matchesSearch;
-    });
-
-    // 6) Sort: soonest expiring first, then Unit, then Item
-    filtered.sort((a,b)=>{
-      const ax = a.DaysToExpire ?? 999999, bx = b.DaysToExpire ?? 999999;
-      if(ax!==bx) return ax-bx;
-      if(a.UnitDisplay!==b.UnitDisplay) return a.UnitDisplay.localeCompare(b.UnitDisplay);
-      return a.ItemName.localeCompare(b.ItemName);
-    });
-
-    $('#count').textContent = `${filtered.length} item(s)`;
-
-    // 7) Group by UnitDisplay and render
-    const byUnit = new Map();
-    for(const r of filtered){
-      const k = r.UnitDisplay || '(No Unit)';
-      if(!byUnit.has(k)) byUnit.set(k, []);
-      byUnit.get(k).push(r);
-    }
-    render(byUnit);
-
-  }catch(err){
-    console.error(err);
-    $('#content').innerHTML = `<div class="card" style="border-color:#f00;">
-      <h3 style="margin:0 0 6px;color:#a00;">Error loading data</h3>
-      <div class="muted">${err.message}</div>
-      <div class="muted">Check WEBAPP_URL and your published CSV links for Catalog & Units.</div>
-    </div>`;
-  }
-}
-
-/*** RENDER ***/
-function render(byUnit){
-  const host = $('#content');
-  host.innerHTML = '';
-  if(!byUnit.size){
-    host.innerHTML = `<div class="card empty">No items match your filters.</div>`;
-    return;
-  }
-  for(const [unit, rows] of byUnit){
-    const sec = document.createElement('section');
-    sec.className = 'unit';
-    sec.innerHTML = `
-      <h3>${unit}</h3>
-      <div class="tablewrap">
-        <table>
-          <thead>
-            <tr>
-              <th style="width:28%">Item</th>
-              <th>Compartment</th>
-              <th>Lot</th>
-              <th class="right">Qty</th>
-              <th>Expiry</th>
-              <th class="right">Days</th>
-              <th>Status</th>
-              <th>Crew</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>`;
-    const tbody = sec.querySelector('tbody');
-
-    for(const r of rows){
-      const cls = statusClass(r.DaysToExpire, r.Status);
-      const tr = document.createElement('tr');
-      tr.className = cls;
-      tr.innerHTML = `
-        <td><strong>${escapeHtml(r.ItemName)}</strong><br><span class="muted">${escapeHtml(r.ItemID)}</span></td>
-        <td>${escapeHtml(r.Compartment)}</td>
-        <td>${escapeHtml(r.Lot)}</td>
-        <td class="right">${escapeHtml(r.Qty)}</td>
-        <td>${escapeHtml(r.Expiry)}</td>
-        <td class="right">${r.DaysToExpire ?? ''}</td>
-        <td><span class="badge">${escapeHtml(r.Status)}</span></td>
-        <td>${escapeHtml(r.CrewStatus)}</td>
-      `;
-      tbody.appendChild(tr);
-    }
-    host.appendChild(sec);
-  }
-}
-function escapeHtml(s){ return (s??'').toString().replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;' }[m])); }
-
-/*** HOOKS ***/
-$('#refreshBtn').addEventListener('click', boot);
-$('#rangeSel').addEventListener('change', boot);
-$('#statusSel').addEventListener('change', boot);
-$('#searchBox').addEventListener('input', debounce(boot, 250));
-
 function debounce(fn,ms){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),ms); }; }
 
-// initial load
+/*** ========== STATE ========== ***/
+let invHead=[], invRows=[], catHead=[], catRows=[], unitHead=[], unitRows=[];
+let unitNameById = new Map();
+
+/*** ========== LOAD & RENDER ========== ***/
+async function boot(){
+  try{
+    const [invText, catText, unitText] = await Promise.all([
+      fetch(CSV_INVENTORY).then(r=>r.text()),
+      fetch(CSV_CATALOG).then(r=>r.text()),
+      fetch(CSV_UNITS).then(r=>r.text())
+    ]);
+    [invHead, ...invRows] = parseCSV(invText);
+    [catHead, ...catRows] = parseCSV(catText);
+    [unitHead, ...unitRows] = parseCSV(unitText);
+
+    // Build unit display map
+    unitNameById = new Map(unitRows.map(r => [ String(r[idx(unitHead,'Unit')]||'').trim(), String(r[idx(unitHead,'Display')]||'').trim() ]));
+
+    // Fill Unit select (keep existing selection if any)
+    const sel = $('#unitSel'); const prev = sel.value || 'ALL';
+    const unitIds = Array.from(new Set(invRows.map(r => String(r[idx(invHead,'Unit')]||'').trim()))).filter(x=>x);
+    const options = ['ALL', ...unitIds.sort((a,b)=>a.localeCompare(b))]
+      .map(u => `<option value="${u}">${u==='ALL' ? 'ALL' : (unitNameById.get(u)||u)}</option>`).join('');
+    sel.innerHTML = options; sel.value = options.includes(`value="${prev}"`) ? prev : 'ALL';
+
+    render(); // first render
+    wireUI(); // set up events & modal only once
+  }catch(e){
+    console.error(e);
+    $('#content').innerHTML = `<p style="color:#a00;font-weight:700;">Error loading CSVs. Check your publish URLs (Inventory gid must be the Inventory tab).</p>`;
+  }
+}
+
+function render(){
+  const within = parseInt($('#rangeSel').value,10);
+  const unit = $('#unitSel').value;
+  const q = $('#searchBox').value.toLowerCase();
+  const statusFilter = $('#statusSel').value;
+
+  const H = invHead;
+  const list = invRows.filter(r=>{
+    const itemId = String(r[idx(H,'ItemID')]||'').trim();
+    const unitVal = String(r[idx(H,'Unit')]||'').trim();
+    const comp = String(r[idx(H,'Compartment')]||'').trim();
+    const lot = String(r[idx(H,'Lot')]||'').trim();
+    const qty = String(r[idx(H,'Qty')]||'').trim();
+    const rawExp = String(r[idx(H,'Expiry')]||'').trim();
+
+    // compute DaysToExpire locally regardless of sheet content
+    const d = parseExpiryDate(rawExp);
+    const days = daysFromTodayFOM(d);
+    r._days = (days===null || isNaN(days)) ? null : days;
+
+    // infer status if the sheet doesn't have one
+    const sheetStatus = String(r[idx(H,'Status')]||'').trim();
+    const status = sheetStatus || (days==null ? '' : (days < 0 ? 'Expired' : (days<=30?'Replace': (days<=60?'60d':'90d'))));
+    r._status = status;
+
+    // within window
+    const inWindow = (r._days==null) ? true : (r._days <= within);
+    if (!inWindow) return false;
+
+    // unit filter
+    if (unit !== 'ALL' && unitVal !== unit) return false;
+
+    // crew/good/replaced suppression? (keep everything; user can set Status filter)
+    // status filter
+    if (statusFilter && status !== statusFilter) return false;
+
+    // search
+    const hay = `${itemId} ${comp} ${lot}`.toLowerCase();
+    if (q && !hay.includes(q)) return false;
+
+    return true;
+  }).map(r=>{
+    // attach names
+    const name = ((catRows.find(cr => String(cr[idx(catHead,'ItemID')]||'').trim() === String(r[idx(H,'ItemID')]||'').trim())||[])[idx(catHead,'ItemName')]||'').toString();
+    r._itemName = name || r[idx(H,'ItemID')] || '';
+    return r;
+  });
+
+  // sort: soonest days, then unit display, then item
+  list.sort((a,b)=>{
+    const ax = a._days ?? 999999, bx = b._days ?? 999999;
+    if (ax!==bx) return ax-bx;
+    const au = unitNameById.get(String(a[idx(H,'Unit')]||'').trim()) || String(a[idx(H,'Unit')]||'');
+    const bu = unitNameById.get(String(b[idx(H,'Unit')]||'').trim()) || String(b[idx(H,'Unit')]||'');
+    if (au!==bu) return au.localeCompare(bu);
+    return (a._itemName||'').localeCompare(b._itemName||'');
+  });
+
+  $('#count').textContent = `${list.length} item(s)`;
+
+  const showUnitCol = (unit === 'ALL');
+  const html = `
+    <table>
+      <thead><tr>
+        <th style="width:28%">Item</th>
+        ${showUnitCol?'<th>Unit</th>':''}
+        <th>Compartment</th>
+        <th>Lot / Qty</th>
+        <th>Expiry</th>
+        <th class="right">Days</th>
+        <th>Status</th>
+        <th>Actions</th>
+      </tr></thead>
+      <tbody>
+        ${list.map(r=>{
+          const itemId = String(r[idx(H,'ItemID')]||'').trim();
+          const unitVal = String(r[idx(H,'Unit')]||'').trim();
+          const comp = String(r[idx(H,'Compartment')]||'').trim();
+          const lot = String(r[idx(H,'Lot')]||'').trim();
+          const qty = String(r[idx(H,'Qty')]||'').trim();
+          const exp = String(r[idx(H,'Expiry')]||'').trim();
+          const days = r._days;
+          const st = r._status;
+          const cls = statusClass(days, st);
+          const unitDisp = unitNameById.get(unitVal)||unitVal;
+          return `
+            <tr class="${cls}">
+              <td><strong>${escapeHtml(r._itemName)}</strong><br><span class="muted">${escapeHtml(itemId)}</span></td>
+              ${showUnitCol?`<td>${escapeHtml(unitDisp)}</td>`:''}
+              <td>${escapeHtml(comp)}</td>
+              <td>${escapeHtml(lot)}${qty?` <span class="muted">(${escapeHtml(qty)})</span>`:''}</td>
+              <td>${escapeHtml(exp)}</td>
+              <td class="right">${days??''}</td>
+              <td><span class="badge">${escapeHtml(st)}</span></td>
+              <td>
+                <div class="actions">
+                  <button class="btn red" data-action="replace" data-item="${encodeURIComponent(itemId)}" data-unit="${encodeURIComponent(unitVal)}" data-lot="${encodeURIComponent(lot)}">Mark Replace</button>
+                  <button class="btn yellow" data-action="ordered" data-item="${encodeURIComponent(itemId)}" data-unit="${encodeURIComponent(unitVal)}" data-lot="${encodeURIComponent(lot)}">Mark Ordered</button>
+                  <button class="btn green" data-action="ok" data-item="${encodeURIComponent(itemId)}" data-unit="${encodeURIComponent(unitVal)}" data-lot="${encodeURIComponent(lot)}">Mark OK</button>
+                </div>
+              </td>
+            </tr>`;
+        }).join('')}
+      </tbody>
+    </table>`;
+  $('#content').innerHTML = html;
+
+  // wire action buttons
+  $('#content').querySelectorAll('button[data-action]').forEach(btn=>{
+    btn.addEventListener('click', async (e)=>{
+      const action = btn.dataset.action;
+      const itemId = decodeURIComponent(btn.dataset.item||'');
+      const unitVal = decodeURIComponent(btn.dataset.unit||'');
+      const lot = decodeURIComponent(btn.dataset.lot||'');
+      const statusMap = { replace:'Replace', ordered:'Ordered', ok:'OK' };
+      const newStatus = statusMap[action] || 'OK';
+      try{
+        await postUpdate({ itemId, unit: unitVal, lot, status: newStatus });
+        // Update the DOM badge immediately
+        const badge = btn.closest('tr').querySelector('.badge');
+        if (badge) badge.textContent = newStatus;
+      }catch(err){
+        alert('Update failed: ' + (err.message||err));
+      }
+    });
+  });
+}
+
+function wireUI(){
+  $('#refreshBtn').addEventListener('click', render);
+  $('#rangeSel').addEventListener('change', render);
+  $('#statusSel').addEventListener('change', render);
+  $('#unitSel').addEventListener('change', render);
+  $('#searchBox').addEventListener('input', debounce(render, 250));
+
+  // Add Item modal
+  const modal = $('#addItemModal');
+  $('#showAddItemModal').addEventListener('click', ()=> modal.style.display='block');
+  $('.close-btn').addEventListener('click', ()=> modal.style.display='none');
+  window.addEventListener('click', (ev)=>{ if(ev.target===modal) modal.style.display='none'; });
+
+  // Catalog datalist
+  $('#itemsDatalist').innerHTML = catRows.map(r => `<option value="${escapeHtml(r[idx(catHead,'ItemName')]||'')}">`).join('');
+
+  // Expiry chips (this month, +1, +2, +3)
+  const now = new Date(); const chips = [];
+  for(let i=0;i<4;i++){
+    const d = new Date(now.getFullYear(), now.getMonth()+i, 1);
+    const iso = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`;
+    const label = d.toLocaleString(undefined, { month:'short', year:'2-digit' });
+    chips.push({iso,label});
+  }
+  const chipBar = $('#addExpiryChips');
+  chipBar.innerHTML = chips.map(c=>`<button class="btn" data-exp="${c.iso}">${c.label}</button>`).join('');
+  let selectedExp = '';
+  chipBar.querySelectorAll('button').forEach(b=>{
+    b.addEventListener('click', (e)=>{
+      selectedExp = b.dataset.exp;
+      chipBar.querySelectorAll('button').forEach(x=>x.style.borderColor='#ddd');
+      b.style.borderColor='blue';
+    });
+  });
+
+  // Save new item
+  $('#saveNewItemBtn').addEventListener('click', async ()=>{
+    const itemName = $('#addItemInput').value.trim();
+    let unit = $('#unitSel').value;
+    if (!itemName) return alert('Pick an item.');
+    if (unit === 'ALL') {
+      unit = prompt('Which unit is this for (e.g., 31, 33, 36)?') || '';
+      unit = unit.trim();
+      if (!unit) return;
+    }
+    const catRow = catRows.find(r => String(r[idx(catHead,'ItemName')]||'').trim().toLowerCase() === itemName.toLowerCase());
+    if (!catRow) return alert('Item name not found in Catalog.');
+    const itemId = String(catRow[idx(catHead,'ItemID')]||'').trim();
+    const comp = $('#addCompartmentSelect').value.trim();
+    const qty  = $('#addQty').value.trim();
+    if (!selectedExp) return alert('Select Expiry Month.');
+    try{
+      await postUpdate({ itemId, unit, compartment: comp, expiry: selectedExp, lot: `NEW-${Date.now()}`, qty });
+      modal.style.display='none';
+      alert('Item added.');
+      // quick refresh
+      boot();
+    }catch(err){
+      alert('Add failed: ' + (err.message||err));
+    }
+  });
+}
+
+/*** ========== SERVER CALLS (Apps Script) ========== ***/
+async function postUpdate(payload){
+  const body = { token: TOKEN, actionType: 'updateInventory', ...payload };
+  const r = await fetch(WEBAPP_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  const j = await r.json();
+  if (!j.ok) throw new Error(j.error || 'server error');
+  return j;
+}
+
+/*** ========== INIT ========== ***/
 boot();
 </script>
 </body>
