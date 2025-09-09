@@ -430,11 +430,15 @@ function wireUI(){
 /*** ========== SERVER CALLS (Apps Script) ========== ***/
 async function postUpdate(payload){
   const body = { token: TOKEN, actionType: 'updateInventory', ...payload };
-  const r = await fetch(WEBAPP_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  const j = await r.json();
-  if (!j.ok) throw new Error(j.error || 'server error');
-  return j;
+   const form = new URLSearchParams(body).toString();
+  await fetch(WEBAPP_URL, {
+    method: 'POST',
+    mode: 'no-cors',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+    body: form
+  });
+  // We can't read the response in no-cors mode; assume success and update UI optimistically.
+  return { ok: true, opaque: true };
 }
 
 /*** ========== INIT ========== ***/
