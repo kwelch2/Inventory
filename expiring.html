@@ -1,0 +1,328 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Expiring Supplies – GC EMS</title>
+<style>
+  :root{--bg:#f7f7f7;--card:#fff;--b:#ddd;--muted:#666;--ok:#e7f7ee;--warn:#fff7e6;--bad:#fdecea}
+  *{box-sizing:border-box}
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:var(--bg)}
+  .wrap{max-width:1100px;margin:0 auto;padding:16px}
+  .card{background:var(--card);border:1px solid var(--b);border-radius:12px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+  h1{margin:0 0 6px}
+  .muted{color:var(--muted);font-size:.9rem}
+  .toolbar{display:flex;gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap}
+  select,button,input{padding:8px 10px;border:1px solid var(--b);border-radius:10px;background:#fff}
+  button{cursor:pointer}
+  table{width:100%;border-collapse:collapse}
+  th,td{padding:8px 10px;border-bottom:1px solid #eee;text-align:left;vertical-align:top}
+  th{font-weight:600;background:#fafafa}
+  .badge{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid var(--b);font-size:.8rem}
+  .ok{background:var(--ok)} .warn{background:var(--warn)} .bad{background:var(--bad)}
+  .actions{display:flex;gap:6px;flex-wrap:wrap}
+  .btn{padding:6px 10px;border:1px solid var(--b);border-radius:10px;background:#fafafa}
+  .btn.red{border-color:#c00} .btn.yellow{border-color:#c90} .btn.green{border-color:#090}
+  .right{text-align:right}
+  .spacer{flex:1}
+  .modal{display:none;position:fixed;z-index:99;left:0;top:0;width:100%;height:100%;overflow:auto;background:rgba(0,0,0,.35)}
+  .modal-content{background:#fff;margin:10% auto;padding:16px;border:1px solid var(--b);width:min(540px,92%);border-radius:12px}
+  .close-btn{float:right;font-size:24px;cursor:pointer}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .chipbar{display:flex;gap:6px;flex-wrap:wrap}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <h1>Expiring Supplies</h1>
+    <div class="muted">Typed JSON from Apps Script; no CSV parsing. Server computes Days to Expire.</div>
+    <div class="toolbar">
+      <label>Window
+        <select id="rangeSel">
+          <option value="30">30 days</option>
+          <option value="60">60 days</option>
+          <option value="90" selected>90 days</option>
+          <option value="120">120 days</option>
+        </select>
+      </label>
+      <label>Unit
+        <select id="unitSel"><option value="ALL">ALL</option></select>
+      </label>
+      <label>Status
+        <select id="statusSel">
+          <option value="">All</option>
+          <option value="Expired">Expired</option>
+          <option value="Replace">Replace</option>
+          <option value="Ordered">Ordered</option>
+          <option value="OK">OK</option>
+        </select>
+      </label>
+      <input id="searchBox" placeholder="Search item, lot, compartment…"/>
+      <button class="btn" id="refreshBtn">Refresh</button>
+      <span class="spacer"></span>
+      <button class="btn" id="showAddItemModal">+ Add Item</button>
+      <span id="count" class="muted"></span>
+    </div>
+  </div>
+
+  <div id="content" class="card"></div>
+</div>
+
+<!-- Add Item Modal -->
+<div id="addItemModal" class="modal">
+  <div class="modal-content">
+    <span class="close-btn">&times;</span>
+    <h3>Add Item to Inventory</h3>
+    <div class="grid2">
+      <div>
+        <label>Item</label>
+        <input id="addItemInput" list="itemsDatalist" placeholder="Start typing name…" />
+        <datalist id="itemsDatalist"></datalist>
+      </div>
+      <div>
+        <label>Compartment</label>
+        <select id="addCompartmentSelect">
+          <option value="">Select…</option>
+          <option>Wall</option>
+          <option>Bag</option>
+          <option>Supply RM</option>
+        </select>
+      </div>
+      <div>
+        <label>Expiry Month</label>
+        <div id="addExpiryChips" class="chipbar"></div>
+      </div>
+      <div>
+        <label>Quantity</label>
+        <input id="addQty" type="number" min="1" step="1" value="1"/>
+      </div>
+    </div>
+    <button id="saveNewItemBtn" class="btn" style="width:100%;margin-top:12px;">Save Item</button>
+  </div>
+</div>
+
+<script>
+/*** CONFIG — keep your current Web App + token (same as Requests page) ***/
+const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbypxL0KxxXMVRieHHuvX98m9Jx6fYJWTdrMLQNkt99Sgt0vNzRDeyGiDz5fILlORP8wFQ/exec';
+const TOKEN      = '9mB4zR7kP2fW6vNqE1jH8aLcV5gT_sYx0uI-oZ3pD9bX4wK7eS6hF-EMS';
+
+/*** UTIL ***/
+const $ = s => document.querySelector(s);
+const escapeHtml = s => (s??'').toString().replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;' }[m]));
+const debounce = (fn,ms)=>{ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),ms); }; };
+function statusClass(days, status){
+  const s = (status||'').toLowerCase();
+  if (s.includes('expired')) return 'bad';
+  if (s.includes('replace')) return 'bad';
+  if (s.includes('ordered')) return 'warn';
+  if (days != null){
+    if (days < 0) return 'bad';
+    if (days <= 30) return 'warn';
+  }
+  return 'ok';
+}
+
+/*** STATE ***/
+let catalog=[], units=[], invRows=[];
+
+/*** DATA LOAD ***/
+async function loadAll() {
+  const within = parseInt($('#rangeSel').value, 10);
+  const [inv, cat, un] = await Promise.all([
+    fetch(`${WEBAPP_URL}?action=expiring&within=${within}`).then(r=>r.json()),
+    fetch(`${WEBAPP_URL}?action=listcatalog`).then(r=>r.json()),
+    fetch(`${WEBAPP_URL}?action=listunits`).then(r=>r.json())
+  ]);
+  if (!inv.ok) throw new Error(inv.error||'expiring failed');
+  if (!cat.ok) throw new Error('catalog failed');
+  if (!un.ok)  throw new Error('units failed');
+  invRows = inv.rows;
+  catalog = cat.rows;
+  units   = un.rows;
+}
+
+/*** RENDER ***/
+function fillUnitSelect() {
+  const sel = $('#unitSel'); const prev = sel.value || 'ALL';
+  const dispByUnit = new Map(units.map(u => [String(u.Unit||'').trim(), String(u.Display||'').trim()]));
+  const unitIds = Array.from(new Set(invRows.map(r => String(r.Unit||'').trim()))).filter(Boolean).sort((a,b)=>a.localeCompare(b));
+  const options = ['ALL', ...unitIds].map(u => `<option value="${u}">${u==='ALL'?'ALL':(dispByUnit.get(u)||u)}</option>`).join('');
+  sel.innerHTML = options;
+  sel.value = options.includes(`value="${prev}"`) ? prev : 'ALL';
+}
+
+function render() {
+  const q = ($('#searchBox').value||'').toLowerCase();
+  const unitFilter = $('#unitSel').value;
+  const statusFilter = $('#statusSel').value;
+  const nameById = new Map(catalog.map(c => [c.ItemID, c.ItemName]));
+  const dispByUnit = new Map(units.map(u => [u.Unit, u.Display]));
+
+  // Filter
+  let list = invRows.filter(r=>{
+    if (unitFilter !== 'ALL' && r.Unit !== unitFilter) return false;
+    if (statusFilter && r.Status !== statusFilter) return false;
+    const hay = `${r.ItemID||''} ${r.Compartment||''} ${r.Lot||''}`.toLowerCase();
+    if (q && !hay.includes(q)) return false;
+    return true;
+  });
+
+  // Enrich + sort
+  list = list.map(r=>({
+    ...r,
+    ItemName: nameById.get(r.ItemID) || r.ItemID,
+    UnitDisplay: dispByUnit.get(r.Unit) || r.Unit
+  })).sort((a,b)=>{
+    const ax=a.DaysToExpire??1e9, bx=b.DaysToExpire??1e9;
+    if (ax!==bx) return ax-bx;
+    if (a.UnitDisplay!==b.UnitDisplay) return a.UnitDisplay.localeCompare(b.UnitDisplay);
+    return a.ItemName.localeCompare(b.ItemName);
+  });
+
+  $('#count').textContent = `${list.length} item(s)`;
+
+  const showUnitCol = ($('#unitSel').value === 'ALL');
+  const html = `
+    <table>
+      <thead><tr>
+        <th style="width:28%">Item</th>
+        ${showUnitCol?'<th>Unit</th>':''}
+        <th>Compartment</th>
+        <th>Lot / Qty</th>
+        <th>Expiry</th>
+        <th class="right">Days</th>
+        <th>Status</th>
+        <th>Actions</th>
+      </tr></thead>
+      <tbody>
+        ${list.map(r=>{
+          const cls = statusClass(r.DaysToExpire, r.Status);
+          return `
+            <tr class="${cls}">
+              <td><strong>${escapeHtml(r.ItemName)}</strong><br><span class="muted">${escapeHtml(r.ItemID)}</span></td>
+              ${showUnitCol?`<td>${escapeHtml(r.UnitDisplay)}</td>`:''}
+              <td>${escapeHtml(r.Compartment||'')}</td>
+              <td>${escapeHtml(r.Lot||'')}${r.Qty?` <span class="muted">(${escapeHtml(r.Qty)})</span>`:''}</td>
+              <td>${escapeHtml(r.Expiry||'')}</td>
+              <td class="right">${r.DaysToExpire??''}</td>
+              <td><span class="badge">${escapeHtml(r.Status||'')}</span></td>
+              <td>
+                <div class="actions">
+                  <button class="btn red"    data-action="Replace" data-item="${encodeURIComponent(r.ItemID)}" data-unit="${encodeURIComponent(r.Unit)}" data-lot="${encodeURIComponent(r.Lot||'')}">Mark Replace</button>
+                  <button class="btn yellow" data-action="Ordered" data-item="${encodeURIComponent(r.ItemID)}" data-unit="${encodeURIComponent(r.Unit)}" data-lot="${encodeURIComponent(r.Lot||'')}">Mark Ordered</button>
+                  <button class="btn green"  data-action="OK"      data-item="${encodeURIComponent(r.ItemID)}" data-unit="${encodeURIComponent(r.Unit)}" data-lot="${encodeURIComponent(r.Lot||'')}">Mark OK</button>
+                </div>
+              </td>
+            </tr>`;
+        }).join('')}
+      </tbody>
+    </table>`;
+  $('#content').innerHTML = html;
+
+  // Wire buttons
+  $('#content').querySelectorAll('button[data-action]').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const status = btn.dataset.action;
+      const itemId = decodeURIComponent(btn.dataset.item||'');
+      const unit   = decodeURIComponent(btn.dataset.unit||'');
+      const lot    = decodeURIComponent(btn.dataset.lot||'');
+      try{
+        await postUpdate({ itemId, unit, lot, status });
+        const badge = btn.closest('tr').querySelector('.badge');
+        if (badge) badge.textContent = status;
+      }catch(e){ alert('Update failed'); }
+    });
+  });
+}
+
+/*** UI wiring ***/
+function wireUI(){
+  $('#refreshBtn').addEventListener('click', init);
+  $('#rangeSel').addEventListener('change', init);
+  $('#statusSel').addEventListener('change', render);
+  $('#unitSel').addEventListener('change', render);
+  $('#searchBox').addEventListener('input', debounce(render, 250));
+
+  // Modal
+  const modal = $('#addItemModal');
+  $('#showAddItemModal').addEventListener('click', ()=> modal.style.display='block');
+  $('.close-btn').addEventListener('click', ()=> modal.style.display='none');
+  window.addEventListener('click', e=>{ if(e.target===modal) modal.style.display='none'; });
+
+  // Catalog datalist
+  $('#itemsDatalist').innerHTML = catalog.map(r => `<option value="${escapeHtml(r.ItemName||'')}">`).join('');
+
+  // Expiry chips (this month + next 3)
+  const now = new Date(); const chips=[];
+  for(let i=0;i<4;i++){
+    const d = new Date(now.getFullYear(), now.getMonth()+i, 1);
+    const iso = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`;
+    const label = d.toLocaleString(undefined,{month:'short',year:'2-digit'});
+    chips.push({iso,label});
+  }
+  const chipBar = $('#addExpiryChips');
+  chipBar.innerHTML = chips.map(c=>`<button class="btn" data-exp="${c.iso}">${c.label}</button>`).join('');
+  let selectedExp = '';
+  chipBar.querySelectorAll('button').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      selectedExp = b.dataset.exp;
+      chipBar.querySelectorAll('button').forEach(x=>x.style.borderColor='#ddd');
+      b.style.borderColor='blue';
+    });
+  });
+
+  $('#saveNewItemBtn').addEventListener('click', async ()=>{
+    const itemName = $('#addItemInput').value.trim();
+    let unit = $('#unitSel').value;
+    if (!itemName) return alert('Pick an item.');
+    if (unit === 'ALL') {
+      unit = prompt('Which unit is this for (e.g., 31, 33, 36)?')?.trim() || '';
+      if (!unit) return;
+    }
+    const cat = catalog.find(c => (c.ItemName||'').toLowerCase() === itemName.toLowerCase());
+    if (!cat) return alert('Item not found in Catalog.');
+    const payload = {
+      itemId: cat.ItemID,
+      unit,
+      compartment: $('#addCompartmentSelect').value.trim(),
+      expiry: selectedExp || '',
+      lot: `NEW-${Date.now()}`,
+      qty: Number($('#addQty').value)||1
+    };
+    try{
+      await postUpdate(payload);
+      alert('Item added.');
+      document.getElementById('addItemModal').style.display='none';
+      init(); // reload from server so Days/Status reflect
+    }catch(e){ alert('Add failed'); }
+  });
+}
+
+/*** POST update to Apps Script ***/
+async function postUpdate(payload){
+  const r = await fetch(WEBAPP_URL, {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ token: TOKEN, actionType:'updateInventory', ...payload })
+  });
+  const j = await r.json();
+  if (!j.ok) throw new Error(j.error||'server');
+}
+
+/*** init flow ***/
+async function init(){
+  try{
+    await loadAll();
+    fillUnitSelect();
+    render();
+  }catch(e){
+    console.error(e);
+    $('#content').innerHTML = `<p style="color:#a00;font-weight:700;">Error loading data. Check WEBAPP_URL and Apps Script deployment.</p>`;
+  }
+}
+wireUI();
+init();
+</script>
+</body>
+</html>
