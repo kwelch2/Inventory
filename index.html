@@ -131,18 +131,62 @@ function parseCSV(text){
 }
 function parseExpiryDate(s){
   if (!s) return null;
-  // accept YYYY-MM or YYYY-MM-DD or M/D/YYYY; normalize to first of month
-  if (/^\d{4}-\d{2}(-\d{2})?$/.test(s)) {
-    const [y,m] = s.split('-'); return new Date(parseInt(y,10), parseInt(m,10)-1, 1);
+  let t = String(s).trim();
+
+  // Pull date out of parentheses if present:  "NEW-… (10/31/2025 18:00:00)" or "11/1/2025 18:00:00 (Pending)"
+  const par = t.match(/\(([^)]+)\)/);
+  if (par && par[1]) t = par[1].trim();
+
+  // Strip trailing markers
+  t = t.replace(/\s*\((?:Pending|WebApp)\)\s*$/i, '').trim();
+
+  // Epoch ms (12+ digits)
+  if (/^\d{12,}$/.test(t)) {
+    const d = new Date(Number(t));
+    return isNaN(d) ? null : d;
   }
-  const d = new Date(s); if (isNaN(d)) return null;
-  return new Date(d.getFullYear(), d.getMonth(), 1);
+
+  // Excel serial (numeric)
+  if (/^\d+(\.\d+)?$/.test(t)) {
+    return excelSerialToDate(t);
+  }
+
+  // YYYY-MM or YYYY-MM-DD
+  if (/^\d{4}-\d{2}(-\d{2})?$/.test(t)) {
+    const [y,m,d='01'] = t.split('-');
+    return new Date(Number(y), Number(m)-1, Number(d));
+  }
+
+  // M/D/YYYY (with optional time)
+  const m = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+  if (m) {
+    const [,MM,DD,YYYY,hh='00',mi='00',ss='00'] = m;
+    return new Date(Number(YYYY), Number(MM)-1, Number(DD), Number(hh), Number(mi), Number(ss));
+  }
+
+  // Fallback to Date.parse
+  const d = new Date(t);
+  return isNaN(d) ? null : d;
 }
-function daysFromTodayFOM(d){
+
+function excelSerialToDate(n){
+  const s = Number(n);
+  if (!isFinite(s)) return null;
+  const base = Date.UTC(1899,11,31); // Excel day 1 baseline
+  const ms   = (s >= 60 ? s+1 : s) * 86400000; // 1900 leap-year bug compensation
+  const d = new Date(base + ms);
+  return isNaN(d) ? null : d;
+}
+
+
+function daysFromTodayNoon(d){
   if (!d) return null;
-  const t = new Date(); const todayFOM = new Date(t.getFullYear(), t.getMonth(), 1);
-  return Math.ceil((d - todayFOM)/86400000);
+  const now = new Date();
+  const baseNow  = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0);
+  const baseExp  = new Date(d.getFullYear(),   d.getMonth(),   d.getDate(),   12, 0, 0);
+  return Math.ceil((baseExp - baseNow)/86400000);
 }
+
 function statusClass(days, status){
   const s = (status||'').toLowerCase();
   if (s.includes('expired')) return 'bad';
@@ -205,10 +249,10 @@ function render(){
     const qty = String(r[idx(H,'Qty')]||'').trim();
     const rawExp = String(r[idx(H,'Expiry')]||'').trim();
 
-    // compute DaysToExpire locally regardless of sheet content
-    const d = parseExpiryDate(rawExp);
-    const days = daysFromTodayFOM(d);
-    r._days = (days===null || isNaN(days)) ? null : days;
+        // compute DaysToExpire locally regardless of sheet content
+    const d = parseExpiryDate(rawExp) || parseExpiryDate(lot);
+    const days = daysFromTodayNoon(d);
+
 
     // infer status if the sheet doesn't have one
     const sheetStatus = String(r[idx(H,'Status')]||'').trim();
@@ -270,7 +314,9 @@ function render(){
           const comp = String(r[idx(H,'Compartment')]||'').trim();
           const lot = String(r[idx(H,'Lot')]||'').trim();
           const qty = String(r[idx(H,'Qty')]||'').trim();
-          const exp = String(r[idx(H,'Expiry')]||'').trim();
+          const expD = parseExpiryDate(String(r[idx(H,'Expiry')]||'').trim()) || parseExpiryDate(lot);
+          const exp  = expD ? `${expD.getFullYear()}-${String(expD.getMonth()+1).padStart(2,'0')}-${String(expD.getDate()).padStart(2,'0')}` 
+                            : String(r[idx(H,'Expiry')]||'').trim();
           const days = r._days;
           const st = r._status;
           const cls = statusClass(days, st);
@@ -306,10 +352,10 @@ function render(){
       const lot = decodeURIComponent(btn.dataset.lot||'');
       const statusMap = { replace:'Replace', ordered:'Ordered', ok:'OK' };
       const newStatus = statusMap[action] || 'OK';
-      try{
-        await postUpdate({ itemId, unit: unitVal, lot, status: newStatus });
-        // Update the DOM badge immediately
-        const badge = btn.closest('tr').querySelector('.badge');
+        try{
+          // NOTE: Apps Script expects 'crewStatus', not 'status'
+        await postUpdate({ itemId, unit: unitVal, lot, crewStatus: newStatus });
+      const badge = btn.closest('tr').querySelector('.badge');
         if (badge) badge.textContent = newStatus;
       }catch(err){
         alert('Update failed: ' + (err.message||err));
