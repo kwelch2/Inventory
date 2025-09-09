@@ -103,23 +103,11 @@
 </div>
 
 <script>
-/*** CONFIG — keep your current Web App + token (same as Requests page) ***/
-//const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbypxL0KxxXMVRieHHuvX98m9Jx6fYJWTdrMLQNkt99Sgt0vNzRDeyGiDz5fILlORP8wFQ/exec';
-const PROXY_URL = 'https://ems-inventory-proxy.kylewelch33.workers.dev/';
-const TOKEN      = '9mB4zR7kP2fW6vNqE1jH8aLcV5gT_sYx0uI-oZ3pD9bX4wK7eS6hF-EMS';
+// ===== CONFIG =====
+const PROXY_URL = 'https://ems-inventory-proxy.kylewelch33.workers.dev'; // no trailing slash needed
+const TOKEN     = '9mB4zR7kP2fW6vNqE1jH8aLcV5gT_sYx0uI-oZ3pD9bX4wK7eS6hF-EMS';
 
-/*** UTIL ***/
-const within = 90;
-const inv = await fetch(`${PROXY_URL}?action=expiring&within=${within}`).then(r=>r.json());
-const cat = await fetch(`${PROXY_URL}?action=listcatalog`).then(r=>r.json());
-const un  = await fetch(`${PROXY_URL}?action=listunits`).then(r=>r.json());
-
-// writes (unchanged payload, just change URL)
-await fetch(PROXY_URL, {
-  method:'POST',
-  headers:{'Content-Type':'application/json'},
-  body: JSON.stringify({ token: TOKEN, actionType:'updateInventory', ...payload })
-})
+// ===== UTIL =====
 const $ = s => document.querySelector(s);
 const escapeHtml = s => (s??'').toString().replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;' }[m]));
 const debounce = (fn,ms)=>{ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),ms); }; };
@@ -135,26 +123,26 @@ function statusClass(days, status){
   return 'ok';
 }
 
-/*** STATE ***/
+// ===== STATE =====
 let catalog=[], units=[], invRows=[];
 
-/*** DATA LOAD ***/
+// ===== DATA LOAD =====
 async function loadAll() {
   const within = parseInt($('#rangeSel').value, 10);
   const [inv, cat, un] = await Promise.all([
-    fetch(`${WEBAPP_URL}?action=expiring&within=${within}`).then(r=>r.json()),
-    fetch(`${WEBAPP_URL}?action=listcatalog`).then(r=>r.json()),
-    fetch(`${WEBAPP_URL}?action=listunits`).then(r=>r.json())
+    fetch(`${PROXY_URL}?action=expiring&within=${within}`).then(r=>r.json()),
+    fetch(`${PROXY_URL}?action=listcatalog`).then(r=>r.json()),
+    fetch(`${PROXY_URL}?action=listunits`).then(r=>r.json())
   ]);
-  if (!inv.ok) throw new Error(inv.error||'expiring failed');
-  if (!cat.ok) throw new Error('catalog failed');
-  if (!un.ok)  throw new Error('units failed');
-  invRows = inv.rows;
-  catalog = cat.rows;
-  units   = un.rows;
+  if (!inv.ok) throw new Error(inv.error || 'expiring failed');
+  if (!cat.ok) throw new Error(cat.error || 'catalog failed');
+  if (!un.ok)  throw new Error(un.error  || 'units failed');
+  invRows = inv.rows || [];
+  catalog = cat.rows || [];
+  units   = un.rows  || [];
 }
 
-/*** RENDER ***/
+// ===== RENDER =====
 function fillUnitSelect() {
   const sel = $('#unitSel'); const prev = sel.value || 'ALL';
   const dispByUnit = new Map(units.map(u => [String(u.Unit||'').trim(), String(u.Display||'').trim()]));
@@ -164,6 +152,10 @@ function fillUnitSelect() {
   sel.value = options.includes(`value="${prev}"`) ? prev : 'ALL';
 }
 
+function updateDatalist(){
+  $('#itemsDatalist').innerHTML = catalog.map(r => `<option value="${escapeHtml(r.ItemName||'')}">`).join('');
+}
+
 function render() {
   const q = ($('#searchBox').value||'').toLowerCase();
   const unitFilter = $('#unitSel').value;
@@ -171,7 +163,6 @@ function render() {
   const nameById = new Map(catalog.map(c => [c.ItemID, c.ItemName]));
   const dispByUnit = new Map(units.map(u => [u.Unit, u.Display]));
 
-  // Filter
   let list = invRows.filter(r=>{
     if (unitFilter !== 'ALL' && r.Unit !== unitFilter) return false;
     if (statusFilter && r.Status !== statusFilter) return false;
@@ -180,7 +171,6 @@ function render() {
     return true;
   });
 
-  // Enrich + sort
   list = list.map(r=>({
     ...r,
     ItemName: nameById.get(r.ItemID) || r.ItemID,
@@ -232,7 +222,7 @@ function render() {
     </table>`;
   $('#content').innerHTML = html;
 
-  // Wire buttons
+  // wire buttons
   $('#content').querySelectorAll('button[data-action]').forEach(btn=>{
     btn.addEventListener('click', async ()=>{
       const status = btn.dataset.action;
@@ -248,7 +238,7 @@ function render() {
   });
 }
 
-/*** UI wiring ***/
+// ===== UI wiring =====
 function wireUI(){
   $('#refreshBtn').addEventListener('click', init);
   $('#rangeSel').addEventListener('change', init);
@@ -261,9 +251,6 @@ function wireUI(){
   $('#showAddItemModal').addEventListener('click', ()=> modal.style.display='block');
   $('.close-btn').addEventListener('click', ()=> modal.style.display='none');
   window.addEventListener('click', e=>{ if(e.target===modal) modal.style.display='none'; });
-
-  // Catalog datalist
-  $('#itemsDatalist').innerHTML = catalog.map(r => `<option value="${escapeHtml(r.ItemName||'')}">`).join('');
 
   // Expiry chips (this month + next 3)
   const now = new Date(); const chips=[];
@@ -306,14 +293,14 @@ function wireUI(){
       await postUpdate(payload);
       alert('Item added.');
       document.getElementById('addItemModal').style.display='none';
-      init(); // reload from server so Days/Status reflect
+      init();
     }catch(e){ alert('Add failed'); }
   });
 }
 
-/*** POST update to Apps Script ***/
+// ===== POST (via proxy) =====
 async function postUpdate(payload){
-  const r = await fetch(WEBAPP_URL, {
+  const r = await fetch(PROXY_URL, {
     method:'POST',
     headers:{'Content-Type':'application/json'},
     body: JSON.stringify({ token: TOKEN, actionType:'updateInventory', ...payload })
@@ -322,15 +309,16 @@ async function postUpdate(payload){
   if (!j.ok) throw new Error(j.error||'server');
 }
 
-/*** init flow ***/
+// ===== init flow =====
 async function init(){
   try{
     await loadAll();
     fillUnitSelect();
+    updateDatalist();
     render();
   }catch(e){
     console.error(e);
-    $('#content').innerHTML = `<p style="color:#a00;font-weight:700;">Error loading data. Check WEBAPP_URL and Apps Script deployment.</p>`;
+    $('#content').innerHTML = `<p style="color:#a00;font-weight:700;">Error loading data. Check your Cloudflare Worker URL and Apps Script deployment.</p>`;
   }
 }
 wireUI();
