@@ -303,80 +303,145 @@ function wireUI(){
   $('#searchBox').addEventListener('input', debounce(render, 250));
 
   // ===== Add Item modal wiring =====
-  const modal = $('#addItemModal');
-  const showBtn = $('#showAddItemModal');
-  const closeBtn = $('.close-btn');
-  const chipBar = $('#addExpiryChips');
-  const compSel = $('#addCompartmentSelect');
-  const qtyInp  = $('#addQty');
-  const itemInp = $('#addItemInput');
-  let selectedExp = '';
+ const modal = $('#addItemModal');
+const showBtn = $('#showAddItemModal');
+const closeBtn = $('.close-btn');
+const chipBar = $('#addExpiryChips');
+const compSel = $('#addCompartmentSelect');
+const qtyInp  = $('#addQty');
+const itemInp = $('#addItemInput');
+let selectedExp = '';
 
-  const buildChips = ()=>{
-    const now = new Date(); const chips=[];
-    for(let i=0;i<4;i++){
-      const d = new Date(now.getFullYear(), now.getMonth()+i, 1);
-      const iso = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(Math.min(28, d.getDate())).padStart(2,'0')}`;
-      const label = d.toLocaleString(undefined,{month:'short',year:'2-digit'});
-      chips.push({iso,label});
-    }
-    chipBar.innerHTML = chips.map(c=>`<button class="btn" data-exp="${c.iso}">${c.label}</button>`).join('');
-    chipBar.querySelectorAll('button').forEach(b=>{
-      b.addEventListener('click', ()=>{
-        selectedExp = b.dataset.exp;
-        chipBar.querySelectorAll('button').forEach(x=>x.style.borderColor='#ddd');
-        b.style.borderColor='blue';
-      });
+function endOfMonthISO(year, monthIndexZeroBased){
+  const last = new Date(year, monthIndexZeroBased + 1, 0); // day 0 -> last day prev month
+  const y = last.getFullYear();
+  const m = String(last.getMonth()+1).padStart(2,'0');
+  const d = String(last.getDate()).padStart(2,'0');
+  return `${y}-${m}-${d}`;
+}
+
+function buildChips(){
+  // Create 3 month chips (this + next 2) + a "Custom…" chip
+  const now = new Date();
+  const chips = [];
+  for (let i=0;i<3;i++){
+    const d = new Date(now.getFullYear(), now.getMonth()+i, 1);
+    const label = d.toLocaleString(undefined,{month:'short',year:'2-digit'});
+    const iso   = endOfMonthISO(d.getFullYear(), d.getMonth());
+    chips.push({label, iso});
+  }
+  chipBar.innerHTML = chips.map(c=>`<button class="btn exp-chip" data-exp="${c.iso}">${c.label}</button>`).join('') +
+                      `<button class="btn exp-chip custom" data-exp="">Custom…</button>`;
+
+  // Insert custom pickers (hidden until "Custom…" is clicked)
+  let customWrap = document.getElementById('customExpiryWrap');
+  if (!customWrap){
+    customWrap = document.createElement('div');
+    customWrap.id = 'customExpiryWrap';
+    customWrap.style.display = 'none';
+    customWrap.style.marginTop = '8px';
+    customWrap.innerHTML = `
+      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+        <label style="display:flex; align-items:center; gap:6px;">
+          <span style="min-width:70px;">Month</span>
+          <input id="customMonth" type="month">
+        </label>
+        <label style="display:flex; align-items:center; gap:6px;">
+          <span style="min-width:70px;">Exact date</span>
+          <input id="customDate" type="date">
+        </label>
+        <button id="applyCustomExp" class="btn">Apply</button>
+      </div>`;
+    chipBar.insertAdjacentElement('afterend', customWrap);
+  }
+
+  // Wire the chips
+  chipBar.querySelectorAll('button.exp-chip').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      // reset borders
+      chipBar.querySelectorAll('button.exp-chip').forEach(x=>x.style.borderColor='#ddd');
+      b.style.borderColor='blue';
+
+      if (b.classList.contains('custom')){
+        // Show custom inputs
+        document.getElementById('customExpiryWrap').style.display = '';
+        selectedExp = ''; // wait for Apply
+      } else {
+        // Hide custom inputs and set selectedExp from chip (end-of-month ISO)
+        document.getElementById('customExpiryWrap').style.display = 'none';
+        selectedExp = b.dataset.exp || '';
+      }
     });
+  });
+
+  // Apply custom picks:
+  document.getElementById('applyCustomExp').onclick = ()=>{
+    const monthVal = document.getElementById('customMonth').value; // "YYYY-MM" or ""
+    const dateVal  = document.getElementById('customDate').value;  // "YYYY-MM-DD" or ""
+
+    if (dateVal){
+      selectedExp = dateVal; // exact date chosen
+    } else if (monthVal){
+      const [y,m] = monthVal.split('-').map(v=>parseInt(v,10));
+      if (y && m){
+        selectedExp = endOfMonthISO(y, m-1); // month-only => end-of-month
+      }
+    } else {
+      alert('Pick a month or an exact date.');
+      return;
+    }
+    // Visual feedback
+    chipBar.querySelectorAll('button.exp-chip').forEach(x=>x.style.borderColor='#ddd');
+    document.getElementById('customExpiryWrap').style.display = 'none';
+  };
+}
+
+showBtn.addEventListener('click', ()=>{
+  selectedExp = '';
+  itemInp.value = '';
+  compSel.value = '';
+  qtyInp.value = '1';
+  buildChips();
+  updateDatalist();
+  modal.style.display='block';
+});
+closeBtn.addEventListener('click', ()=> modal.style.display='none');
+window.addEventListener('click', e=>{ if(e.target===modal) modal.style.display='none'; });
+
+// Save button stays the same, but will now use selectedExp set above:
+$('#saveNewItemBtn').addEventListener('click', async ()=>{
+  const visibleName = itemInp.value.trim();
+  if (!visibleName) { alert('Pick an item name.'); return; }
+
+  // Resolve ItemID by ItemName or ItemNameAlt
+  const row = catalog.find(c => [String(c.ItemName||'').toLowerCase(), String(c.ItemNameAlt||'').toLowerCase()].includes(visibleName.toLowerCase()));
+  if (!row || !row.ItemID) { alert('Item not found in Catalog.'); return; }
+
+  let unit = $('#unitSel').value;
+  if (unit === 'ALL') {
+    unit = prompt('Which unit is this for (e.g., 31, 33, 36)?')?.trim() || '';
+    if (!unit) return;
+  }
+
+  if (!selectedExp) { alert('Pick an expiry (chip or custom).'); return; }
+  const payload = {
+    itemId: row.ItemID,
+    unit,
+    compartment: $('#addCompartmentSelect').value.trim(),
+    expiry: selectedExp,                  // ISO yyyy-mm-dd
+    qty: Number($('#addQty').value)||1,
+    crewStatus: ''
   };
 
-  showBtn.addEventListener('click', ()=>{
-    selectedExp = '';
-    itemInp.value = '';
-    compSel.value = '';
-    qtyInp.value = '1';
-    buildChips();
-    updateDatalist();
-    modal.style.display='block';
-  });
-  closeBtn.addEventListener('click', ()=> modal.style.display='none');
-  window.addEventListener('click', e=>{ if(e.target===modal) modal.style.display='none'; });
-
-  $('#saveNewItemBtn').addEventListener('click', async ()=>{
-    const visibleName = itemInp.value.trim();
-    if (!visibleName) { alert('Pick an item name.'); return; }
-
-    // Resolve ItemID via Catalog by either ItemName or ItemNameAlt
-    const row = catalog.find(c => [String(c.ItemName||'').toLowerCase(), String(c.ItemNameAlt||'').toLowerCase()].includes(visibleName.toLowerCase()));
-    if (!row || !row.ItemID) { alert('Item not found in Catalog.'); return; }
-
-    // Unit: use current filter or prompt when ALL
-    let unit = $('#unitSel').value;
-    if (unit === 'ALL') {
-      unit = prompt('Which unit is this for (e.g., 31, 33, 36)?')?.trim() || '';
-      if (!unit) return;
-    }
-
-    if (!selectedExp) { alert('Pick an expiry month.'); return; }
-    const payload = {
-      itemId: row.ItemID,
-      unit,
-      compartment: $('#addCompartmentSelect').value.trim(),
-      expiry: selectedExp,                  // ISO yyyy-mm-dd
-      qty: Number($('#addQty').value)||1,
-      crewStatus: ''                        // default blank
-    };
-
-    try{
-      await postCreate(payload);
-      modal.style.display='none';
-      await init(); // refresh so the new row appears if in-range
-    }catch(e){
-      console.error(e);
-      alert('Add failed');
-    }
-  });
-}
+  try{
+    await postCreate(payload);
+    modal.style.display='none';
+    await init(); // refresh list
+  }catch(e){
+    console.error(e);
+    alert('Add failed');
+  }
+});
 
 // ===== POSTs (via proxy) =====
 async function postUpdate(payload){
