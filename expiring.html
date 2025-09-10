@@ -18,11 +18,10 @@
   table{width:100%;border-collapse:collapse}
   th,td{padding:8px 10px;border-bottom:1px solid #eee;text-align:left;vertical-align:top}
   th{font-weight:600;background:#fafafa}
-  .badge{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid var(--b);font-size:.8rem}
   .ok{background:var(--ok)} .warn{background:var(--warn)} .bad{background:var(--bad)}
   .actions{display:flex;gap:6px;flex-wrap:wrap}
   .btn{padding:6px 10px;border:1px solid var(--b);border-radius:10px;background:#fafafa}
-  .btn.red{border-color:#c00} .btn.yellow{border-color:#c90} .btn.green{border-color:#090}
+  .btn.red{border-color:#c00} .btn.green{border-color:#090}
   .right{text-align:right}
   .spacer{flex:1}
   .modal{display:none;position:fixed;z-index:99;left:0;top:0;width:100%;height:100%;overflow:auto;background:rgba(0,0,0,.35)}
@@ -30,6 +29,20 @@
   .close-btn{float:right;font-size:24px;cursor:pointer}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
   .chipbar{display:flex;gap:6px;flex-wrap:wrap}
+
+  /* Note trigger styled like an input */
+  .note-trigger{
+    padding:6px 10px;border:1px solid var(--b);border-radius:10px;background:#fff;
+    min-width:140px;text-align:left;cursor:pointer
+  }
+  .btn.is-active{background:var(--warn);}
+
+  /* Small note modal */
+  #noteModal{display:none;position:fixed;z-index:120;inset:0;background:rgba(0,0,0,.35)}
+  #noteModal .box{background:#fff;margin:12% auto;max-width:420px;width:92%;
+    border:1px solid var(--b);border-radius:12px;padding:14px}
+  #noteText{width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--b);border-radius:8px}
+  #charLeft{float:right;color:var(--muted);font-size:.85rem}
 </style>
 </head>
 <body>
@@ -49,7 +62,7 @@
       <label>Unit
         <select id="unitSel"><option value="ALL">ALL</option></select>
       </label>
-          <input id="searchBox" placeholder="Search item, compartment…"/>
+      <input id="searchBox" placeholder="Search item, compartment…"/>
       <button class="btn" id="refreshBtn">Refresh</button>
       <span class="spacer"></span>
       <button class="btn" id="showAddItemModal">+ Add Item</button>
@@ -58,6 +71,21 @@
   </div>
 
   <div id="content" class="card"></div>
+</div>
+
+<!-- Note modal -->
+<div id="noteModal">
+  <div class="box">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <strong>Edit note</strong>
+      <span id="charLeft">40</span>
+    </div>
+    <textarea id="noteText" rows="3" maxlength="40" placeholder="Short note (max 40 chars)"></textarea>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
+      <button id="noteCancel" class="btn">Cancel</button>
+      <button id="noteSave" class="btn">Save</button>
+    </div>
+  </div>
 </div>
 
 <!-- Add Item Modal -->
@@ -214,8 +242,10 @@ function render() {
               <td class="right">${r.DaysToExpire??''}</td>
               <td>
                 <div class="actions" style="gap:8px;align-items:center;">
-                  <input type="text" class="crew-note" placeholder="note…" value="${escapeHtml(note)}" style="min-width:140px;">
-                  <button class="btn pending">Pending</button>
+                  <button type="button" class="note-trigger" title="Click to edit note">
+                    ${escapeHtml(note || 'note…')}
+                  </button>
+                  <button class="btn pending ${r.Status==='Pending'?'is-active':''}">Pending</button>
                   <button class="btn green ok">OK</button>
                   <button class="btn red replaced">Replaced</button>
                 </div>
@@ -226,33 +256,84 @@ function render() {
     </table>`;
   $('#content').innerHTML = html;
 
-  // Wire row actions
+  // Wire row actions + note modal per row
   $('#content').querySelectorAll('tr[data-id]').forEach(tr=>{
     const id = decodeURIComponent(tr.dataset.id);
-    const noteInput = tr.querySelector('.crew-note');
-    const doUpdate = async (status) => {
-      const crewStatus = noteInput.value.trim();
-      try{
-        await postUpdate({ inventoryId: id, status, crewStatus });
-        if (status==='OK' || status==='Replaced'){
-          tr.remove();
-          $('#count').textContent = `${$('#content tbody').children.length} item(s)`;
-        } else {
-          tr.classList.add('warn');
-        }
-      }catch(e){
-        console.error(e);
-        alert('Update failed');
-      }
+    const noteBtn = tr.querySelector('.note-trigger');
+    let cachedNote = (noteBtn.textContent.trim() === 'note…') ? '' : noteBtn.textContent.trim();
+
+    const markPendingActive = () => {
+      tr.classList.add('warn');
+      tr.querySelector('.pending').classList.add('is-active');
     };
-    tr.querySelector('button.pending')  .addEventListener('click', ()=>doUpdate('Pending'));
-    tr.querySelector('button.ok')       .addEventListener('click', ()=>doUpdate('OK'));
-    tr.querySelector('button.replaced') .addEventListener('click', ()=>doUpdate('Replaced'));
+    const clearPendingActive = () => {
+      tr.classList.remove('warn');
+      tr.querySelector('.pending').classList.remove('is-active');
+    };
+
+    // open note editor
+    noteBtn.addEventListener('click', ()=>{
+      openNoteEditor(id, cachedNote, async (newNote)=>{
+        // save handler
+        await postUpdate({ inventoryId:id, crewStatus:newNote });
+        cachedNote = newNote;
+        noteBtn.textContent = newNote || 'note…';
+      });
+    });
+
+    tr.querySelector('button.pending').addEventListener('click', async ()=>{
+      try{
+        await postUpdate({ inventoryId:id, status:'Pending', crewStatus: cachedNote });
+        markPendingActive();
+      }catch(e){ console.error(e); alert('Update failed'); }
+    });
+
+    tr.querySelector('button.ok').addEventListener('click', async ()=>{
+      try{
+        await postUpdate({ inventoryId:id, status:'OK', crewStatus: cachedNote });
+        tr.remove();
+        $('#count').textContent = `${$('#content tbody').children.length} item(s)`;
+      }catch(e){ console.error(e); alert('Update failed'); }
+    });
+
+    tr.querySelector('button.replaced').addEventListener('click', async ()=>{
+      try{
+        await postUpdate({ inventoryId:id, status:'Replaced', crewStatus: cachedNote });
+        tr.remove();
+        $('#count').textContent = `${$('#content tbody').children.length} item(s)`;
+      }catch(e){ console.error(e); alert('Update failed'); }
+    });
   });
 }
 
+// Note modal helper (max 40 chars)
+function openNoteEditor(inventoryId, initialText, onSave){
+  const modal = $('#noteModal'), ta = $('#noteText'), left = $('#charLeft');
+  ta.value = initialText || '';
+  left.textContent = String(40 - ta.value.length);
+  modal.style.display = 'block';
+  ta.focus();
+
+  const onInput = ()=> left.textContent = String(40 - ta.value.length);
+  ta.addEventListener('input', onInput);
+
+  const close = ()=>{
+    ta.removeEventListener('input', onInput);
+    modal.style.display = 'none';
+  };
+  $('#noteCancel').onclick = close;
+  modal.onclick = e => { if (e.target===modal) close(); };
+
+  $('#noteSave').onclick = async ()=>{
+    const txt = ta.value.trim().slice(0,40);
+    try{
+      await onSave(txt);
+    }catch(e){ console.error(e); alert('Note update failed'); }
+    close();
+  };
+}
+
 function updateDatalist(){
-  // Prefer distinct ItemName, but allow alt names; the input stores the visible name only.
   const names = new Set();
   const opts = [];
   for (const r of catalog){
@@ -294,146 +375,139 @@ function wireUI(){
   $('#searchBox').addEventListener('input', debounce(render, 250));
 
   // ===== Add Item modal wiring =====
- const modal = $('#addItemModal');
-const showBtn = $('#showAddItemModal');
-const closeBtn = $('.close-btn');
-const chipBar = $('#addExpiryChips');
-const compSel = $('#addCompartmentSelect');
-const qtyInp  = $('#addQty');
-const itemInp = $('#addItemInput');
-let selectedExp = '';
+  const modal = $('#addItemModal');
+  const showBtn = $('#showAddItemModal');
+  const closeBtn = $('.close-btn');
+  const chipBar = $('#addExpiryChips');
+  const compSel = $('#addCompartmentSelect');
+  const qtyInp  = $('#addQty');
+  const itemInp = $('#addItemInput');
+  let selectedExp = '';
 
-function endOfMonthISO(year, monthIndexZeroBased){
-  const last = new Date(year, monthIndexZeroBased + 1, 0); // day 0 -> last day prev month
-  const y = last.getFullYear();
-  const m = String(last.getMonth()+1).padStart(2,'0');
-  const d = String(last.getDate()).padStart(2,'0');
-  return `${y}-${m}-${d}`;
-}
-
-function buildChips(){
-  // Create 3 month chips (this + next 2) + a "Custom…" chip
-  const now = new Date();
-  const chips = [];
-  for (let i=0;i<3;i++){
-    const d = new Date(now.getFullYear(), now.getMonth()+i, 1);
-    const label = d.toLocaleString(undefined,{month:'short',year:'2-digit'});
-    const iso   = endOfMonthISO(d.getFullYear(), d.getMonth());
-    chips.push({label, iso});
-  }
-  chipBar.innerHTML = chips.map(c=>`<button class="btn exp-chip" data-exp="${c.iso}">${c.label}</button>`).join('') +
-                      `<button class="btn exp-chip custom" data-exp="">Custom…</button>`;
-
-  // Insert custom pickers (hidden until "Custom…" is clicked)
-  let customWrap = document.getElementById('customExpiryWrap');
-  if (!customWrap){
-    customWrap = document.createElement('div');
-    customWrap.id = 'customExpiryWrap';
-    customWrap.style.display = 'none';
-    customWrap.style.marginTop = '8px';
-    customWrap.innerHTML = `
-      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-        <label style="display:flex; align-items:center; gap:6px;">
-          <span style="min-width:70px;">Month</span>
-          <input id="customMonth" type="month">
-        </label>
-        <label style="display:flex; align-items:center; gap:6px;">
-          <span style="min-width:70px;">Exact date</span>
-          <input id="customDate" type="date">
-        </label>
-        <button id="applyCustomExp" class="btn">Apply</button>
-      </div>`;
-    chipBar.insertAdjacentElement('afterend', customWrap);
+  function endOfMonthISO(year, monthIndexZeroBased){
+    const last = new Date(year, monthIndexZeroBased + 1, 0);
+    const y = last.getFullYear();
+    const m = String(last.getMonth()+1).padStart(2,'0');
+    const d = String(last.getDate()).padStart(2,'0');
+    return `${y}-${m}-${d}`;
   }
 
-  // Wire the chips
-  chipBar.querySelectorAll('button.exp-chip').forEach(b=>{
-    b.addEventListener('click', ()=>{
-      // reset borders
-      chipBar.querySelectorAll('button.exp-chip').forEach(x=>x.style.borderColor='#ddd');
-      b.style.borderColor='blue';
-
-      if (b.classList.contains('custom')){
-        // Show custom inputs
-        document.getElementById('customExpiryWrap').style.display = '';
-        selectedExp = ''; // wait for Apply
-      } else {
-        // Hide custom inputs and set selectedExp from chip (end-of-month ISO)
-        document.getElementById('customExpiryWrap').style.display = 'none';
-        selectedExp = b.dataset.exp || '';
-      }
-    });
-  });
-
-  // Apply custom picks:
-  document.getElementById('applyCustomExp').onclick = ()=>{
-    const monthVal = document.getElementById('customMonth').value; // "YYYY-MM" or ""
-    const dateVal  = document.getElementById('customDate').value;  // "YYYY-MM-DD" or ""
-
-    if (dateVal){
-      selectedExp = dateVal; // exact date chosen
-    } else if (monthVal){
-      const [y,m] = monthVal.split('-').map(v=>parseInt(v,10));
-      if (y && m){
-        selectedExp = endOfMonthISO(y, m-1); // month-only => end-of-month
-      }
-    } else {
-      alert('Pick a month or an exact date.');
-      return;
+  function buildChips(){
+    const now = new Date();
+    const chips = [];
+    for (let i=0;i<3;i++){
+      const d = new Date(now.getFullYear(), now.getMonth()+i, 1);
+      const label = d.toLocaleString(undefined,{month:'short',year:'2-digit'});
+      const iso   = endOfMonthISO(d.getFullYear(), d.getMonth());
+      chips.push({label, iso});
     }
-    // Visual feedback
-    chipBar.querySelectorAll('button.exp-chip').forEach(x=>x.style.borderColor='#ddd');
-    document.getElementById('customExpiryWrap').style.display = 'none';
-  };
-}
+    chipBar.innerHTML = chips.map(c=>`<button class="btn exp-chip" data-exp="${c.iso}">${c.label}</button>`).join('') +
+                        `<button class="btn exp-chip custom" data-exp="">Custom…</button>`;
 
-showBtn.addEventListener('click', ()=>{
-  selectedExp = '';
-  itemInp.value = '';
-  compSel.value = '';
-  qtyInp.value = '1';
-  buildChips();
-  updateDatalist();
-  modal.style.display='block';
-});
-closeBtn.addEventListener('click', ()=> modal.style.display='none');
-window.addEventListener('click', e=>{ if(e.target===modal) modal.style.display='none'; });
+    // Insert custom pickers (hidden until "Custom…" is clicked)
+    let customWrap = document.getElementById('customExpiryWrap');
+    if (!customWrap){
+      customWrap = document.createElement('div');
+      customWrap.id = 'customExpiryWrap';
+      customWrap.style.display = 'none';
+      customWrap.style.marginTop = '8px';
+      customWrap.innerHTML = `
+        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+          <label style="display:flex; align-items:center; gap:6px;">
+            <span style="min-width:70px;">Month</span>
+            <input id="customMonth" type="month">
+          </label>
+          <label style="display:flex; align-items:center; gap:6px;">
+            <span style="min-width:70px;">Exact date</span>
+            <input id="customDate" type="date">
+          </label>
+          <button id="applyCustomExp" class="btn">Apply</button>
+        </div>`;
+      chipBar.insertAdjacentElement('afterend', customWrap);
+    }
 
-// Save button stays the same, but will now use selectedExp set above:
-$('#saveNewItemBtn').addEventListener('click', async ()=>{
-  const visibleName = itemInp.value.trim();
-  if (!visibleName) { alert('Pick an item name.'); return; }
+    // Wire the chips
+    chipBar.querySelectorAll('button.exp-chip').forEach(b=>{
+      b.addEventListener('click', ()=>{
+        chipBar.querySelectorAll('button.exp-chip').forEach(x=>x.style.borderColor='#ddd');
+        b.style.borderColor='blue';
 
-  // Resolve ItemID by ItemName or ItemNameAlt
-  const row = catalog.find(c => [String(c.ItemName||'').toLowerCase(), String(c.ItemNameAlt||'').toLowerCase()].includes(visibleName.toLowerCase()));
-  if (!row || !row.ItemID) { alert('Item not found in Catalog.'); return; }
+        if (b.classList.contains('custom')){
+          document.getElementById('customExpiryWrap').style.display = '';
+          selectedExp = '';
+        } else {
+          document.getElementById('customExpiryWrap').style.display = 'none';
+          selectedExp = b.dataset.exp || '';
+        }
+      });
+    });
 
-  let unit = $('#unitSel').value;
-  if (unit === 'ALL') {
-    unit = prompt('Which unit is this for (e.g., 31, 33, 36)?')?.trim() || '';
-    if (!unit) return;
+    document.getElementById('applyCustomExp').onclick = ()=>{
+      const monthVal = document.getElementById('customMonth').value; // YYYY-MM
+      const dateVal  = document.getElementById('customDate').value;  // YYYY-MM-DD
+
+      if (dateVal){
+        selectedExp = dateVal;
+      } else if (monthVal){
+        const [y,m] = monthVal.split('-').map(v=>parseInt(v,10));
+        if (y && m) selectedExp = endOfMonthISO(y, m-1);
+      } else {
+        alert('Pick a month or an exact date.');
+        return;
+      }
+      chipBar.querySelectorAll('button.exp-chip').forEach(x=>x.style.borderColor='#ddd');
+      document.getElementById('customExpiryWrap').style.display = 'none';
+    };
   }
 
-  if (!selectedExp) { alert('Pick an expiry (chip or custom).'); return; }
-  const payload = {
-    itemId: row.ItemID,
-    unit,
-    compartment: $('#addCompartmentSelect').value.trim(),
-    expiry: selectedExp,                  // ISO yyyy-mm-dd
-    qty: Number($('#addQty').value)||1,
-    crewStatus: ''
-  };
+  showBtn.addEventListener('click', ()=>{
+    selectedExp = '';
+    itemInp.value = '';
+    compSel.value = '';
+    qtyInp.value = '1';
+    buildChips();
+    updateDatalist();
+    modal.style.display='block';
+  });
+  closeBtn.addEventListener('click', ()=> modal.style.display='none');
+  window.addEventListener('click', e=>{ if(e.target===modal) modal.style.display='none'; });
 
-  try{
-    await postCreate(payload);
-    modal.style.display='none';
-    await init(); // refresh list
-  }catch(e){
-    console.error(e);
-    alert('Add failed');
-  }
-});
+  // Save (create)
+  $('#saveNewItemBtn').addEventListener('click', async ()=>{
+    const visibleName = itemInp.value.trim();
+    if (!visibleName) { alert('Pick an item name.'); return; }
+
+    // Resolve ItemID by ItemName or ItemNameAlt
+    const row = catalog.find(c => [String(c.ItemName||'').toLowerCase(), String(c.ItemNameAlt||'').toLowerCase()].includes(visibleName.toLowerCase()));
+    if (!row || !row.ItemID) { alert('Item not found in Catalog.'); return; }
+
+    let unit = $('#unitSel').value;
+    if (unit === 'ALL') {
+      unit = prompt('Which unit is this for (e.g., 31, 33, 36)?')?.trim() || '';
+      if (!unit) return;
+    }
+
+    if (!selectedExp) { alert('Pick an expiry (chip or custom).'); return; }
+    const payload = {
+      itemId: row.ItemID,
+      unit,
+      compartment: $('#addCompartmentSelect').value.trim(),
+      expiry: selectedExp,                  // ISO yyyy-mm-dd
+      qty: Number($('#addQty').value)||1,
+      crewStatus: ''
+    };
+
+    try{
+      await postCreate(payload);
+      modal.style.display='none';
+      await init(); // refresh list
+    }catch(e){
+      console.error(e);
+      alert('Add failed');
+    }
+  });
 }
+
 // ===== POSTs (via proxy) =====
 async function postUpdate(payload){
   const r = await fetch(PROXY_URL, {
