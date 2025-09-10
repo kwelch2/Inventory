@@ -49,16 +49,7 @@
       <label>Unit
         <select id="unitSel"><option value="ALL">ALL</option></select>
       </label>
-      <label>Status
-        <select id="statusSel">
-          <option value="">All</option>
-          <option value="Expired">Expired</option>
-          <option value="Replace">Replace</option>
-          <option value="Ordered">Ordered</option>
-          <option value="OK">OK</option>
-        </select>
-      </label>
-      <input id="searchBox" placeholder="Search item, lot, compartment…"/>
+          <input id="searchBox" placeholder="Search item, compartment…"/>
       <button class="btn" id="refreshBtn">Refresh</button>
       <span class="spacer"></span>
       <button class="btn" id="showAddItemModal">+ Add Item</button>
@@ -178,7 +169,7 @@ function render() {
 
   // Filter
   let list = rows.filter(r=>{
-    if (unitFilter !== 'ALL' && r.Unit !== unitFilter) return false;
+    if (unitFilter !== 'ALL' && String(r.Unit).toUpperCase() !== String(unitFilter).toUpperCase()) return false;
     const hay = `${r.ItemName||''} ${r.ItemRef||''} ${r.Category||''} ${r.Compartment||''}`.toLowerCase();
     if (q && !hay.includes(q)) return false;
     return true;
@@ -442,7 +433,7 @@ $('#saveNewItemBtn').addEventListener('click', async ()=>{
     alert('Add failed');
   }
 });
-
+}
 // ===== POSTs (via proxy) =====
 async function postUpdate(payload){
   const r = await fetch(PROXY_URL, {
