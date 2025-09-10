@@ -104,18 +104,17 @@
 
 <script>
 // ===== CONFIG =====
-const PROXY_URL = 'https://ems-inventory-proxy.kylewelch33.workers.dev'; // no trailing slash needed
+const PROXY_URL = 'https://ems-inventory-proxy.kylewelch33.workers.dev'; // no trailing slash
 const TOKEN     = '9mB4zR7kP2fW6vNqE1jH8aLcV5gT_sYx0uI-oZ3pD9bX4wK7eS6hF-EMS';
 
 // ===== UTIL =====
 const $ = s => document.querySelector(s);
 const escapeHtml = s => (s??'').toString().replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;' }[m]));
 const debounce = (fn,ms)=>{ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),ms); }; };
-function statusClass(days, status){
-  const s = (status||'').toLowerCase();
-  if (s.includes('expired')) return 'bad';
-  if (s.includes('replace')) return 'bad';
-  if (s.includes('ordered')) return 'warn';
+
+// Row class from days + status (Pending highlighted; OK/Replaced filtered out server-side)
+function rowClass(days, status){
+  if ((status||'').toLowerCase()==='pending') return 'warn';
   if (days != null){
     if (days < 0) return 'bad';
     if (days <= 30) return 'warn';
@@ -124,62 +123,74 @@ function statusClass(days, status){
 }
 
 // ===== STATE =====
-let catalog=[], units=[], invRows=[];
+let units=[], rows=[], catalog=[]; // catalog used for Add Item search
 
 // ===== DATA LOAD =====
+function readWithin(){
+  const sel = $('#rangeSel').value;
+  if (sel === 'CUSTOM') {
+    const v = parseInt($('#customDays').value || '0', 10);
+    return isNaN(v) || v < 0 ? 0 : v;
+  }
+  return sel === 'ALL' ? 'ALL' : parseInt(sel, 10);
+}
+
 async function loadAll() {
-  const within = parseInt($('#rangeSel').value, 10);
-  const [inv, cat, un] = await Promise.all([
-    fetch(`${PROXY_URL}?action=expiring&within=${within}`).then(r=>r.json()),
-    fetch(`${PROXY_URL}?action=listcatalog`).then(r=>r.json()),
-    fetch(`${PROXY_URL}?action=listunits`).then(r=>r.json())
+  const within = readWithin();
+  const unit   = $('#unitSel')?.value || 'ALL';
+
+  // Build expiring URL
+  const url = new URL(PROXY_URL);
+  url.searchParams.set('action','expiring');
+  url.searchParams.set('within', within === 'ALL' ? 'ALL' : String(within));
+  url.searchParams.set('unit', unit);
+  url.searchParams.set('showResolved','false');
+
+  const [inv, un, cat] = await Promise.all([
+    fetch(url.toString()).then(r=>r.json()),
+    fetch(`${PROXY_URL}?action=listunits`).then(r=>r.json()),
+    fetch(`${PROXY_URL}?action=listcatalog`).then(r=>r.json())
   ]);
   if (!inv.ok) throw new Error(inv.error || 'expiring failed');
-  if (!cat.ok) throw new Error(cat.error || 'catalog failed');
   if (!un.ok)  throw new Error(un.error  || 'units failed');
-  invRows = inv.rows || [];
-  catalog = cat.rows || [];
+  if (!cat.ok) throw new Error(cat.error || 'catalog failed');
+
+  rows    = inv.rows || [];
   units   = un.rows  || [];
+  catalog = cat.rows || [];
 }
 
 // ===== RENDER =====
 function fillUnitSelect() {
-  const sel = $('#unitSel'); const prev = sel.value || 'ALL';
-  const dispByUnit = new Map(units.map(u => [String(u.Unit||'').trim(), String(u.Display||'').trim()]));
-  const unitIds = Array.from(new Set(invRows.map(r => String(r.Unit||'').trim()))).filter(Boolean).sort((a,b)=>a.localeCompare(b));
-  const options = ['ALL', ...unitIds].map(u => `<option value="${u}">${u==='ALL'?'ALL':(dispByUnit.get(u)||u)}</option>`).join('');
+  const sel = $('#unitSel'); if (!sel) return;
+  const prev = sel.value || 'ALL';
+  const unitIds   = Array.from(new Set(rows.map(r => String(r.Unit||'').trim()))).filter(Boolean);
+  const unitNames = new Map(units.map(u => [String(u.Unit||'').trim(), String(u.Display||'').trim()]));
+  const unique = Array.from(new Set([...unitIds, ...units.map(u=>String(u.Unit||'').trim())])).filter(Boolean).sort();
+  const options = ['ALL', ...unique].map(u => `<option value="${u}">${u==='ALL'?'ALL':(unitNames.get(u)||u)}</option>`).join('');
   sel.innerHTML = options;
   sel.value = options.includes(`value="${prev}"`) ? prev : 'ALL';
-}
-
-function updateDatalist(){
-  $('#itemsDatalist').innerHTML = catalog.map(r => `<option value="${escapeHtml(r.ItemName||'')}">`).join('');
 }
 
 function render() {
   const q = ($('#searchBox').value||'').toLowerCase();
   const unitFilter = $('#unitSel').value;
-  const statusFilter = $('#statusSel').value;
-  const nameById = new Map(catalog.map(c => [c.ItemID, c.ItemName]));
-  const dispByUnit = new Map(units.map(u => [u.Unit, u.Display]));
 
-  let list = invRows.filter(r=>{
+  // Filter
+  let list = rows.filter(r=>{
     if (unitFilter !== 'ALL' && r.Unit !== unitFilter) return false;
-    if (statusFilter && r.Status !== statusFilter) return false;
-    const hay = `${r.ItemID||''} ${r.Compartment||''} ${r.Lot||''}`.toLowerCase();
+    const hay = `${r.ItemName||''} ${r.ItemRef||''} ${r.Category||''} ${r.Compartment||''}`.toLowerCase();
     if (q && !hay.includes(q)) return false;
     return true;
   });
 
-  list = list.map(r=>({
-    ...r,
-    ItemName: nameById.get(r.ItemID) || r.ItemID,
-    UnitDisplay: dispByUnit.get(r.Unit) || r.Unit
-  })).sort((a,b)=>{
+  // Sort: Days ASC → UnitDisplay (when ALL) → ItemName
+  list = list.sort((a,b)=>{
     const ax=a.DaysToExpire??1e9, bx=b.DaysToExpire??1e9;
     if (ax!==bx) return ax-bx;
-    if (a.UnitDisplay!==b.UnitDisplay) return a.UnitDisplay.localeCompare(b.UnitDisplay);
-    return a.ItemName.localeCompare(b.ItemName);
+    const ua=a.UnitDisplay||a.Unit||'', ub=b.UnitDisplay||b.Unit||'';
+    if ($('#unitSel').value==='ALL' && ua!==ub) return ua.localeCompare(ub);
+    return (a.ItemName||'').localeCompare(b.ItemName||'');
   });
 
   $('#count').textContent = `${list.length} item(s)`;
@@ -188,32 +199,34 @@ function render() {
   const html = `
     <table>
       <thead><tr>
-        <th style="width:28%">Item</th>
+        <th style="width:30%">Item</th>
         ${showUnitCol?'<th>Unit</th>':''}
         <th>Compartment</th>
-        <th>Lot / Qty</th>
+        <th>Qty</th>
         <th>Expiry</th>
         <th class="right">Days</th>
-        <th>Status</th>
         <th>Actions</th>
       </tr></thead>
       <tbody>
         ${list.map(r=>{
-          const cls = statusClass(r.DaysToExpire, r.Status);
+          const cls = rowClass(r.DaysToExpire, r.Status);
+          const ref = r.ItemRef ? `<span class="muted">${escapeHtml(r.ItemRef)}</span>` : '';
+          const unitDisp = r.UnitDisplay || r.Unit || '';
+          const note = r.CrewStatus || '';
           return `
-            <tr class="${cls}">
-              <td><strong>${escapeHtml(r.ItemName)}</strong><br><span class="muted">${escapeHtml(r.ItemID)}</span></td>
-              ${showUnitCol?`<td>${escapeHtml(r.UnitDisplay)}</td>`:''}
+            <tr class="${cls}" data-id="${encodeURIComponent(r.InventoryID)}">
+              <td><strong>${escapeHtml(r.ItemName||'')}</strong><br>${ref}</td>
+              ${showUnitCol?`<td>${escapeHtml(unitDisp)}</td>`:''}
               <td>${escapeHtml(r.Compartment||'')}</td>
-              <td>${escapeHtml(r.Lot||'')}${r.Qty?` <span class="muted">(${escapeHtml(r.Qty)})</span>`:''}</td>
+              <td>${(r.Qty??'')!==''?escapeHtml(String(r.Qty)):'—'}</td>
               <td>${escapeHtml(r.Expiry||'')}</td>
               <td class="right">${r.DaysToExpire??''}</td>
-              <td><span class="badge">${escapeHtml(r.Status||'')}</span></td>
               <td>
-                <div class="actions">
-                  <button class="btn red"    data-action="Replace" data-item="${encodeURIComponent(r.ItemID)}" data-unit="${encodeURIComponent(r.Unit)}" data-lot="${encodeURIComponent(r.Lot||'')}">Mark Replace</button>
-                  <button class="btn yellow" data-action="Ordered" data-item="${encodeURIComponent(r.ItemID)}" data-unit="${encodeURIComponent(r.Unit)}" data-lot="${encodeURIComponent(r.Lot||'')}">Mark Ordered</button>
-                  <button class="btn green"  data-action="OK"      data-item="${encodeURIComponent(r.ItemID)}" data-unit="${encodeURIComponent(r.Unit)}" data-lot="${encodeURIComponent(r.Lot||'')}">Mark OK</button>
+                <div class="actions" style="gap:8px;align-items:center;">
+                  <input type="text" class="crew-note" placeholder="note…" value="${escapeHtml(note)}" style="min-width:140px;">
+                  <button class="btn pending">Pending</button>
+                  <button class="btn green ok">OK</button>
+                  <button class="btn red replaced">Replaced</button>
                 </div>
               </td>
             </tr>`;
@@ -222,91 +235,180 @@ function render() {
     </table>`;
   $('#content').innerHTML = html;
 
-  // wire buttons
-  $('#content').querySelectorAll('button[data-action]').forEach(btn=>{
-    btn.addEventListener('click', async ()=>{
-      const status = btn.dataset.action;
-      const itemId = decodeURIComponent(btn.dataset.item||'');
-      const unit   = decodeURIComponent(btn.dataset.unit||'');
-      const lot    = decodeURIComponent(btn.dataset.lot||'');
+  // Wire row actions
+  $('#content').querySelectorAll('tr[data-id]').forEach(tr=>{
+    const id = decodeURIComponent(tr.dataset.id);
+    const noteInput = tr.querySelector('.crew-note');
+    const doUpdate = async (status) => {
+      const crewStatus = noteInput.value.trim();
       try{
-        await postUpdate({ itemId, unit, lot, status });
-        const badge = btn.closest('tr').querySelector('.badge');
-        if (badge) badge.textContent = status;
-      }catch(e){ alert('Update failed'); }
-    });
+        await postUpdate({ inventoryId: id, status, crewStatus });
+        if (status==='OK' || status==='Replaced'){
+          tr.remove();
+          $('#count').textContent = `${$('#content tbody').children.length} item(s)`;
+        } else {
+          tr.classList.add('warn');
+        }
+      }catch(e){
+        console.error(e);
+        alert('Update failed');
+      }
+    };
+    tr.querySelector('button.pending')  .addEventListener('click', ()=>doUpdate('Pending'));
+    tr.querySelector('button.ok')       .addEventListener('click', ()=>doUpdate('OK'));
+    tr.querySelector('button.replaced') .addEventListener('click', ()=>doUpdate('Replaced'));
   });
 }
 
-// ===== UI wiring =====
+function updateDatalist(){
+  // Prefer distinct ItemName, but allow alt names; the input stores the visible name only.
+  const names = new Set();
+  const opts = [];
+  for (const r of catalog){
+    const nm = String(r.ItemName||'').trim();
+    const alt= String(r.ItemNameAlt||'').trim();
+    if (nm && !names.has(nm)) { names.add(nm); opts.push(nm); }
+    if (alt && !names.has(alt)) { names.add(alt); opts.push(alt); }
+  }
+  $('#itemsDatalist').innerHTML = opts.map(v => `<option value="${escapeHtml(v)}">`).join('');
+}
+
+// ===== UI wiring (including Add Item modal) =====
 function wireUI(){
+  // Range options: add Custom + All
+  const rangeSel = $('#rangeSel');
+  if (![...rangeSel.options].some(o=>o.value==='CUSTOM')) {
+    rangeSel.insertAdjacentHTML('beforeend', `<option value="CUSTOM">Custom…</option><option value="ALL">All</option>`);
+  }
+
+  // custom input
+  const customInput = document.createElement('input');
+  customInput.type = 'number'; customInput.min = '0'; customInput.placeholder = 'days';
+  customInput.id = 'customDays';
+  customInput.style.display = 'none';
+  customInput.style.width = '80px';
+  rangeSel.parentElement.appendChild(customInput);
+
+  const onRangeChange = ()=>{
+    const v = rangeSel.value;
+    customInput.style.display = (v==='CUSTOM') ? '' : 'none';
+    if (v!=='CUSTOM') customInput.value = '';
+    init();
+  };
+  rangeSel.addEventListener('change', onRangeChange);
+  customInput.addEventListener('input', debounce(init, 400));
+
   $('#refreshBtn').addEventListener('click', init);
-  $('#rangeSel').addEventListener('change', init);
-  $('#statusSel').addEventListener('change', render);
-  $('#unitSel').addEventListener('change', render);
+  $('#unitSel').addEventListener('change', init);
   $('#searchBox').addEventListener('input', debounce(render, 250));
 
-  // Modal
+  // ===== Add Item modal wiring =====
   const modal = $('#addItemModal');
-  $('#showAddItemModal').addEventListener('click', ()=> modal.style.display='block');
-  $('.close-btn').addEventListener('click', ()=> modal.style.display='none');
+  const showBtn = $('#showAddItemModal');
+  const closeBtn = $('.close-btn');
+  const chipBar = $('#addExpiryChips');
+  const compSel = $('#addCompartmentSelect');
+  const qtyInp  = $('#addQty');
+  const itemInp = $('#addItemInput');
+  let selectedExp = '';
+
+  const buildChips = ()=>{
+    const now = new Date(); const chips=[];
+    for(let i=0;i<4;i++){
+      const d = new Date(now.getFullYear(), now.getMonth()+i, 1);
+      const iso = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(Math.min(28, d.getDate())).padStart(2,'0')}`;
+      const label = d.toLocaleString(undefined,{month:'short',year:'2-digit'});
+      chips.push({iso,label});
+    }
+    chipBar.innerHTML = chips.map(c=>`<button class="btn" data-exp="${c.iso}">${c.label}</button>`).join('');
+    chipBar.querySelectorAll('button').forEach(b=>{
+      b.addEventListener('click', ()=>{
+        selectedExp = b.dataset.exp;
+        chipBar.querySelectorAll('button').forEach(x=>x.style.borderColor='#ddd');
+        b.style.borderColor='blue';
+      });
+    });
+  };
+
+  showBtn.addEventListener('click', ()=>{
+    selectedExp = '';
+    itemInp.value = '';
+    compSel.value = '';
+    qtyInp.value = '1';
+    buildChips();
+    updateDatalist();
+    modal.style.display='block';
+  });
+  closeBtn.addEventListener('click', ()=> modal.style.display='none');
   window.addEventListener('click', e=>{ if(e.target===modal) modal.style.display='none'; });
 
-  // Expiry chips (this month + next 3)
-  const now = new Date(); const chips=[];
-  for(let i=0;i<4;i++){
-    const d = new Date(now.getFullYear(), now.getMonth()+i, 1);
-    const iso = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`;
-    const label = d.toLocaleString(undefined,{month:'short',year:'2-digit'});
-    chips.push({iso,label});
-  }
-  const chipBar = $('#addExpiryChips');
-  chipBar.innerHTML = chips.map(c=>`<button class="btn" data-exp="${c.iso}">${c.label}</button>`).join('');
-  let selectedExp = '';
-  chipBar.querySelectorAll('button').forEach(b=>{
-    b.addEventListener('click', ()=>{
-      selectedExp = b.dataset.exp;
-      chipBar.querySelectorAll('button').forEach(x=>x.style.borderColor='#ddd');
-      b.style.borderColor='blue';
-    });
-  });
-
   $('#saveNewItemBtn').addEventListener('click', async ()=>{
-    const itemName = $('#addItemInput').value.trim();
+    const visibleName = itemInp.value.trim();
+    if (!visibleName) { alert('Pick an item name.'); return; }
+
+    // Resolve ItemID via Catalog by either ItemName or ItemNameAlt
+    const row = catalog.find(c => [String(c.ItemName||'').toLowerCase(), String(c.ItemNameAlt||'').toLowerCase()].includes(visibleName.toLowerCase()));
+    if (!row || !row.ItemID) { alert('Item not found in Catalog.'); return; }
+
+    // Unit: use current filter or prompt when ALL
     let unit = $('#unitSel').value;
-    if (!itemName) return alert('Pick an item.');
     if (unit === 'ALL') {
       unit = prompt('Which unit is this for (e.g., 31, 33, 36)?')?.trim() || '';
       if (!unit) return;
     }
-    const cat = catalog.find(c => (c.ItemName||'').toLowerCase() === itemName.toLowerCase());
-    if (!cat) return alert('Item not found in Catalog.');
+
+    if (!selectedExp) { alert('Pick an expiry month.'); return; }
     const payload = {
-      itemId: cat.ItemID,
+      itemId: row.ItemID,
       unit,
       compartment: $('#addCompartmentSelect').value.trim(),
-      expiry: selectedExp || '',
-      lot: `NEW-${Date.now()}`,
-      qty: Number($('#addQty').value)||1
+      expiry: selectedExp,                  // ISO yyyy-mm-dd
+      qty: Number($('#addQty').value)||1,
+      crewStatus: ''                        // default blank
     };
+
     try{
-      await postUpdate(payload);
-      alert('Item added.');
-      document.getElementById('addItemModal').style.display='none';
-      init();
-    }catch(e){ alert('Add failed'); }
+      await postCreate(payload);
+      modal.style.display='none';
+      await init(); // refresh so the new row appears if in-range
+    }catch(e){
+      console.error(e);
+      alert('Add failed');
+    }
   });
 }
 
-// ===== POST (via proxy) =====
+// ===== POSTs (via proxy) =====
 async function postUpdate(payload){
   const r = await fetch(PROXY_URL, {
     method:'POST',
     headers:{'Content-Type':'application/json'},
     body: JSON.stringify({ token: TOKEN, actionType:'updateInventory', ...payload })
   });
-  const j = await r.json();
+  let j;
+  try { j = await r.json(); } catch(e){
+    const txt = await r.text();
+    console.error('POST raw text:', txt);
+    throw new Error('Non-JSON response');
+  }
   if (!j.ok) throw new Error(j.error||'server');
+  return j;
+}
+
+async function postCreate(payload){
+  const r = await fetch(PROXY_URL, {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ token: TOKEN, actionType:'createInventory', ...payload })
+  });
+  let j;
+  try { j = await r.json(); } catch(e){
+    const txt = await r.text();
+    console.error('POST raw text:', txt);
+    throw new Error('Non-JSON response');
+  }
+  if (!j.ok) throw new Error(j.error||'server');
+  return j;
 }
 
 // ===== init flow =====
@@ -314,13 +416,14 @@ async function init(){
   try{
     await loadAll();
     fillUnitSelect();
-    updateDatalist();
     render();
   }catch(e){
     console.error(e);
-    $('#content').innerHTML = `<p style="color:#a00;font-weight:700;">Error loading data. Check your Cloudflare Worker URL and Apps Script deployment.</p>`;
+    $('#content').innerHTML = `<p style="color:#a00;font-weight:700;">Error loading data. Check Worker URL & GAS deployment.</p>`;
   }
 }
+
+// boot
 wireUI();
 init();
 </script>
