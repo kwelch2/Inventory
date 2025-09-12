@@ -167,31 +167,62 @@ function renderPending(){
     });
   });
 }
-
-function renderHistory(days, query=''){
+function renderHistory(days, query='') {
   const nameById = new Map(catRows.map(r => [r.ItemID, r.ItemName]));
-  const received = orderRows.filter(r => r.Status === 'Received');
+  const rangeDays = Number.isFinite(+days) ? +days : 30;
 
-  const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - Number(days||30));
+  // Robust timestamp parser (Date | serial number | string)
+  const toDate = (v) => {
+    if (v instanceof Date && !isNaN(v)) return v;
+    if (typeof v === 'number') {
+      // Google Sheets serial days -> JS Date
+      return new Date(Math.round((v - 25569) * 86400e3));
+    }
+    const d = new Date(String(v));
+    return isNaN(d) ? null : d;
+  };
 
-  const filtered = received.filter(r=>{
-    const ts = new Date(r.Timestamp);
-    const nm = nameById.get(r.ItemID) || '';
-    return ts >= cutoff && (!query || nm.toLowerCase().includes(query.toLowerCase()));
+  // Display name: from catalog if ItemID, else from "REQUESTED OTHER ITEM: ..."
+  const displayNameFor = (row) => {
+    if (row.ItemID && nameById.get(row.ItemID)) return nameById.get(row.ItemID);
+    if (typeof row.Notes === 'string' && row.Notes.startsWith('REQUESTED OTHER ITEM:')) {
+      // keep any text before " -- " as the item name
+      const raw = row.Notes.replace('REQUESTED OTHER ITEM: ','');
+      return raw.split(' -- ')[0] || 'Other Item';
+    }
+    return nameById.get(row.ItemID) || 'Other Item';
+  };
+
+  const cutoff = new Date();
+  cutoff.setHours(0,0,0,0);
+  cutoff.setDate(cutoff.getDate() - rangeDays);
+
+  // Only show rows marked Received
+  const received = orderRows.filter(r => String(r.Status || '').toLowerCase() === 'received');
+
+  const filtered = received.filter(r => {
+    const ts = toDate(r.Timestamp);
+    if (!ts) return false;
+    const nm = displayNameFor(r);
+    const matchesQuery = !query || nm.toLowerCase().includes(query.toLowerCase());
+    return ts >= cutoff && matchesQuery;
   });
 
-  const tbody = $('#historyTable tbody');
-  if (!filtered.length){
-    tbody.innerHTML = `<tr><td colspan="3">No history in the last ${days} days.</td></tr>`;
+  const tbody = document.querySelector('#historyTable tbody');
+  if (!filtered.length) {
+    tbody.innerHTML = `<tr><td colspan="3">No history in the last ${rangeDays} days.</td></tr>`;
     return;
   }
 
-  tbody.innerHTML = filtered.map(r => `
-    <tr>
-      <td>${nameById.get(r.ItemID) || 'Other Item'}</td>
-      <td>${new Date(r.Timestamp).toLocaleDateString()}</td>
-      <td>${r.Notes || ''}</td>
-    </tr>`).join('');
+  tbody.innerHTML = filtered.map(r => {
+    const ts = toDate(r.Timestamp);
+    return `
+      <tr>
+        <td>${displayNameFor(r)}</td>
+        <td>${ts ? ts.toLocaleDateString() : ''}</td>
+        <td>${r.Notes ? String(r.Notes) : ''}</td>
+      </tr>`;
+  }).join('');
 }
 
 /*** BOOT ***/
