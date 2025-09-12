@@ -244,6 +244,7 @@ async function boot(){
 
     // Pending section
     renderPending();
+    renderHistory(30);
 
     // History controls
     document.querySelectorAll('button.hist').forEach(b=>{
@@ -252,6 +253,9 @@ async function boot(){
     $('#historySearch').addEventListener('input', e=>{
       // default to 30 if user hasn’t clicked a range
       renderHistory(30, e.target.value);
+    });
+    $('#historyPane').addEventListener('toggle', (e)=>{
+    if (e.target.open) renderHistory(30);
     });
 
     // “Other item” toggle
