@@ -12,33 +12,40 @@
   h1,h2{margin:0 0 8px}
   label{display:block;margin:10px 0 6px;font-weight:600}
   input,button,select{width:100%;padding:10px;border:1px solid #ccc;border-radius:8px}
-  button.btn{width:auto;padding:6px 10px;}
+  button.btn{width:auto;padding:6px 10px;cursor:pointer}
   .muted{color:var(--muted);font-size:.9rem}
   table{width:100%;border-collapse:collapse;margin-top:12px}
-  th,td{padding:8px;border-bottom:1px solid #eee;text-align:left;vertical-align:top;}
-  .status-btns button{width:auto; margin-right:5px; cursor:pointer;}
-  .status-btns .active{background-color:#0275d8;color:white;border-color:#0275d8;}
-  .vendor-table{font-size:0.9em; margin-top:8px; background-color:#fafafa;}
-  .vendor-table th, .vendor-table td {padding:4px;}
-  summary {cursor:pointer; font-weight:bold;}
+  th,td{padding:8px;border-bottom:1px solid #eee;text-align:left;vertical-align:top}
+  .status-btns button{width:auto;margin-right:5px}
+  .status-btns .active{background:#0275d8;color:#fff;border-color:#0275d8}
+  .vendor-table{font-size:.9em;margin-top:8px;background:#fafafa}
+  .vendor-table th,.vendor-table td{padding:4px}
+  summary{cursor:pointer;font-weight:bold}
+  .toolbar{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap;align-items:center}
 </style>
 </head>
 <body>
 <div class="wrap">
   <div class="card">
     <h1>Supply Request</h1>
+
     <label for="itemSearch">Item from Catalog</label>
     <input id="itemSearch" list="itemsDatalist" placeholder="Search for an item...">
     <datalist id="itemsDatalist"></datalist>
-    <div style="margin: 8px 0;">
-        <input type="checkbox" id="isOther" style="width:auto;">
-        <label for="isOther" style="display:inline;font-weight:normal;">Or, request an item not in the list</label>
+
+    <div style="margin:8px 0;">
+      <input type="checkbox" id="isOther" style="width:auto;">
+      <label for="isOther" style="display:inline;font-weight:normal;">Or, request an item not in the list</label>
     </div>
+
     <input id="otherItem" placeholder="Enter unlisted item name..." style="display:none;">
+
     <label for="qty">Quantity (Optional)</label>
     <input id="qty" type="text" placeholder="e.g., 1 Box or 5 EA">
+
     <label for="notes">Notes (Optional)</label>
     <input id="notes" placeholder="e.g., For Unit 31">
+
     <button id="submitBtn" style="margin-top:12px;">Submit Request</button>
     <div id="msg" class="muted" style="margin-top:8px;"></div>
   </div>
@@ -46,178 +53,242 @@
   <div class="card" style="margin-top:16px;">
     <h2>Pending Requests</h2>
     <table id="pendingTable">
-        <thead><tr><th>Item / Vendor Pricing</th><th>Qty</th><th>Status</th><th>Notes</th></tr></thead>
-        <tbody><tr><td colspan="4">Loading...</td></tr></tbody>
+      <thead><tr><th>Item / Vendor Pricing</th><th>Qty</th><th>Status</th><th>Notes</th></tr></thead>
+      <tbody><tr><td colspan="4">Loading...</td></tr></tbody>
     </table>
   </div>
 
   <div class="card" style="margin-top:16px;">
-    <details>
-        <summary style="font-size:1.5em;font-weight:bold;">View Order History</summary>
-        <div style="display:flex; gap:10px; margin-top:12px; flex-wrap:wrap;">
-            <button class="btn" data-days="30">Last 30 Days</button>
-            <button class="btn" data-days="60">Last 60 Days</button>
-            <button class="btn" data-days="90">Last 90 Days</button>
-            <input id="historySearch" placeholder="Search history..." style="width:auto;flex:1;">
-        </div>
-        <table id="historyTable">
-            <thead><tr><th>Item</th><th>Received</th><th>Notes</th></tr></thead>
-            <tbody><tr><td colspan="3">Select a date range to view history.</td></tr></tbody>
-        </table>
+    <details id="historyPane">
+      <summary style="font-size:1.5em;font-weight:bold;">View Order History</summary>
+      <div class="toolbar">
+        <button class="btn hist" data-days="30">Last 30 Days</button>
+        <button class="btn hist" data-days="60">Last 60 Days</button>
+        <button class="btn hist" data-days="90">Last 90 Days</button>
+        <input id="historySearch" placeholder="Search history..." style="width:auto;flex:1;">
+      </div>
+      <table id="historyTable">
+        <thead><tr><th>Item</th><th>Received</th><th>Notes</th></tr></thead>
+        <tbody><tr><td colspan="3">Select a date range to view history.</td></tr></tbody>
+      </table>
     </details>
   </div>
 </div>
 
 <script>
-/*** CONFIG ***/
-const WEBAPP_URL    = 'https://script.google.com/macros/s/AKfycbypxL0KxxXMVRieHHuvX98m9Jx6fYJWTdrMLQNkt99Sgt0vNzRDeyGiDz5fILlORP8wFQ/exec';
-const TOKEN         = '9mB4zR7kP2fW6vNqE1jH8aLcV5gT_sYx0uI-oZ3pD9bX4wK7eS6hF-EMS';
-/*** end config ***/
+/*** CONFIG: use the Cloudflare Worker, not the raw Apps Script URL ***/
+const PROXY_URL = 'https://ems-inventory-proxy.kylewelch33.workers.dev';
+const TOKEN     = '9mB4zR7kP2fW6vNqE1jH8aLcV5gT_sYx0uI-oZ3pD9bX4wK7eS6hF-EMS';
 
-let catRows=[], orderRows=[], vpRows=[];
+/*** STATE ***/
+let catRows = [], orderRows = [], vpRows = [];
 
+/*** UTIL ***/
+const $ = s => document.querySelector(s);
+function money(v){ const n = Number(v); return Number.isFinite(n) ? `$${n.toFixed(2)}` : 'N/A'; }
+
+/*** RENDERERS ***/
 function renderPending(){
-    const nameById = new Map(catRows.map(r => [r.ItemID, {name: r.ItemName, alt: r.ItemNameAlt}]));
-    const pending = orderRows.filter(r => ['Requested', 'Ordered'].includes(r.Status));
-    
-    const tbody = document.querySelector('#pendingTable tbody');
-    tbody.innerHTML = pending.map(r => {
-        const itemInfo = nameById.get(r.ItemID);
-        let itemName = itemInfo ? itemInfo.name : r.ItemID;
-        const itemAltName = itemInfo ? itemInfo.alt : '';
+  const nameMap = new Map(catRows.map(r => [r.ItemID, {name:r.ItemName, alt:r.ItemNameAlt||''}]));
+  const pending = orderRows.filter(r => r.Status === 'Requested' || r.Status === 'Ordered');
 
-        if (!itemName && r.Notes.startsWith('REQUESTED OTHER ITEM:')) {
-            itemName = `<em>${r.Notes.replace('REQUESTED OTHER ITEM: ', '').split(' -- ')[0]}</em>`;
-        }
+  const tbody = $('#pendingTable tbody');
+  if (!pending.length){
+    tbody.innerHTML = '<tr><td colspan="4">No pending requests.</td></tr>';
+    return;
+  }
 
-        const vendorPrices = vpRows.filter(vp => vp.ItemID === r.ItemID)
-                                 .sort((a,b) => parseFloat(a.UnitPrice) - parseFloat(b.UnitPrice));
+  tbody.innerHTML = pending.map(r => {
+    const info = nameMap.get(r.ItemID);
+    let itemName = info?.name || '';
+    const alt    = info?.alt  || '';
 
-        return `<tr>
-            <td>
-                <details>
-                    <summary>${itemName} <span class="muted">${itemAltName || ''}</span></summary>
-                    <table class="vendor-table">
-                        <thead><tr><th>Vendor</th><th>Price</th><th>Item#</th></tr></thead>
-                        <tbody>
-                            ${vendorPrices.map(vp => {
-                                const price = parseFloat(vp.UnitPrice);
-                                return `<tr>
-                                    <td>${vp.VendorID || ''}</td>
-                                    <td>${!isNaN(price) ? `$${price.toFixed(2)}` : 'N/A'}</td>
-                                    <td>${vp.VendorItemNumber || ''}</td>
-                                </tr>`
-                            }).join('') || '<tr><td colspan="3">No pricing info</td></tr>'}
-                        </tbody>
-                    </table>
-                </details>
-            </td>
-            <td>${r.Qty || ''}</td>
-            <td class="status-btns">
-                <button class="btn ${r.Status === 'Requested' ? 'active' : ''}" data-orderid="${r.OrderID}" data-status="Requested">Pending</button>
-                <button class="btn ${r.Status === 'Ordered' ? 'active' : ''}" data-orderid="${r.OrderID}" data-status="Ordered">Ordered</button>
-                <button class="btn" data-orderid="${r.OrderID}" data-status="Received">Received</button>
-            </td>
-            <td>${r.Notes || ''}</td>
-        </tr>`;
-    }).join('') || '<tr><td colspan="4">No pending requests.</td></tr>';
-    
-    tbody.querySelectorAll('.status-btns button').forEach(btn => {
-        btn.addEventListener('click', async () => {
-            const orderId = btn.dataset.orderid;
-            const status = btn.dataset.status;
-            await fetch(WEBAPP_URL, {method:'POST', mode:'no-cors', body: JSON.stringify({token: TOKEN, actionType: 'updateOrderStatus', orderId, status})});
-            
-            const orderRow = orderRows.find(r => r.OrderID === orderId);
-            if (orderRow) orderRow.Status = status;
-            renderPending();
-        });
-    });
-}
-
-function renderHistory(days, query = '') {
-    const nameById = new Map(catRows.map(r => [r.ItemID, r.ItemName]));
-    const received = orderRows.filter(r => r.Status === 'Received');
-    
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - days);
-
-    const filtered = received.filter(r => {
-        const ts = new Date(r.Timestamp);
-        const itemName = nameById.get(r.ItemID) || '';
-        return ts >= cutoff && (!query || itemName.toLowerCase().includes(query.toLowerCase()));
-    });
-
-    const tbody = document.querySelector('#historyTable tbody');
-    tbody.innerHTML = filtered.map(r => `<tr>
-        <td>${nameById.get(r.ItemID) || 'Other Item'}</td>
-        <td>${new Date(r.Timestamp).toLocaleDateString()}</td>
-        <td>${r.Notes || ''}</td>
-    </tr>`).join('') || `<tr><td colspan="3">No history in the last ${days} days.</td></tr>`;
-}
-
-async function boot() {
-    try {
-        const response = await fetch(`${WEBAPP_URL}?action=getRequestPageData`);
-        const data = await response.json();
-
-        if (!data.ok) throw new Error("Failed to load data from script.");
-        
-        catRows = data.catalog;
-        orderRows = data.orders;
-        vpRows = data.vendorPricing;
-        
-        document.getElementById('itemsDatalist').innerHTML = catRows.map(r => `<option value="${r.ItemName}">${r.ItemNameAlt || ''}</option>`).join('');
-        
-        renderPending();
-
-        document.querySelectorAll('div[style*="margin-top:12px"] button[data-days]').forEach(btn => btn.addEventListener('click', () => renderHistory(btn.dataset.days)));
-        document.getElementById('historySearch').addEventListener('input', (e) => {
-            const selectedDays = 30;
-            renderHistory(selectedDays, e.target.value);
-        });
-
-        const isOtherCheck = document.getElementById('isOther');
-        const itemSearchInput = document.getElementById('itemSearch');
-        const otherItemInput = document.getElementById('otherItem');
-        isOtherCheck.addEventListener('change', () => {
-            itemSearchInput.style.display = isOtherCheck.checked ? 'none' : 'block';
-            otherItemInput.style.display = isOtherCheck.checked ? 'block' : 'none';
-            itemSearchInput.value = '';
-            otherItemInput.value = '';
-        });
-
-        document.getElementById('submitBtn').addEventListener('click', async () => {
-            const isOther = isOtherCheck.checked;
-            const itemName = itemSearchInput.value;
-            const otherItemName = otherItemInput.value.trim();
-            const qty = document.getElementById('qty').value.trim();
-            const notes = document.getElementById('notes').value.trim();
-            const msg = document.getElementById('msg');
-            let payload = { token: TOKEN, actionType: 'createRequest', qty, notes };
-            let catItem;
-            if (isOther) {
-                if (!otherItemName) { msg.textContent = 'Please enter the item name.'; return; }
-                payload.otherItemName = otherItemName;
-            } else {
-                catItem = catRows.find(r => r.ItemName === itemName);
-                if (!catItem) { msg.textContent = 'Please select a valid item.'; return; }
-                payload.itemId = catItem.ItemID;
-            }
-            msg.textContent = 'Submitting...';
-            try {
-                await fetch(WEBAPP_URL, { method:'POST', mode:'no-cors', body: JSON.stringify(payload) });
-                msg.textContent = 'Request submitted! Refreshing...';
-                setTimeout(() => location.reload(), 1000);
-            } catch(e) {
-                msg.textContent = 'An error occurred.';
-            }
-        });
-    } catch(e) {
-        console.error(e);
-        document.querySelector('#pendingTable tbody').innerHTML = `<tr><td colspan="4" style="color:red;font-weight:bold;">Error loading data. Please check browser console (F12).</td></tr>`;
+    // Handle "other item" requests
+    if (!itemName && typeof r.Notes === 'string' && r.Notes.startsWith('REQUESTED OTHER ITEM:')){
+      itemName = `<em>${r.Notes.replace('REQUESTED OTHER ITEM: ','').split(' -- ')[0]}</em>`;
     }
+    if (!itemName) itemName = r.ItemID || 'Item';
+
+    const prices = vpRows
+      .filter(vp => String(vp.ItemID) === String(r.ItemID))
+      .sort((a,b) => (parseFloat(a.UnitPrice)||Infinity) - (parseFloat(b.UnitPrice)||Infinity));
+
+    const pricingHTML = prices.length
+      ? prices.map(vp => `
+          <tr>
+            <td>${vp.VendorID || ''}</td>
+            <td>${money(vp.UnitPrice)}</td>
+            <td>${vp.VendorItemNumber || ''}</td>
+          </tr>`).join('')
+      : '<tr><td colspan="3">No pricing info</td></tr>';
+
+    return `
+      <tr>
+        <td>
+          <details>
+            <summary>${itemName} ${alt?`<span class="muted">${alt}</span>`:''}</summary>
+            <table class="vendor-table">
+              <thead><tr><th>Vendor</th><th>Price</th><th>Item#</th></tr></thead>
+              <tbody>${pricingHTML}</tbody>
+            </table>
+          </details>
+        </td>
+        <td>${r.Qty || ''}</td>
+        <td class="status-btns">
+          <button class="btn ${r.Status==='Requested'?'active':''}" data-orderid="${r.OrderID}" data-status="Requested">Pending</button>
+          <button class="btn ${r.Status==='Ordered'  ?'active':''}" data-orderid="${r.OrderID}" data-status="Ordered">Ordered</button>
+          <button class="btn" data-orderid="${r.OrderID}" data-status="Received">Received</button>
+        </td>
+        <td>${r.Notes || ''}</td>
+      </tr>`;
+  }).join('');
+
+  // wire status buttons
+  tbody.querySelectorAll('.status-btns button').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const orderId = btn.dataset.orderid;
+      const status  = btn.dataset.status;
+      try{
+        const res = await fetch(PROXY_URL, {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ token:TOKEN, actionType:'updateOrderStatus', orderId, status })
+        });
+        const j = await res.json();
+        if (!j.ok) throw new Error(j.error||'server');
+
+        const row = orderRows.find(r => r.OrderID === orderId);
+        if (row) row.Status = status;
+        renderPending();
+      }catch(e){
+        console.error(e);
+        alert('Failed to update status');
+      }
+    });
+  });
 }
+
+function renderHistory(days, query=''){
+  const nameById = new Map(catRows.map(r => [r.ItemID, r.ItemName]));
+  const received = orderRows.filter(r => r.Status === 'Received');
+
+  const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - Number(days||30));
+
+  const filtered = received.filter(r=>{
+    const ts = new Date(r.Timestamp);
+    const nm = nameById.get(r.ItemID) || '';
+    return ts >= cutoff && (!query || nm.toLowerCase().includes(query.toLowerCase()));
+  });
+
+  const tbody = $('#historyTable tbody');
+  if (!filtered.length){
+    tbody.innerHTML = `<tr><td colspan="3">No history in the last ${days} days.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(r => `
+    <tr>
+      <td>${nameById.get(r.ItemID) || 'Other Item'}</td>
+      <td>${new Date(r.Timestamp).toLocaleDateString()}</td>
+      <td>${r.Notes || ''}</td>
+    </tr>`).join('');
+}
+
+/*** BOOT ***/
+async function boot(){
+  try{
+    // GET all page data via proxy
+    const res = await fetch(`${PROXY_URL}?action=getRequestPageData`);
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error||'Failed to load');
+
+    catRows = data.catalog || [];
+    orderRows = data.orders || [];
+    vpRows = data.vendorPricing || [];
+
+    // Datalist
+    $('#itemsDatalist').innerHTML = catRows
+      .map(r => `<option value="${r.ItemName}">${r.ItemNameAlt || ''}</option>`)
+      .join('');
+
+    // Pending section
+    renderPending();
+
+    // History controls
+    document.querySelectorAll('button.hist').forEach(b=>{
+      b.addEventListener('click', ()=> renderHistory(b.dataset.days));
+    });
+    $('#historySearch').addEventListener('input', e=>{
+      // default to 30 if user hasn’t clicked a range
+      renderHistory(30, e.target.value);
+    });
+
+    // “Other item” toggle
+    const isOther = $('#isOther');
+    const itemSearch = $('#itemSearch');
+    const otherItem = $('#otherItem');
+    isOther.addEventListener('change', ()=>{
+      const on = isOther.checked;
+      itemSearch.style.display = on ? 'none' : 'block';
+      otherItem.style.display = on ? 'block' : 'none';
+      itemSearch.value = '';
+      otherItem.value = '';
+    });
+
+    // Submit
+    $('#submitBtn').addEventListener('click', async ()=>{
+      const msg = $('#msg');
+      const onOther = isOther.checked;
+      const itemName = itemSearch.value.trim();
+      const otherName = otherItem.value.trim();
+      const qty = $('#qty').value.trim();
+      const notes = $('#notes').value.trim();
+
+      const payload = { token:TOKEN, actionType:'createRequest', qty, notes };
+
+      if (onOther){
+        if (!otherName){ msg.textContent='Please enter the item name.'; return; }
+        payload.otherItemName = otherName;
+      } else {
+        const catItem = catRows.find(r => r.ItemName === itemName);
+        if (!catItem){ msg.textContent='Please select a valid item.'; return; }
+        payload.itemId = catItem.ItemID;
+      }
+
+      msg.textContent = 'Submitting...';
+      try{
+        const res = await fetch(PROXY_URL, {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify(payload)
+        });
+        const j = await res.json();
+        if (!j.ok) throw new Error(j.error||'server');
+
+        msg.textContent = 'Request submitted. Refreshing...';
+        // Refresh only the order list, not the whole page
+        const r2 = await fetch(`${PROXY_URL}?action=getRequestPageData`);
+        const d2 = await r2.json();
+        orderRows = d2.orders || [];
+        renderPending();
+        // Clear form
+        itemSearch.value = '';
+        otherItem.value = '';
+        $('#qty').value = '';
+        $('#notes').value = '';
+      }catch(e){
+        console.error(e);
+        msg.textContent = 'An error occurred submitting the request.';
+      }
+    });
+
+  }catch(err){
+    console.error(err);
+    $('#pendingTable tbody').innerHTML =
+      `<tr><td colspan="4" style="color:#a00;font-weight:700;">Error loading data. Check your Cloudflare Worker URL & Apps Script.</td></tr>`;
+  }
+}
+
 boot();
 </script>
 </body>
