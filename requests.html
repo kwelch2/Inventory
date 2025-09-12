@@ -26,36 +26,39 @@
 </head>
 <body>
 <div class="wrap">
-  <div class="card">
-    <h1>Supply Request</h1>
-
-    <label for="itemSearch">Item from Catalog</label>
-    <input id="itemSearch" list="itemsDatalist" placeholder="Search for an item...">
-    <datalist id="itemsDatalist"></datalist>
-
-    <div style="margin:8px 0;">
-      <input type="checkbox" id="isOther" style="width:auto;">
-      <label for="isOther" style="display:inline;font-weight:normal;">Or, request an item not in the list</label>
-    </div>
-
-    <input id="otherItem" placeholder="Enter unlisted item name..." style="display:none;">
-
-    <label for="qty">Quantity (Optional)</label>
-    <input id="qty" type="text" placeholder="e.g., 1 Box or 5 EA">
-
-    <label for="notes">Notes (Optional)</label>
-    <input id="notes" placeholder="e.g., For Unit 31">
-
-    <button id="submitBtn" style="margin-top:12px;">Submit Request</button>
-    <div id="msg" class="muted" style="margin-top:8px;"></div>
-  </div>
-
-  <div class="card" style="margin-top:16px;">
+    <div class="card" style="margin-top:16px;">
     <h2>Pending Requests</h2>
     <table id="pendingTable">
       <thead><tr><th>Item / Vendor Pricing</th><th>Qty</th><th>Status</th><th>Notes</th></tr></thead>
       <tbody><tr><td colspan="4">Loading...</td></tr></tbody>
     </table>
+  </div>
+
+<div class="card" style="margin-top:16px;">
+  <details id="requestPane">
+    <summary style="font-size:1.25em;font-weight:bold;">New Request</summary>
+    <div style="margin-top:12px">
+      <label for="itemSearch">Item from Catalog</label>
+      <input id="itemSearch" list="itemsDatalist" placeholder="Search for an item...">
+      <datalist id="itemsDatalist"></datalist>
+
+      <div style="margin:8px 0;">
+        <input type="checkbox" id="isOther" style="width:auto;">
+        <label for="isOther" style="display:inline;font-weight:normal;">Or, request an item not in the list</label>
+      </div>
+
+      <input id="otherItem" placeholder="Enter unlisted item name..." style="display:none;">
+
+      <label for="qty">Quantity (Optional)</label>
+      <input id="qty" type="text" placeholder="e.g., 1 Box or 5 EA">
+
+      <label for="notes">Notes (Optional)</label>
+      <input id="notes" placeholder="e.g., For Unit 31">
+
+      <button id="submitBtn" style="margin-top:12px;">Submit Request</button>
+      <div id="msg" class="muted" style="margin-top:8px;"></div>
+      </div>
+     </details>
   </div>
 
   <div class="card" style="margin-top:16px;">
