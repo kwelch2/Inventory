@@ -167,41 +167,41 @@ function renderPending(){
     });
   });
 }
-function renderHistory(days, query='') {
+function renderHistory(days, query=''){
   const nameById = new Map(catRows.map(r => [r.ItemID, r.ItemName]));
   const rangeDays = Number.isFinite(+days) ? +days : 30;
 
-  // Robust timestamp parser (Date | serial number | string)
+  // tolerate Date | serial | string
   const toDate = (v) => {
     if (v instanceof Date && !isNaN(v)) return v;
-    if (typeof v === 'number') {
-      // Google Sheets serial days -> JS Date
-      return new Date(Math.round((v - 25569) * 86400e3));
-    }
+    if (typeof v === 'number') return new Date(Math.round((v - 25569) * 86400e3)); // sheets serial
     const d = new Date(String(v));
     return isNaN(d) ? null : d;
   };
 
-  // Display name: from catalog if ItemID, else from "REQUESTED OTHER ITEM: ..."
-  const displayNameFor = (row) => {
-    if (row.ItemID && nameById.get(row.ItemID)) return nameById.get(row.ItemID);
-    if (typeof row.Notes === 'string' && row.Notes.startsWith('REQUESTED OTHER ITEM:')) {
-      // keep any text before " -- " as the item name
-      const raw = row.Notes.replace('REQUESTED OTHER ITEM: ','');
-      return raw.split(' -- ')[0] || 'Other Item';
-    }
-    return nameById.get(row.ItemID) || 'Other Item';
-  };
+  // pull timestamp from either "Timestamp" or "TimeStamp"
+  const getTsRaw = (row) => row.Timestamp ?? row.TimeStamp ?? row.timestamp ?? row.TIMESTAMP;
+
+  // show only Ordered/Received (and tolerate "recieved")
+  const receivedish = orderRows.filter(r => {
+    const s = String(r.Status||'').trim().toLowerCase();
+    return s === 'ordered' || s === 'received' || s === 'recieved';
+  });
 
   const cutoff = new Date();
   cutoff.setHours(0,0,0,0);
   cutoff.setDate(cutoff.getDate() - rangeDays);
 
-  // Only show rows marked Received
-  const received = orderRows.filter(r => String(r.Status || '').toLowerCase() === 'received');
+  const displayNameFor = (row) => {
+    if (row.ItemID && nameById.get(row.ItemID)) return nameById.get(row.ItemID);
+    if (typeof row.Notes === 'string' && row.Notes.startsWith('REQUESTED OTHER ITEM:')) {
+      return row.Notes.replace('REQUESTED OTHER ITEM: ','').split(' -- ')[0] || 'Other Item';
+    }
+    return nameById.get(row.ItemID) || 'Other Item';
+    };
 
-  const filtered = received.filter(r => {
-    const ts = toDate(r.Timestamp);
+  const filtered = receivedish.filter(r => {
+    const ts = toDate(getTsRaw(r));
     if (!ts) return false;
     const nm = displayNameFor(r);
     const matchesQuery = !query || nm.toLowerCase().includes(query.toLowerCase());
@@ -209,21 +209,22 @@ function renderHistory(days, query='') {
   });
 
   const tbody = document.querySelector('#historyTable tbody');
-  if (!filtered.length) {
+  if (!filtered.length){
     tbody.innerHTML = `<tr><td colspan="3">No history in the last ${rangeDays} days.</td></tr>`;
     return;
   }
 
   tbody.innerHTML = filtered.map(r => {
-    const ts = toDate(r.Timestamp);
+    const ts = toDate(getTsRaw(r));
     return `
       <tr>
         <td>${displayNameFor(r)}</td>
         <td>${ts ? ts.toLocaleDateString() : ''}</td>
-        <td>${r.Notes ? String(r.Notes) : ''}</td>
+        <td>${r.Notes || ''}</td>
       </tr>`;
   }).join('');
 }
+
 
 /*** BOOT ***/
 async function boot(){
@@ -248,8 +249,12 @@ async function boot(){
 
     // History controls
     document.querySelectorAll('button.hist').forEach(b=>{
-      b.addEventListener('click', ()=> renderHistory(b.dataset.days));
+    b.addEventListener('click', ()=> renderHistory(b.dataset.days));
     });
+    document.getElementById('historySearch').addEventListener('input', e=>{
+    renderHistory(30, e.target.value);
+    });
+
     $('#historySearch').addEventListener('input', e=>{
       // default to 30 if user hasn’t clicked a range
       renderHistory(30, e.target.value);
