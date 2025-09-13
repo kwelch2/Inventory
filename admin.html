@@ -1,0 +1,454 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>EMS Supplies — Admin Dashboard</title>
+  <style>
+    :root{--bg:#f7f7f7;--card:#fff;--b:#ddd;--muted:#666;--ink:#111;--accent:#0a66ff;--bad:#b00020;--ok:#137333}
+    *{box-sizing:border-box}
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:var(--bg);color:var(--ink)}
+    .wrap{max-width:1200px;margin:0 auto;padding:16px}
+    .tabs{display:flex;gap:8px;border-bottom:1px solid var(--b);position:sticky;top:0;background:var(--bg);padding-bottom:8px;z-index:5}
+    .tab{padding:10px 14px;border:1px solid var(--b);border-bottom:none;border-top-left-radius:10px;border-top-right-radius:10px;background:#eee;color:#333;cursor:pointer}
+    .tab.active{background:var(--card);color:#000;border-bottom:1px solid var(--card)}
+    .panel{display:none;background:var(--card);border:1px solid var(--b);border-radius:12px;padding:16px;margin-top:-1px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+    .panel.active{display:block}
+    h1{margin:0 0 10px}
+    h2{margin:.2rem 0 .8rem}
+    .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .spacer{flex:1}
+    table{width:100%;border-collapse:collapse;font-size:14px}
+    th,td{padding:8px;border-top:1px solid var(--b);text-align:left;vertical-align:top}
+    th{background:#fafafa}
+    input,select{padding:8px;border:1px solid var(--b);border-radius:8px}
+    .btn{padding:8px 10px;border:1px solid var(--b);border-radius:10px;background:#fff;cursor:pointer}
+    .btn.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+    .btn.ghost{background:transparent}
+    .muted{color:var(--muted)}
+    .vendor-basket{border:1px dashed var(--b);border-radius:10px;padding:10px;margin:10px 0}
+    .tag{display:inline-block;font-size:.8rem;padding:3px 6px;border:1px solid var(--b);border-radius:999px;background:#fff}
+    .danger{color:var(--bad)}
+    .success{color:var(--ok)}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace}
+    .banner{display:flex;gap:8px;align-items:center;padding:10px;border:1px solid var(--b);border-radius:10px;background:#fff;margin:10px 0}
+    .pill{display:inline-block;padding:3px 8px;border-radius:999px;border:1px solid var(--b)}
+    .pill.ok{border-color:#cde8d1;background:#eef7f0}
+    .pill.bad{border-color:#f3c1c1;background:#fdecec}
+    .toast{position:fixed;right:12px;bottom:12px;max-width:380px;background:#222;color:#fff;padding:10px 12px;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.2);display:none}
+    .toast.show{display:block}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1>EMS Supplies — Admin Dashboard</h1>
+
+  <!-- Connectivity / Diagnostics Banner -->
+  <div class="banner" id="diag">
+    <strong>Connectivity</strong>
+    <span id="statusIcon" class="pill bad">Checking…</span>
+    <span class="muted">BASE:</span><code class="mono" id="baseEcho"></code>
+    <span class="spacer"></span>
+    <button class="btn" id="btnTestGet">Test GET</button>
+    <button class="btn" id="btnTestPost">Test POST</button>
+  </div>
+
+  <div class="tabs" id="tabs"></div>
+
+  <!-- Catalog Manager -->
+  <section id="panel-catalog" class="panel">
+    <h2>Catalog Manager</h2>
+    <div class="row">
+      <input id="catName" placeholder="Item name"/>
+      <input id="catCategory" placeholder="Category"/>
+      <input id="catUnit" placeholder="Unit (ea/box/case)"/>
+      <input id="catPack" type="number" min="1" value="1" placeholder="Pack size"/>
+      <button class="btn primary" id="catAddBtn">Add / Upsert</button>
+      <span class="muted">Uses <span class="mono">actionType=upsertcatalog</span></span>
+    </div>
+    <div id="catalogTable" style="margin-top:10px"></div>
+  </section>
+
+  <!-- Vendor Pricing -->
+  <section id="panel-pricing" class="panel">
+    <h2>Vendor Pricing</h2>
+    <div class="row">
+      <select id="vpItem"></select>
+      <select id="vpVendor"></select>
+      <input id="vpSku" placeholder="Vendor SKU / order #"/>
+      <input id="vpPack" type="number" min="1" value="1" placeholder="Pack size"/>
+      <input id="vpPrice" type="number" step="0.01" placeholder="Unit price"/>
+      <button class="btn" id="vpAddBtn">Upsert Price</button>
+      <button class="btn ghost" id="vpRefreshBtn">Refresh</button>
+    </div>
+    <div id="pricingTable" style="margin-top:10px"></div>
+  </section>
+
+  <!-- Order Planner -->
+  <section id="panel-planner" class="panel">
+    <h2>Order Planner</h2>
+    <div class="row">
+      <select id="reqItem"></select>
+      <input id="reqQty" type="number" min="1" value="1" placeholder="Qty"/>
+      <button class="btn" id="reqAddBtn">Add to Plan</button>
+      <button class="btn" id="resolveBtn">Resolve Best Prices</button>
+      <span class="spacer"></span>
+      <button class="btn ghost" id="planClearBtn">Clear Plan</button>
+    </div>
+    <div id="planTable" style="margin-top:10px"></div>
+    <h3>Vendor Baskets</h3>
+    <div id="vendorGroups"></div>
+  </section>
+
+  <!-- Orders -->
+  <section id="panel-orders" class="panel">
+    <h2>Orders</h2>
+    <div class="row">
+      <button class="btn ghost" id="ordersRefreshBtn">Refresh</button>
+      <span class="muted">Update status via quick actions → uses <span class="mono">updateorderstatus</span></span>
+    </div>
+    <div id="ordersTable"></div>
+  </section>
+
+  <!-- Activity Log -->
+  <section id="panel-log" class="panel">
+    <h2>Activity Log</h2>
+    <div class="row">
+      <button class="btn ghost" id="logRefreshBtn">Refresh</button>
+      <span class="muted">(Optional) Add <span class="mono">doGet?action=listactivity</span> to return rows from <span class="mono">ActivityLog</span>.</span>
+    </div>
+    <div id="logTable"><p class="muted">Hook this to <span class="mono">listactivity</span> and click Refresh.</p></div>
+  </section>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+/*************************
+ * CONFIG — match Apps Script
+ *************************/
+const BASE = 'https://script.google.com/macros/s/AKfycbypV4iW-fXvhuH4p73fu6CqXY-1SQ64BLqD3Ln5WI6L_zgAlSQiVK8rEuTs7YQ2IHa_9Q/exec';
+const TOKEN = '9mB4zR7kP2fW6vNqE1jH8aLcV5gT_sYx0uI-oZ3pD9bX4wK7eS6hF-EMS';
+
+const state = {
+  catalog: [],
+  vendors: [],
+  pricingAll: [],
+  plan: [], // [{itemId, qty, selectedVendor, vendorSku, unitPrice}]
+  orders: [],
+  log: []
+};
+
+/************* UI: Tabs *************/
+const tabs = [
+  { id:'catalog', label:'Catalog Manager' },
+  { id:'pricing', label:'Vendor Pricing' },
+  { id:'planner', label:'Order Planner' },
+  { id:'orders',  label:'Orders' },
+  { id:'log',     label:'Activity Log' }
+];
+
+function mountTabs(){
+  const el = document.getElementById('tabs');
+  el.innerHTML = tabs.map((t,i)=>`<button class="tab ${i===0?'active':''}" data-tab="${t.id}">${t.label}</button>`).join('');
+  el.addEventListener('click', (ev)=>{
+    const btn = ev.target.closest('.tab');
+    if(!btn) return;
+    const id = btn.dataset.tab;
+    document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active', b===btn));
+    document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('active', p.id===`panel-${id}`));
+  });
+  document.getElementById('panel-catalog').classList.add('active');
+}
+
+/************* Helpers *************/
+const $ = id => document.getElementById(id);
+const fmt = n => (Number(n||0)).toFixed(2);
+const genId = () => (crypto && crypto.randomUUID ? crypto.randomUUID() : `ID-${Math.random().toString(36).slice(2)}-${Date.now()}`);
+function nameOf(itemId){ return (state.catalog.find(i=>String(i.ItemID)===String(itemId))||{}).ItemName || 'Unknown'; }
+function vendorOf(vendorId){ return (state.vendors.find(v=>String(v.VendorID)===String(vendorId))||{}).VendorName || 'Vendor'; }
+function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 4200); }
+
+// network timeout helper
+function withTimeout(promise, ms=15000){
+  const ctl = new AbortController();
+  const timer = setTimeout(()=>ctl.abort(), ms);
+  return Promise.race([
+    promise(ctl.signal).finally(()=>clearTimeout(timer)),
+    new Promise((_,rej)=>setTimeout(()=>rej(new Error('Request timed out')), ms+10))
+  ]);
+}
+
+/************* API *************/
+async function GET(action, params={}, opts={}){
+  try{
+    const q = new URLSearchParams({ action, ...params, _ts: Date.now() }).toString();
+    const resp = await withTimeout((signal)=>fetch(`${BASE}?${q}`, { signal }));
+    const data = await resp.json();
+    if(!resp.ok || data.ok===false){ throw new Error(data.error || `GET ${action} failed`); }
+    return data;
+  }catch(err){
+    reportConnectivity(false, `GET ${action}: ${err.message}`);
+    throw err;
+  }
+}
+
+// IMPORTANT: Use text/plain to AVOID CORS preflight while still sending JSON body that your doPost parses
+async function POST(actionType, payload={}){
+  const body = { token: TOKEN, actionType, ...payload };
+  try{
+    const resp = await withTimeout((signal)=>fetch(BASE, {
+      method:'POST',
+      headers:{ 'Content-Type':'text/plain;charset=UTF-8' }, // avoid preflight
+      body: JSON.stringify(body),
+      signal
+    }));
+    const text = await resp.text();
+    let data; try{ data = JSON.parse(text); }catch{ data = { ok:false, error:'Non-JSON response', raw:text }; }
+    if(!resp.ok || data.ok===false){ throw new Error(data.error || `POST ${actionType} failed`); }
+    return data;
+  }catch(err){
+    reportConnectivity(false, `POST ${actionType}: ${err.message}`);
+    throw err;
+  }
+}
+
+/************* Renderers *************/
+function renderCatalog(){
+  const rows = state.catalog.map(i=>`<tr>
+    <td>${i.ItemName}</td><td>${i.Category||''}</td>
+    <td>${i.Unit||''}/${i.PackSize||1}</td>
+    <td class="mono muted">${i.ItemID}</td>
+    <td><button class="btn danger" data-del="${i.ItemID}">Delete</button></td>
+  </tr>`).join('');
+  $('catalogTable').innerHTML = `<table><thead><tr><th>Item</th><th>Category</th><th>Unit/Pack</th><th>ID</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+  $('catalogTable').addEventListener('click', async (e)=>{
+    const id = e.target && e.target.dataset && e.target.dataset.del;
+    if(!id) return;
+    if(confirm('Delete this catalog item?')){
+      try{ await POST('deletecatalog', { itemId: id }); toast('Catalog item deleted'); }
+      catch(err){ toast(`Delete failed: ${err.message}`); }
+      await loadCatalog(); hydrateItemSelects();
+    }
+  }, { once:true });
+}
+
+function renderVendors(){
+  const opts = state.vendors.map(v=>`<option value="${v.VendorID}">${v.VendorName}</option>`).join('');
+  $('vpVendor').innerHTML = `<option value="">Vendor…</option>${opts}`;
+}
+
+function hydrateItemSelects(){
+  const opts = state.catalog.map(i=>`<option value="${i.ItemID}">${i.ItemName}</option>`).join('');
+  $('vpItem').innerHTML = `<option value="">Select item…</option>${opts}`;
+  $('reqItem').innerHTML = `<option value="">Select item…</option>${opts}`;
+}
+
+function renderPricingTable(){
+  const rows = state.pricingAll.slice(0,400).map(p=>`<tr>
+    <td>${nameOf(p.ItemID)}</td>
+    <td>${vendorOf(p.VendorID)}</td>
+    <td>${p.VendorItemNumber||p.VendorSKU||''}</td>
+    <td>${p.PackSize||1}</td>
+    <td>$${fmt(p.UnitPrice)}</td>
+    <td>${p.Preferred?'<span class="tag">Preferred</span>':''}</td>
+  </tr>`).join('');
+  $('pricingTable').innerHTML = `<table><thead><tr><th>Item</th><th>Vendor</th><th>Vendor SKU</th><th>Pack</th><th>Unit Price</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function renderPlan(){
+  if(!state.plan.length){ $('planTable').innerHTML = '<p class="muted">No items planned yet.</p>'; return; }
+  const rows = state.plan.map(r=>`<tr>
+    <td>${nameOf(r.itemId)}</td>
+    <td>${r.qty}</td>
+    <td>${r.selectedVendor? vendorOf(r.selectedVendor):'<span class="muted">—</span>'}</td>
+    <td>${r.vendorSku||''}</td>
+    <td>${r.unitPrice? '$'+fmt(r.unitPrice):''}</td>
+  </tr>`).join('');
+  $('planTable').innerHTML = `<table><thead><tr><th>Item</th><th>Qty</th><th>Vendor</th><th>Vendor SKU</th><th>Price</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function renderVendorGroups(){
+  const groups = {};
+  state.plan.filter(r=>r.selectedVendor).forEach(r=>{ (groups[r.selectedVendor]??=[]).push(r); });
+  const html = Object.entries(groups).map(([vendorId,rows])=>{
+    const subtotal = rows.reduce((s,r)=> s + (Number(r.unitPrice||0)*Number(r.qty||0)), 0);
+    const lines = rows.map(r=>`<tr><td>${nameOf(r.itemId)}</td><td>${r.vendorSku||''}</td><td>${r.qty}</td><td>$${fmt(r.unitPrice)}</td><td>$${fmt(r.unitPrice*r.qty)}</td></tr>`).join('');
+    return `<div class="vendor-basket">
+      <div class="row"><strong>${vendorOf(vendorId)}</strong><span class="muted">Subtotal $${fmt(subtotal)}</span>
+      <span class="spacer"></span>
+      <button class="btn primary" onclick="quickMarkOrdered('${vendorId}')">Mark Ordered</button></div>
+      <table><thead><tr><th>Item</th><th>Vendor SKU</th><th>Qty</th><th>Price</th><th>Total</th></tr></thead><tbody>${lines}</tbody></table>
+    </div>`;
+  }).join('') || '<p class="muted">Resolve prices to build vendor baskets.</p>';
+  $('vendorGroups').innerHTML = html;
+}
+
+function renderOrders(){
+  const rows = state.orders.map(o=>`<tr>
+    <td class="mono">${o.OrderID||o.OrderId||''}</td>
+    <td>${o.ItemID? nameOf(o.ItemID) : (o.VendorID? vendorOf(o.VendorID):'')}</td>
+    <td>${o.Status||''}</td>
+    <td>${o.Timestamp||o.CreatedAt||''}</td>
+    <td>
+      <button class="btn" onclick="setOrderStatus('${o.OrderID}','Planned')">Planned</button>
+      <button class="btn" onclick="setOrderStatus('${o.OrderID}','Ordered')">Ordered</button>
+      <button class="btn" onclick="setOrderStatus('${o.OrderID}','Received')">Received</button>
+    </td>
+  </tr>`).join('');
+  $('ordersTable').innerHTML = `<table><thead><tr><th>OrderID</th><th>Item/Vendor</th><th>Status</th><th>Timestamp</th><th>Quick Actions</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function renderLog(){
+  if(!state.log.length){ $('logTable').innerHTML = '<p class="muted">No log rows (yet). Add a GET handler for listactivity and click Refresh.</p>'; return; }
+  const rows = state.log.map(a=>`<tr>
+    <td>${a.Timestamp||a.When||''}</td><td>${a.UserAgent||a.Who||''}</td>
+    <td>${a.Action||''}</td><td>${a.Unit||a.EntityType||''}</td>
+    <td class="mono muted">${a.ItemID||a.EntityID||''}</td>
+    <td class="mono muted">${a.Notes||''}</td>
+  </tr>`).join('');
+  $('logTable').innerHTML = `<table><thead><tr><th>When</th><th>User</th><th>Action</th><th>Scope</th><th>ID</th><th>Notes</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+/************* Actions *************/
+$('catAddBtn').onclick = async ()=>{
+  const name = $('catName').value.trim();
+  if(!name){ alert('Item name required'); return; }
+  const item = {
+    ItemID: genId(),
+    ItemName: name,
+    Category: $('catCategory').value.trim(),
+    Unit: $('catUnit').value.trim(),
+    PackSize: Number($('catPack').value||1)
+  };
+  try{
+    await POST('upsertcatalog', { item });
+    toast('Catalog item saved');
+    $('catName').value=''; $('catCategory').value=''; $('catUnit').value=''; $('catPack').value=1;
+    await loadCatalog(); hydrateItemSelects();
+  }catch(err){ toast(`Save failed: ${err.message}`); }
+};
+
+$('vpAddBtn').onclick = async ()=>{
+  const row = {
+    ItemID: $('vpItem').value,
+    VendorID: $('vpVendor').value,
+    VendorItemNumber: $('vpSku').value.trim(),
+    PackSize: Number($('vpPack').value||1),
+    UnitPrice: Number($('vpPrice').value||0)
+  };
+  if(!row.ItemID || !row.VendorID){ alert('Select item and vendor'); return; }
+  try{ await POST('upsertvendorprice', { row }); toast('Vendor price saved'); await loadPricing(); }
+  catch(err){ toast(`Save failed: ${err.message}`); }
+};
+$('vpRefreshBtn').onclick = ()=>loadPricing().catch(err=>toast(err.message));
+
+$('reqAddBtn').onclick = ()=>{
+  const itemId = $('reqItem').value, qty = Number($('reqQty').value||0);
+  if(!itemId || qty<1) return;
+  state.plan.push({ itemId, qty });
+  renderPlan(); renderVendorGroups();
+};
+$('resolveBtn').onclick = ()=>{
+  state.plan = state.plan.map(row=>{
+    const candidates = state.pricingAll.filter(p=>String(p.ItemID)===String(row.itemId));
+    if(!candidates.length) return row;
+    const preferred = candidates.find(c=>String(c.Preferred).toLowerCase()==='true' || c.Preferred===true);
+    const best = preferred || candidates.map(p=>({p, cmp:(Number(p.UnitPrice)||0)/Math.max(1,Number(p.PackSize||1))}))
+                                      .sort((a,b)=>a.cmp-b.cmp)[0].p;
+    return { ...row, selectedVendor: best.VendorID, vendorSku: (best.VendorItemNumber||best.VendorSKU||''), unitPrice: Number(best.UnitPrice)||0 };
+  });
+  renderPlan(); renderVendorGroups();
+};
+$('planClearBtn').onclick = ()=>{ state.plan = []; renderPlan(); renderVendorGroups(); };
+
+async function quickMarkOrdered(vendorId){
+  const lines = state.plan.filter(r=>r.selectedVendor===vendorId);
+  try{
+    for(const r of lines){
+      const res = await POST('createrequest', { itemId: r.itemId, qty: r.qty, notes: `Auto from planner | Vendor:${vendorOf(vendorId)} | SKU:${r.vendorSku}` });
+      await POST('updateorderstatus', { orderId: res.orderId, status: 'Ordered' });
+    }
+    await loadOrders();
+    toast(`Marked ${lines.length} line(s) Ordered for ${vendorOf(vendorId)}`);
+  }catch(err){ toast(`Order error: ${err.message}`); }
+}
+
+async function setOrderStatus(orderId, status){
+  try{ await POST('updateorderstatus', { orderId, status }); await loadOrders(); toast(`Order ${orderId}: ${status}`); }
+  catch(err){ toast(`Status failed: ${err.message}`); }
+}
+
+/************* Loaders *************/
+async function loadCatalog(){
+  const res = await GET('listcatalog');
+  state.catalog = res.rows || [];
+  renderCatalog(); hydrateItemSelects();
+}
+async function loadVendors(){
+  const res = await GET('listvendors');
+  state.vendors = res.rows || [];
+  renderVendors();
+}
+async function loadPricing(itemId){
+  const res = await GET('listvendorpricing', itemId? { itemId } : {});
+  state.pricingAll = res.rows || [];
+  renderPricingTable();
+}
+async function loadOrders(){
+  const res = await GET('getrequestpagedata');
+  state.orders = (res.orders || res.Orders || []);
+  renderOrders();
+}
+async function loadLog(){
+  try{ const res = await GET('listactivity'); state.log = res.rows || []; }
+  catch(_){ state.log = []; }
+  renderLog();
+}
+
+/************* Diagnostics *************/
+function reportConnectivity(ok, msg=''){
+  const el = $('statusIcon');
+  if(ok){ el.textContent='Connected'; el.classList.remove('bad'); el.classList.add('ok'); el.classList.add('pill','ok'); }
+  else { el.textContent='Problem'; el.classList.remove('ok'); el.classList.add('bad'); el.classList.add('pill','bad'); if(msg) toast(msg); }
+}
+
+$('btnTestGet').onclick = async ()=>{
+  try{ const r = await GET('ping'); toast('GET ping ok'); reportConnectivity(true); }
+  catch(err){ reportConnectivity(false, err.message); }
+};
+$('btnTestPost').onclick = async ()=>{
+  try{ const r = await POST('echo', { hello:'world' }); toast('POST echo ok'); reportConnectivity(true); }
+  catch(err){ reportConnectivity(false, err.message); }
+};
+
+async function boot(){
+  mountTabs();
+  $('baseEcho').textContent = BASE;
+  // Initial quick connectivity test (non-fatal)
+  GET('ping').then(()=>reportConnectivity(true)).catch(()=>reportConnectivity(false));
+  await Promise.allSettled([loadCatalog(), loadVendors(), loadPricing()]);
+  await Promise.allSettled([loadOrders(), loadLog()]);
+  // Hook refresh buttons
+  $('ordersRefreshBtn').onclick = ()=>loadOrders().catch(err=>toast(err.message));
+  $('logRefreshBtn').onclick = ()=>loadLog().catch(err=>toast(err.message));
+}
+boot();
+// ---- Global error hardening (helps ignore extension noise) ----
+window.addEventListener('unhandledrejection', (ev)=>{
+  const msg = (ev && ev.reason && (ev.reason.message||ev.reason.toString())) || 'Unhandled promise rejection';
+  // Ignore common Chrome extension noise:
+  if (/listener indicated an asynchronous response/i.test(msg)) return;
+  console.error('[unhandledrejection]', ev.reason);
+  if (typeof toast==='function') toast(msg);
+  ev.preventDefault();
+});
+window.addEventListener('error', (ev)=>{
+  const msg = (ev && ev.message) || 'Script error';
+  if (/listener indicated an asynchronous response/i.test(msg)) return; // ignore extension message
+  console.error('[error]', msg, ev.error);
+  if (typeof toast==='function') toast(msg);
+});
+</script>
+</body>
+</html>
