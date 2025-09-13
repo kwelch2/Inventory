@@ -36,8 +36,10 @@
     .pill{display:inline-block;padding:3px 8px;border-radius:999px;border:1px solid var(--b)}
     .pill.ok{border-color:#cde8d1;background:#eef7f0}
     .pill.bad{border-color:#f3c1c1;background:#fdecec}
-    .toast{position:fixed;right:12px;bottom:12px;max-width:380px;background:#222;color:#fff;padding:10px 12px;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.2);display:none}
+    .toast{position:fixed;right:12px;bottom:12px;max-width:420px;background:#222;color:#fff;padding:10px 12px;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.2);display:none}
     .toast.show{display:block}
+    .kvd{font-size:12px;color:#555}
+    code.badge{background:#f5f5f5;border:1px solid var(--b);padding:2px 6px;border-radius:6px}
   </style>
 </head>
 <body>
@@ -51,27 +53,28 @@
     <span class="muted">BASE:</span><code class="mono" id="baseEcho"></code>
     <span class="spacer"></span>
     <button class="btn" id="btnTestApi">Test API</button>
+    <button class="btn ghost" id="btnProbe">Probe Data</button>
   </div>
 
   <div class="tabs" id="tabs"></div>
 
   <!-- Catalog Manager -->
   <section id="panel-catalog" class="panel">
-    <h2>Catalog Manager</h2>
+    <h2>Catalog Manager <span class="kvd" id="kvCatalog"></span></h2>
     <div class="row">
       <input id="catName" placeholder="Item name"/>
       <input id="catCategory" placeholder="Category"/>
       <input id="catUnit" placeholder="Unit (ea/box/case)"/>
       <input id="catPack" type="number" min="1" value="1" placeholder="Pack size"/>
       <button class="btn primary" id="catAddBtn">Add / Upsert</button>
-      <span class="muted">Uses <span class="mono">actionType=upsertcatalog</span></span>
+      <span class="muted">Uses <span class="mono">upsertcatalog</span></span>
     </div>
     <div id="catalogTable" style="margin-top:10px"></div>
   </section>
 
   <!-- Vendor Pricing -->
   <section id="panel-pricing" class="panel">
-    <h2>Vendor Pricing</h2>
+    <h2>Vendor Pricing <span class="kvd" id="kvPricing"></span></h2>
     <div class="row">
       <select id="vpItem"></select>
       <select id="vpVendor"></select>
@@ -86,7 +89,7 @@
 
   <!-- Order Planner -->
   <section id="panel-planner" class="panel">
-    <h2>Order Planner</h2>
+    <h2>Order Planner <span class="kvd" id="kvPlan"></span></h2>
     <div class="row">
       <select id="reqItem"></select>
       <input id="reqQty" type="number" min="1" value="1" placeholder="Qty"/>
@@ -102,7 +105,7 @@
 
   <!-- Orders -->
   <section id="panel-orders" class="panel">
-    <h2>Orders</h2>
+    <h2>Orders <span class="kvd" id="kvOrders"></span></h2>
     <div class="row">
       <button class="btn ghost" id="ordersRefreshBtn">Refresh</button>
       <label class="row" style="gap:6px"><input type="checkbox" id="toggleHistory"/> <span class="muted">Show history (Received)</span></label>
@@ -113,10 +116,10 @@
 
   <!-- Activity Log -->
   <section id="panel-log" class="panel">
-    <h2>Activity Log</h2>
+    <h2>Activity Log <span class="kvd" id="kvLog"></span></h2>
     <div class="row">
       <button class="btn ghost" id="logRefreshBtn">Refresh</button>
-      <span class="muted">Add <span class="mono">listactivity</span> POST mirror on the server to enable this.</span>
+      <span class="muted">Add <code class="badge">listactivity</code> POST mirror on the server to enable this.</span>
     </div>
     <div id="logTable"><p class="muted">Hook this to <span class="mono">listactivity</span> and click Refresh.</p></div>
   </section>
@@ -168,7 +171,7 @@ const fmt = n => (Number(n||0)).toFixed(2);
 const genId = () => (crypto && crypto.randomUUID ? crypto.randomUUID() : `ID-${Math.random().toString(36).slice(2)}-${Date.now()}`);
 function nameOf(itemId){ return (state.catalog.find(i=>String(i.ItemID)===String(itemId))||{}).ItemName || 'Unknown'; }
 function vendorOf(vendorId){ return (state.vendors.find(v=>String(v.VendorID)===String(vendorId))||{}).VendorName || 'Vendor'; }
-function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 4200); }
+function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 5200); }
 
 // network timeout helper
 function withTimeout(promise, ms=15000){
@@ -176,27 +179,44 @@ function withTimeout(promise, ms=15000){
   const timer = setTimeout(()=>ctl.abort(), ms);
   return Promise.race([
     promise(ctl.signal).finally(()=>clearTimeout(timer)),
-    new Promise((_,rej)=>setTimeout(()=>rej(new Error('Request timed out')), ms+10))
+    new Promise((_,rej)=>setTimeout(()=>rej(new Error('Request timed out')), ms+20))
   ]);
 }
 
 /************* API *************/
-// All data loads use POST (simple request via text/plain) to bypass preflight & CORS issues.
 async function POST(actionType, payload={}){
   const body = { token: TOKEN, actionType, ...payload };
+  const resp = await withTimeout((signal)=>fetch(BASE, {
+    method:'POST', headers:{ 'Content-Type':'text/plain;charset=UTF-8' }, body: JSON.stringify(body), signal
+  }));
+  const text = await resp.text();
+  let data; try{ data = JSON.parse(text); }catch{ data = { ok:false, error:'Non-JSON response', raw:text }; }
+  if(!resp.ok || data.ok===false){
+    const err = new Error(data.error || `POST ${actionType} failed`); err.code = resp.status; err.data = data; throw err;
+  }
+  return data;
+}
+async function GET(action, params={}){
+  const q = new URLSearchParams({ action, ...params, _ts: Date.now() }).toString();
+  const resp = await withTimeout((signal)=>fetch(`${BASE}?${q}`, { signal }));
+  const text = await resp.text();
+  let data; try{ data = JSON.parse(text); }catch{ data = { ok:false, error:'Non-JSON response', raw:text }; }
+  if(!resp.ok || data.ok===false){ const err = new Error(data.error || `GET ${action} failed`); err.code = resp.status; err.data = data; throw err; }
+  return data;
+}
+
+// Try POST first (no CORS), then fallback to GET if server lacks POST mirror
+async function apiLoad({ postAction, getAction, params }){
   try{
-    const resp = await withTimeout((signal)=>fetch(BASE, {
-      method:'POST',
-      headers:{ 'Content-Type':'text/plain;charset=UTF-8' },
-      body: JSON.stringify(body),
-      signal
-    }));
-    const text = await resp.text();
-    let data; try{ data = JSON.parse(text); }catch{ data = { ok:false, error:'Non-JSON response', raw:text }; }
-    if(!resp.ok || data.ok===false){ throw new Error(data.error || `POST ${actionType} failed`); }
-    return data;
+    const res = await POST(postAction, params||{});
+    return res;
   }catch(err){
-    reportConnectivity(false, `POST ${actionType}: ${err.message}`);
+    // Only fallback if server says unknown_action or method not allowed
+    const msg = String(err?.data?.error||'').toLowerCase();
+    if (msg.includes('unknown_action') || err.code===405) {
+      try{ const res = await GET(getAction, params||{}); toast(`Fallback GET ${getAction} ok`); return res; }
+      catch(e2){ throw e2; }
+    }
     throw err;
   }
 }
@@ -209,7 +229,9 @@ function renderCatalog(){
     <td class="mono muted">${i.ItemID}</td>
     <td><button class="btn danger" data-del="${i.ItemID}">Delete</button></td>
   </tr>`).join('');
-  $('catalogTable').innerHTML = `<table><thead><tr><th>Item</th><th>Category</th><th>Unit/Pack</th><th>ID</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+  $('kvCatalog').textContent = `(${state.catalog.length})`;
+  $('catalogTable').innerHTML = rows ? `<table><thead><tr><th>Item</th><th>Category</th><th>Unit/Pack</th><th>ID</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
+                                     : '<p class="muted">No items found.</p>';
   $('catalogTable').addEventListener('click', async (e)=>{
     const id = e.target && e.target.dataset && e.target.dataset.del;
     if(!id) return;
@@ -241,10 +263,13 @@ function renderPricingTable(){
     <td>$${fmt(p.UnitPrice)}</td>
     <td>${p.Preferred?'<span class="tag">Preferred</span>':''}</td>
   </tr>`).join('');
-  $('pricingTable').innerHTML = `<table><thead><tr><th>Item</th><th>Vendor</th><th>Vendor SKU</th><th>Pack</th><th>Unit Price</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+  $('kvPricing').textContent = `(${state.pricingAll.length})`;
+  $('pricingTable').innerHTML = rows ? `<table><thead><tr><th>Item</th><th>Vendor</th><th>Vendor SKU</th><th>Pack</th><th>Unit Price</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
+                                     : '<p class="muted">No vendor pricing rows.</p>';
 }
 
 function renderPlan(){
+  $('kvPlan').textContent = `(${state.plan.length})`;
   if(!state.plan.length){ $('planTable').innerHTML = '<p class="muted">No items planned yet.</p>'; return; }
   const rows = state.plan.map(r=>`<tr>
     <td>${nameOf(r.itemId)}</td>
@@ -287,11 +312,14 @@ function renderOrders(){
       <button class="btn" onclick="setOrderStatus('${o.OrderID}','Received')">Received</button>
     </td>
   </tr>`).join('');
+  $('kvOrders').textContent = `(${list.length}${showHistory?' incl. hist.':''})`;
   const caption = showHistory ? 'All Orders (including Received)' : 'Open & Pending Orders';
-  $('ordersTable').innerHTML = `<table><caption style="text-align:left;margin-bottom:6px" class="muted">${caption}</caption><thead><tr><th>OrderID</th><th>Item/Vendor</th><th>Status</th><th>Timestamp</th><th>Quick Actions</th></tr></thead><tbody>${rows}</tbody></table>`;
+  $('ordersTable').innerHTML = rows ? `<table><caption style="text-align:left;margin-bottom:6px" class="muted">${caption}</caption><thead><tr><th>OrderID</th><th>Item/Vendor</th><th>Status</th><th>Timestamp</th><th>Quick Actions</th></tr></thead><tbody>${rows}</tbody></table>`
+                                   : `<p class="muted">No orders ${showHistory?'in history or open.':'open/pending.'}</p>`;
 }
 
 function renderLog(){
+  $('kvLog').textContent = `(${state.log.length})`;
   if(!state.log.length){ $('logTable').innerHTML = '<p class="muted">No log rows (yet). Add a POST mirror for <span class="mono">listactivity</span> and click Refresh.</p>'; return; }
   const rows = state.log.map(a=>`<tr>
     <td>${a.Timestamp||a.When||''}</td><td>${a.UserAgent||a.Who||''}</td>
@@ -373,33 +401,44 @@ async function setOrderStatus(orderId, status){
 
 /************* Loaders *************/
 async function loadCatalog(){
-  const res = await POST('listcatalog');
-  state.catalog = res.rows || [];
-  renderCatalog(); hydrateItemSelects();
+  try{
+    const res = await apiLoad({ postAction:'listcatalog', getAction:'listcatalog' });
+    state.catalog = res.rows || [];
+    renderCatalog(); hydrateItemSelects();
+  }catch(err){ toast(`Catalog load: ${err.message}`); console.error('Catalog load error', err); }
 }
 
 async function loadVendors(){
-  const res = await POST('listvendors');
-  state.vendors = res.rows || [];
-  renderVendors();
+  try{
+    const res = await apiLoad({ postAction:'listvendors', getAction:'listvendors' });
+    state.vendors = res.rows || [];
+    renderVendors();
+  }catch(err){ toast(`Vendors load: ${err.message}`); console.error('Vendors load error', err); }
 }
 
 async function loadPricing(itemId){
-  const res = await POST('listvendorpricing', itemId ? { itemId } : {});
-  state.pricingAll = res.rows || [];
-  renderPricingTable();
+  try{
+    const params = itemId ? { itemId } : {};
+    const res = await apiLoad({ postAction:'listvendorpricing', getAction:'listvendorpricing', params });
+    state.pricingAll = res.rows || [];
+    renderPricingTable();
+  }catch(err){ toast(`Pricing load: ${err.message}`); console.error('Pricing load error', err); }
 }
 
 async function loadOrders(){
-  const res = await POST('getrequestpagedata');
-  state.orders = (res.orders || res.Orders || []);
-  renderOrders();
+  try{
+    const res = await apiLoad({ postAction:'getrequestpagedata', getAction:'getrequestpagedata' });
+    state.orders = (res.orders || res.Orders || []);
+    renderOrders();
+  }catch(err){ toast(`Orders load: ${err.message}`); console.error('Orders load error', err); }
 }
 
 async function loadLog(){
-  try { const res = await POST('listactivity'); state.log = res.rows || []; }
-  catch(_) { state.log = []; }
-  renderLog();
+  try{
+    const res = await apiLoad({ postAction:'listactivity', getAction:'listactivity' });
+    state.log = res.rows || [];
+    renderLog();
+  }catch(err){ toast(`Log load: ${err.message}`); console.error('Log load error', err); }
 }
 
 
@@ -411,14 +450,29 @@ function reportConnectivity(ok, msg=''){
 }
 
 $('btnTestApi').onclick = async ()=>{
-  try{ await POST('pingpost'); toast('API OK'); reportConnectivity(true); }
+  try{ const r = await POST('pingpost'); toast('API OK'); reportConnectivity(true); console.debug('pingpost:', r); }
   catch(err){ reportConnectivity(false, err.message); }
+};
+$('btnProbe').onclick = async ()=>{
+  const out = { };
+  try{ out.catalog = await apiLoad({ postAction:'listcatalog', getAction:'listcatalog' }); }catch(e){ out.catalog = { error: String(e.message) }; }
+  try{ out.vendors = await apiLoad({ postAction:'listvendors', getAction:'listvendors' }); }catch(e){ out.vendors = { error: String(e.message) }; }
+  try{ out.pricing = await apiLoad({ postAction:'listvendorpricing', getAction:'listvendorpricing' }); }catch(e){ out.pricing = { error: String(e.message) }; }
+  try{ out.orders  = await apiLoad({ postAction:'getrequestpagedata', getAction:'getrequestpagedata' }); }catch(e){ out.orders = { error: String(e.message) }; }
+  try{ out.activity= await apiLoad({ postAction:'listactivity', getAction:'listactivity' }); }catch(e){ out.activity = { error: String(e.message) }; }
+  console.table({
+    catalog: out.catalog?.rows?.length ?? out.catalog?.error ?? 'n/a',
+    vendors: out.vendors?.rows?.length ?? out.vendors?.error ?? 'n/a',
+    pricing: out.pricing?.rows?.length ?? out.pricing?.error ?? 'n/a',
+    orders:  (out.orders?.orders||out.orders?.Orders||[])?.length ?? out.orders?.error ?? 'n/a',
+    activity: out.activity?.rows?.length ?? out.activity?.error ?? 'n/a'
+  });
+  toast('Probe complete — open console for counts');
 };
 
 async function boot(){
   mountTabs();
   $('baseEcho').textContent = BASE;
-  // POST-based ping to avoid CORS on GET
   POST('pingpost', { hello:'boot' })
     .then(()=>reportConnectivity(true))
     .catch(()=>reportConnectivity(false));
@@ -431,10 +485,9 @@ async function boot(){
 }
 boot();
 
-// ---- Global error hardening (helps ignore extension noise) ----
+// ---- Global error hardening (ignore noisy extension message) ----
 window.addEventListener('unhandledrejection', (ev)=>{
   const msg = (ev && ev.reason && (ev.reason.message||ev.reason.toString())) || 'Unhandled promise rejection';
-  // Ignore common Chrome extension noise:
   if (/listener indicated an asynchronous response/i.test(msg)) return;
   console.error('[unhandledrejection]', ev.reason);
   if (typeof toast==='function') toast(msg);
@@ -442,7 +495,7 @@ window.addEventListener('unhandledrejection', (ev)=>{
 });
 window.addEventListener('error', (ev)=>{
   const msg = (ev && ev.message) || 'Script error';
-  if (/listener indicated an asynchronous response/i.test(msg)) return; // ignore extension message
+  if (/listener indicated an asynchronous response/i.test(msg)) return;
   console.error('[error]', msg, ev.error);
   if (typeof toast==='function') toast(msg);
 });
