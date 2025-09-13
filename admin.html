@@ -4,6 +4,7 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>EMS Supplies — Admin Dashboard</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='50' font-size='50'%3E🚑%3C/text%3E%3C/svg%3E">
   <style>
     :root{--bg:#f7f7f7;--card:#fff;--b:#ddd;--muted:#666;--ink:#111;--accent:#0a66ff;--bad:#b00020;--ok:#137333}
     *{box-sizing:border-box}
@@ -49,8 +50,7 @@
     <span id="statusIcon" class="pill bad">Checking…</span>
     <span class="muted">BASE:</span><code class="mono" id="baseEcho"></code>
     <span class="spacer"></span>
-    <button class="btn" id="btnTestGet">Test GET</button>
-    <button class="btn" id="btnTestPost">Test POST</button>
+    <button class="btn" id="btnTestApi">Test API</button>
   </div>
 
   <div class="tabs" id="tabs"></div>
@@ -105,7 +105,8 @@
     <h2>Orders</h2>
     <div class="row">
       <button class="btn ghost" id="ordersRefreshBtn">Refresh</button>
-      <span class="muted">Update status via quick actions → uses <span class="mono">updateorderstatus</span></span>
+      <label class="row" style="gap:6px"><input type="checkbox" id="toggleHistory"/> <span class="muted">Show history (Received)</span></label>
+      <span class="muted">Quick actions use <span class="mono">updateorderstatus</span></span>
     </div>
     <div id="ordersTable"></div>
   </section>
@@ -115,7 +116,7 @@
     <h2>Activity Log</h2>
     <div class="row">
       <button class="btn ghost" id="logRefreshBtn">Refresh</button>
-      <span class="muted">(Optional) Add <span class="mono">doGet?action=listactivity</span> to return rows from <span class="mono">ActivityLog</span>.</span>
+      <span class="muted">Add <span class="mono">listactivity</span> POST mirror on the server to enable this.</span>
     </div>
     <div id="logTable"><p class="muted">Hook this to <span class="mono">listactivity</span> and click Refresh.</p></div>
   </section>
@@ -180,26 +181,13 @@ function withTimeout(promise, ms=15000){
 }
 
 /************* API *************/
-async function GET(action, params={}, opts={}){
-  try{
-    const q = new URLSearchParams({ action, ...params, _ts: Date.now() }).toString();
-    const resp = await withTimeout((signal)=>fetch(`${BASE}?${q}`, { signal }));
-    const data = await resp.json();
-    if(!resp.ok || data.ok===false){ throw new Error(data.error || `GET ${action} failed`); }
-    return data;
-  }catch(err){
-    reportConnectivity(false, `GET ${action}: ${err.message}`);
-    throw err;
-  }
-}
-
-// IMPORTANT: Use text/plain to AVOID CORS preflight while still sending JSON body that your doPost parses
+// All data loads use POST (simple request via text/plain) to bypass preflight & CORS issues.
 async function POST(actionType, payload={}){
   const body = { token: TOKEN, actionType, ...payload };
   try{
     const resp = await withTimeout((signal)=>fetch(BASE, {
       method:'POST',
-      headers:{ 'Content-Type':'text/plain;charset=UTF-8' }, // avoid preflight
+      headers:{ 'Content-Type':'text/plain;charset=UTF-8' },
       body: JSON.stringify(body),
       signal
     }));
@@ -285,7 +273,10 @@ function renderVendorGroups(){
 }
 
 function renderOrders(){
-  const rows = state.orders.map(o=>`<tr>
+  const showHistory = $('toggleHistory').checked;
+  const list = (state.orders||[]);
+  const visible = list.filter(o => showHistory ? true : (String(o.Status||'').toLowerCase() !== 'received'));
+  const rows = visible.map(o=>`<tr>
     <td class="mono">${o.OrderID||o.OrderId||''}</td>
     <td>${o.ItemID? nameOf(o.ItemID) : (o.VendorID? vendorOf(o.VendorID):'')}</td>
     <td>${o.Status||''}</td>
@@ -296,11 +287,12 @@ function renderOrders(){
       <button class="btn" onclick="setOrderStatus('${o.OrderID}','Received')">Received</button>
     </td>
   </tr>`).join('');
-  $('ordersTable').innerHTML = `<table><thead><tr><th>OrderID</th><th>Item/Vendor</th><th>Status</th><th>Timestamp</th><th>Quick Actions</th></tr></thead><tbody>${rows}</tbody></table>`;
+  const caption = showHistory ? 'All Orders (including Received)' : 'Open & Pending Orders';
+  $('ordersTable').innerHTML = `<table><caption style="text-align:left;margin-bottom:6px" class="muted">${caption}</caption><thead><tr><th>OrderID</th><th>Item/Vendor</th><th>Status</th><th>Timestamp</th><th>Quick Actions</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
 function renderLog(){
-  if(!state.log.length){ $('logTable').innerHTML = '<p class="muted">No log rows (yet). Add a GET handler for listactivity and click Refresh.</p>'; return; }
+  if(!state.log.length){ $('logTable').innerHTML = '<p class="muted">No log rows (yet). Add a POST mirror for <span class="mono">listactivity</span> and click Refresh.</p>'; return; }
   const rows = state.log.map(a=>`<tr>
     <td>${a.Timestamp||a.When||''}</td><td>${a.UserAgent||a.Who||''}</td>
     <td>${a.Action||''}</td><td>${a.Unit||a.EntityType||''}</td>
@@ -381,30 +373,35 @@ async function setOrderStatus(orderId, status){
 
 /************* Loaders *************/
 async function loadCatalog(){
-  const res = await GET('listcatalog');
+  const res = await POST('listcatalog');
   state.catalog = res.rows || [];
   renderCatalog(); hydrateItemSelects();
 }
+
 async function loadVendors(){
-  const res = await GET('listvendors');
+  const res = await POST('listvendors');
   state.vendors = res.rows || [];
   renderVendors();
 }
+
 async function loadPricing(itemId){
-  const res = await GET('listvendorpricing', itemId? { itemId } : {});
+  const res = await POST('listvendorpricing', itemId ? { itemId } : {});
   state.pricingAll = res.rows || [];
   renderPricingTable();
 }
+
 async function loadOrders(){
-  const res = await GET('getrequestpagedata');
+  const res = await POST('getrequestpagedata');
   state.orders = (res.orders || res.Orders || []);
   renderOrders();
 }
+
 async function loadLog(){
-  try{ const res = await GET('listactivity'); state.log = res.rows || []; }
-  catch(_){ state.log = []; }
+  try { const res = await POST('listactivity'); state.log = res.rows || []; }
+  catch(_) { state.log = []; }
   renderLog();
 }
+
 
 /************* Diagnostics *************/
 function reportConnectivity(ok, msg=''){
@@ -413,27 +410,27 @@ function reportConnectivity(ok, msg=''){
   else { el.textContent='Problem'; el.classList.remove('ok'); el.classList.add('bad'); el.classList.add('pill','bad'); if(msg) toast(msg); }
 }
 
-$('btnTestGet').onclick = async ()=>{
-  try{ const r = await GET('ping'); toast('GET ping ok'); reportConnectivity(true); }
-  catch(err){ reportConnectivity(false, err.message); }
-};
-$('btnTestPost').onclick = async ()=>{
-  try{ const r = await POST('echo', { hello:'world' }); toast('POST echo ok'); reportConnectivity(true); }
+$('btnTestApi').onclick = async ()=>{
+  try{ await POST('pingpost'); toast('API OK'); reportConnectivity(true); }
   catch(err){ reportConnectivity(false, err.message); }
 };
 
 async function boot(){
   mountTabs();
   $('baseEcho').textContent = BASE;
-  // Initial quick connectivity test (non-fatal)
-  GET('ping').then(()=>reportConnectivity(true)).catch(()=>reportConnectivity(false));
+  // POST-based ping to avoid CORS on GET
+  POST('pingpost', { hello:'boot' })
+    .then(()=>reportConnectivity(true))
+    .catch(()=>reportConnectivity(false));
   await Promise.allSettled([loadCatalog(), loadVendors(), loadPricing()]);
   await Promise.allSettled([loadOrders(), loadLog()]);
   // Hook refresh buttons
   $('ordersRefreshBtn').onclick = ()=>loadOrders().catch(err=>toast(err.message));
+  $('toggleHistory').onchange = ()=>renderOrders();
   $('logRefreshBtn').onclick = ()=>loadLog().catch(err=>toast(err.message));
 }
 boot();
+
 // ---- Global error hardening (helps ignore extension noise) ----
 window.addEventListener('unhandledrejection', (ev)=>{
   const msg = (ev && ev.reason && (ev.reason.message||ev.reason.toString())) || 'Unhandled promise rejection';
