@@ -6,107 +6,107 @@
 <title>Expiring Supplies – GC EMS</title>
 <script src="quagga.min.js"></script>
 <style>
-    :root{--bg:#f7f7f7;--card:#fff;--b:#ddd;--muted:#666;--ok:#e7f7ee;--warn:#fff7e6;--bad:#fdecea}
-    *{box-sizing:border-box}
-    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:var(--bg)}
-    .wrap{max-width:1100px;margin:0 auto;padding:16px}
-    .card{background:var(--card);border:1px solid var(--b);border-radius:12px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
-    h1{margin:0 0 6px}
-    .muted{color:var(--muted);font-size:.9rem}
-    .toolbar{display:flex;gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap}
-    select,button,input{padding:8px 10px;border:1px solid var(--b);border-radius:10px;background:#fff}
-    button{cursor:pointer}
-    table{width:100%;border-collapse:collapse}
-    th,td{padding:8px 10px;border-bottom:1px solid #eee;text-align:left;vertical-align:top}
-    th{font-weight:600;background:#fafafa}
-    .ok{background:var(--ok)} .warn{background:var(--warn)} .bad{background:var(--bad)}
-    .actions{display:flex;gap:6px;flex-wrap:wrap}
-    .btn{padding:6px 10px;border:1px solid var(--b);border-radius:10px;background:#fafafa}
-    .btn.red{border-color:#c00} .btn.green{border-color:#090}
-    .right{text-align:right}
-    .spacer{flex:1}
-    .modal{display:none;position:fixed;z-index:99;left:0;top:0;width:100%;height:100%;overflow:auto;background:rgba(0,0,0,.35)}
-    .modal-content{background:#fff;margin:10% auto;padding:16px;border:1px solid var(--b);width:min(540px,92%);border-radius:12px}
-    .close-btn{float:right;font-size:24px;cursor:pointer}
-    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-    .chipbar{display:flex;gap:6px;flex-wrap:wrap}
+    :root{--bg:#f7f7f7;--card:#fff;--b:#ddd;--muted:#666;--ok:#e7f7ee;--warn:#fff7e6;--bad:#fdecea}
+    *{box-sizing:border-box}
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:var(--bg)}
+    .wrap{max-width:1100px;margin:0 auto;padding:16px}
+    .card{background:var(--card);border:1px solid var(--b);border-radius:12px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+    h1{margin:0 0 6px}
+    .muted{color:var(--muted);font-size:.9rem}
+    .toolbar{display:flex;gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap}
+    select,button,input{padding:8px 10px;border:1px solid var(--b);border-radius:10px;background:#fff}
+    button{cursor:pointer}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:8px 10px;border-bottom:1px solid #eee;text-align:left;vertical-align:top}
+    th{font-weight:600;background:#fafafa}
+    .ok{background:var(--ok)} .warn{background:var(--warn)} .bad{background:var(--bad)}
+    .actions{display:flex;gap:6px;flex-wrap:wrap}
+    .btn{padding:6px 10px;border:1px solid var(--b);border-radius:10px;background:#fafafa}
+    .btn.red{border-color:#c00} .btn.green{border-color:#090}
+    .right{text-align:right}
+    .spacer{flex:1}
+    .modal{display:none;position:fixed;z-index:99;left:0;top:0;width:100%;height:100%;overflow:auto;background:rgba(0,0,0,.35)}
+    .modal-content{background:#fff;margin:10% auto;padding:16px;border:1px solid var(--b);width:min(540px,92%);border-radius:12px}
+    .close-btn{float:right;font-size:24px;cursor:pointer}
+    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .chipbar{display:flex;gap:6px;flex-wrap:wrap}
 
-    /* Note trigger styled like an input */
-    .note-trigger{
-      padding:6px 10px;border:1px solid var(--b);border-radius:10px;background:#fff;
-      min-width:140px;text-align:left;cursor:pointer
-    }
-    .btn.is-active{background:var(--warn);}
-    #interactive.viewport {
-        position: relative;
-        width: 100%;
-        height: 300px; /* Adjust as needed */
-        border: 1px solid #ccc;
-        background: #000;
-        display: none; /* Add this to hide the scanner initially */
-    }
-    #interactive.viewport video {
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-    }
-    .drawingBuffer {
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-    }
-    /* Small note modal */
-    #noteModal{display:none;position:fixed;z-index:120;inset:0;background:rgba(0,0,0,.35)}
-    #noteModal .box{background:#fff;margin:12% auto;max-width:420px;width:92%;
-      border:1px solid var(--b);border-radius:12px;padding:14px}
-    #noteText{width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--b);border-radius:8px}
-    #charLeft{float:right;color:var(--muted);font-size:.85rem}
+    /* Note trigger styled like an input */
+    .note-trigger{
+      padding:6px 10px;border:1px solid var(--b);border-radius:10px;background:#fff;
+      min-width:140px;text-align:left;cursor:pointer
+    }
+    .btn.is-active{background:var(--warn);}
+    #interactive.viewport {
+    position: relative;
+    width: 100%;
+    height: 300px; /* Adjust as needed */
+    border: 1px solid #ccc;
+    background: #000;
+    display: none;
+}
+#interactive.viewport video {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}
+.drawingBuffer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}
+    /* Small note modal */
+    #noteModal{display:none;position:fixed;z-index:120;inset:0;background:rgba(0,0,0,.35)}
+    #noteModal .box{background:#fff;margin:12% auto;max-width:420px;width:92%;
+      border:1px solid var(--b);border-radius:12px;padding:14px}
+    #noteText{width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--b);border-radius:8px}
+    #charLeft{float:right;color:var(--muted);font-size:.85rem}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <div class="card">
-    <h1>Expiring Supplies</h1>
-    <div class="muted">Typed JSON from Apps Script; no CSV parsing. Server computes Days to Expire.</div>
-    <div class="toolbar">
-      <label>Window
-        <select id="rangeSel">
-          <option value="30">30 days</option>
-          <option value="60">60 days</option>
-          <option value="90" selected>90 days</option>
-          <option value="120">120 days</option>
-        </select>
-      </label>
-      <label>Unit
-        <select id="unitSel"><option value="ALL">ALL</option></select>
-      </label>
-      <input id="searchBox" placeholder="Search item, compartment…"/>
-      <button class="btn" id="refreshBtn">Refresh</button>
-      <span class="spacer"></span>
-      <button class="btn" id="showAddItemModal">+ Add Item</button>
-      <span id="count" class="muted"></span>
-    </div>
-  </div>
+  <div class="card">
+    <h1>Expiring Supplies</h1>
+    <div class="muted">Typed JSON from Apps Script; no CSV parsing. Server computes Days to Expire.</div>
+    <div class="toolbar">
+      <label>Window
+        <select id="rangeSel">
+          <option value="30">30 days</option>
+          <option value="60">60 days</option>
+          <option value="90" selected>90 days</option>
+          <option value="120">120 days</option>
+        </select>
+      </label>
+      <label>Unit
+        <select id="unitSel"><option value="ALL">ALL</option></select>
+      </label>
+      <input id="searchBox" placeholder="Search item, compartment…"/>
+      <button class="btn" id="refreshBtn">Refresh</button>
+      <span class="spacer"></span>
+      <button class="btn" id="showAddItemModal">+ Add Item</button>
+      <span id="count" class="muted"></span>
+    </div>
+  </div>
 
-  <div id="content" class="card"></div>
+  <div id="content" class="card"></div>
 </div>
 
 <div id="noteModal">
-  <div class="box">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-      <strong>Edit note</strong>
-      <span id="charLeft">40</span>
-    </div>
-    <textarea id="noteText" rows="3" maxlength="40" placeholder="Short note (max 40 chars)"></textarea>
-    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
-      <button id="noteCancel" class="btn">Cancel</button>
-      <button id="noteSave" class="btn">Save</button>
-    </div>
-  </div>
+  <div class="box">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <strong>Edit note</strong>
+      <span id="charLeft">40</span>
+    </div>
+    <textarea id="noteText" rows="3" maxlength="40" placeholder="Short note (max 40 chars)"></textarea>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
+      <button id="noteCancel" class="btn">Cancel</button>
+      <button id="noteSave" class="btn">Save</button>
+    </div>
+  </div>
 </div>
 
 <div id="addItemModal" class="modal">
@@ -421,6 +421,120 @@ function wireUI(){
     const d = String(last.getDate()).padStart(2,'0');
     return `${y}-${m}-${d}`;
   }
+  function buildChips(){
+    const now = new Date();
+    const chips = [];
+    for (let i=0;i<3;i++){
+      const d = new Date(now.getFullYear(), now.getMonth()+i, 1);
+      const label = d.toLocaleString(undefined,{month:'short',year:'2-digit'});
+      const iso   = endOfMonthISO(d.getFullYear(), d.getMonth());
+      chips.push({label, iso});
+    }
+    chipBar.innerHTML = chips.map(c=>`<button class="btn exp-chip" data-exp="${c.iso}">${c.label}</button>`).join('') +
+                        `<button class="btn exp-chip custom" data-exp="">Custom…</button>`;
+
+    // Insert custom pickers (hidden until "Custom…" is clicked)
+    let customWrap = document.getElementById('customExpiryWrap');
+    if (!customWrap){
+      customWrap = document.createElement('div');
+      customWrap.id = 'customExpiryWrap';
+      customWrap.style.display = 'none';
+      customWrap.style.marginTop = '8px';
+      customWrap.innerHTML = `
+        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+          <label style="display:flex; align-items:center; gap:6px;">
+            <span style="min-width:70px;">Month</span>
+            <input id="customMonth" type="month">
+          </label>
+          <label style="display:flex; align-items:center; gap:6px;">
+            <span style="min-width:70px;">Exact date</span>
+            <input id="customDate" type="date">
+          </label>
+          <button id="applyCustomExp" class="btn">Apply</button>
+        </div>`;
+      chipBar.insertAdjacentElement('afterend', customWrap);
+    }
+
+    // Wire the chips
+    chipBar.querySelectorAll('button.exp-chip').forEach(b=>{
+      b.addEventListener('click', ()=>{
+        chipBar.querySelectorAll('button.exp-chip').forEach(x=>x.style.borderColor='#ddd');
+        b.style.borderColor='blue';
+
+        if (b.classList.contains('custom')){
+          document.getElementById('customExpiryWrap').style.display = '';
+          selectedExp = '';
+        } else {
+          document.getElementById('customExpiryWrap').style.display = 'none';
+          selectedExp = b.dataset.exp || '';
+        }
+      });
+    });
+
+    document.getElementById('applyCustomExp').onclick = ()=>{
+      const monthVal = document.getElementById('customMonth').value; // YYYY-MM
+      const dateVal  = document.getElementById('customDate').value;  // YYYY-MM-DD
+
+      if (dateVal){
+        selectedExp = dateVal;
+      } else if (monthVal){
+        const [y,m] = monthVal.split('-').map(v=>parseInt(v,10));
+        if (y && m) selectedExp = endOfMonthISO(y, m-1);
+      } else {
+        alert('Pick a month or an exact date.');
+        return;
+      }
+      chipBar.querySelectorAll('button.exp-chip').forEach(x=>x.style.borderColor='#ddd');
+      document.getElementById('customExpiryWrap').style.display = 'none';
+    };
+  }
+
+  showBtn.addEventListener('click', ()=>{
+    selectedExp = '';
+    itemInp.value = '';
+    compSel.value = '';
+    qtyInp.value = '1';
+    buildChips();
+    updateDatalist();
+    modal.style.display='block';
+  });
+  closeBtn.addEventListener('click', ()=> modal.style.display='none');
+  window.addEventListener('click', e=>{ if(e.target===modal) modal.style.display='none'; });
+
+  // Save (create)
+  $('#saveNewItemBtn').addEventListener('click', async ()=>{
+    const visibleName = itemInp.value.trim();
+    if (!visibleName) { alert('Pick an item name.'); return; }
+
+    // Resolve ItemID by ItemName or ItemNameAlt
+    const row = catalog.find(c => [String(c.ItemName||'').toLowerCase(), String(c.ItemNameAlt||'').toLowerCase()].includes(visibleName.toLowerCase()));
+    if (!row || !row.ItemID) { alert('Item not found in Catalog.'); return; }
+
+    let unit = $('#unitSel').value;
+    if (unit === 'ALL') {
+      unit = prompt('Which unit is this for (e.g., 31, 33, 36)?')?.trim() || '';
+      if (!unit) return;
+    }
+
+    if (!selectedExp) { alert('Pick an expiry (chip or custom).'); return; }
+    const payload = {
+      itemId: row.ItemID,
+      unit,
+      compartment: $('#addCompartmentSelect').value.trim(),
+      expiry: selectedExp,                  // ISO yyyy-mm-dd
+      qty: Number($('#addQty').value)||1,
+      crewStatus: ''
+    };
+
+    try{
+      await postCreate(payload);
+      modal.style.display='none';
+      await init(); // refresh list
+    }catch(e){
+      console.error(e);
+      alert('Add failed');
+    }
+  });
 // In your wireUI function, add this new logic.
 function setupBarcodeScanner() {
   const scanBarcodeBtn = $('#scanBarcodeBtn');
@@ -635,6 +749,60 @@ async function init(){
     console.error(e);
     $('#content').innerHTML = `<p style="color:#a00;font-weight:700;">Error loading data. Check Worker URL & GAS deployment.</p>`;
   }
+}
+// This is the function that initializes the barcode scanner.
+// It must be defined and then called from within wireUI.
+function setupBarcodeScanner() {
+  const scanBarcodeBtn = $('#scanBarcodeBtn');
+  const addItemInput = $('#addItemInput');
+  const scannerViewport = $('#interactive');
+
+  scanBarcodeBtn.addEventListener('click', () => {
+    if (isScannerActive) {
+      Quagga.stop();
+      isScannerActive = false;
+      scanBarcodeBtn.textContent = 'Scan Barcode';
+      scannerViewport.style.display = 'none';
+    } else {
+      scannerViewport.style.display = 'block';
+      Quagga.init({
+        inputStream: {
+          name: "Live",
+          type: "LiveStream",
+          target: document.querySelector('#interactive')
+        },
+        decoder: {
+          readers: ["code_128_reader", "upc_reader", "ean_reader", "ean_8_reader", "code_39_reader"]
+        }
+      }, function(err) {
+        if (err) {
+          console.error(err);
+          alert("Error starting scanner: " + err);
+          return;
+        }
+        console.log("Initialization finished. Ready to start.");
+        Quagga.start();
+        isScannerActive = true;
+        scanBarcodeBtn.textContent = 'Stop Scan';
+      });
+
+      Quagga.onDetected(async function(result) {
+        if (result && result.codeResult && result.codeResult.code) {
+          Quagga.stop();
+          isScannerActive = false;
+          scanBarcodeBtn.textContent = 'Scan Barcode';
+          scannerViewport.style.display = 'none';
+          
+          const barcodeValue = result.codeResult.code;
+
+          // Replace this mock with a call to your Apps Script function
+          // google.script.run.getBarcodeData(barcodeValue)...
+          addItemInput.value = barcodeValue;
+          alert(`Barcode detected: ${barcodeValue}`);
+        }
+      });
+    }
+  });
 }
 
 // boot
