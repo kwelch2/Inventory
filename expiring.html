@@ -4,6 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Expiring Supplies – GC EMS</title>
+<script src="quagga.min.js"></script>
 <style>
     :root{--bg:#f7f7f7;--card:#fff;--b:#ddd;--muted:#666;--ok:#e7f7ee;--warn:#fff7e6;--bad:#fdecea}
     *{box-sizing:border-box}
@@ -36,7 +37,28 @@
       min-width:140px;text-align:left;cursor:pointer
     }
     .btn.is-active{background:var(--warn);}
-
+    #interactive.viewport {
+        position: relative;
+        width: 100%;
+        height: 300px; /* Adjust as needed */
+        border: 1px solid #ccc;
+        background: #000;
+        display: none; /* Add this to hide the scanner initially */
+    }
+    #interactive.viewport video {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+    }
+    .drawingBuffer {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+    }
     /* Small note modal */
     #noteModal{display:none;position:fixed;z-index:120;inset:0;background:rgba(0,0,0,.35)}
     #noteModal .box{background:#fff;margin:12% auto;max-width:420px;width:92%;
@@ -91,6 +113,9 @@
   <div class="modal-content">
     <span class="close-btn">&times;</span>
     <h3>Add Item to Inventory</h3>
+    
+    <div id="interactive" class="viewport"></div>
+    
     <div class="grid2">
       <div>
         <label>Item</label>
@@ -146,6 +171,7 @@ function rowClass(days, status){
 
 // ===== STATE =====
 let units = [], rows = [], catalog = []; // catalog used for Add Item search
+let isScannerActive = false;
 
 // ===== DATA LOAD =====
 function readWithin(){
@@ -350,7 +376,7 @@ function updateDatalist(){
 
 // ===== UI wiring (including Add Item modal) =====
 function wireUI(){
-  // --- EXISTING CODE ---
+  // --- EXISTING CODE ---
   // Range options: add Custom + All
   const rangeSel = $('#rangeSel');
   if (![...rangeSel.options].some(o=>o.value==='CUSTOM')) {
@@ -395,7 +421,61 @@ function wireUI(){
     const d = String(last.getDate()).padStart(2,'0');
     return `${y}-${m}-${d}`;
   }
+// In your wireUI function, add this new logic.
+function setupBarcodeScanner() {
+  const scanBarcodeBtn = $('#scanBarcodeBtn');
+  const addItemInput = $('#addItemInput');
+  const scannerViewport = $('#interactive');
 
+  scanBarcodeBtn.addEventListener('click', () => {
+    if (isScannerActive) {
+      // If active, stop the scanner
+      Quagga.stop();
+      isScannerActive = false;
+      scanBarcodeBtn.textContent = 'Scan Barcode';
+      scannerViewport.style.display = 'none';
+    } else {
+      // Start the scanner
+      scannerViewport.style.display = 'block';
+      Quagga.init({
+        inputStream: {
+          name: "Live",
+          type: "LiveStream",
+          target: document.querySelector('#interactive')
+        },
+        decoder: {
+          readers: ["code_128_reader", "upc_reader", "ean_reader", "ean_8_reader", "code_39_reader"] // Adjust as needed
+        }
+      }, function(err) {
+        if (err) {
+          console.error(err);
+          alert("Error starting scanner: " + err);
+          return;
+        }
+        console.log("Initialization finished. Ready to start.");
+        Quagga.start();
+        isScannerActive = true;
+        scanBarcodeBtn.textContent = 'Stop Scan';
+      });
+
+      Quagga.onDetected(async function(result) {
+        if (result && result.codeResult && result.codeResult.code) {
+          Quagga.stop(); // Stop the scanner once a barcode is detected
+          isScannerActive = false;
+          scanBarcodeBtn.textContent = 'Scan Barcode';
+          scannerViewport.style.display = 'none';
+          
+          const barcodeValue = result.codeResult.code;
+
+          // You'll need to call your Apps Script function here to get the item details
+          // For now, let's just populate the input field with the barcode number
+          addItemInput.value = barcodeValue;
+          alert(`Barcode detected: ${barcodeValue}`);
+        }
+      });
+    }
+  });
+}
   function buildChips(){
     const now = new Date();
     const chips = [];
