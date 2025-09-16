@@ -405,68 +405,68 @@ function wireUI(){
   $('#searchBox').addEventListener('input', debounce(render, 250));
 
   // --- NEWLY ADDED CODE ---
-  // Barcode scanner setup
-  const scanBarcodeBtn = $('#scanBarcodeBtn');
-  const addItemInput = $('#addItemInput');
-  const scannerViewport = $('#interactive');
-  
-  scanBarcodeBtn.addEventListener('click', () => {
-    if (isScannerActive) {
-      Quagga.stop();
-      isScannerActive = false;
-      scanBarcodeBtn.innerHTML = '<img src="data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\'%3E%3Cpath d=\'M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z\'/%3E%3C/svg%3E" alt="Barcode Scanner" style="height:20px;width:20px;">';
-      scannerViewport.style.display = 'none';
-    } else {
-      scannerViewport.style.display = 'block';
-      Quagga.init({
-        inputStream: {
-          name: "Live",
-          type: "LiveStream",
-          target: document.querySelector('#interactive')
-        },
-        decoder: {
-          readers: ["code_128_reader", "upc_reader", "ean_reader", "ean_8_reader", "code_39_reader"]
-        }
-      }, function(err) {
-        if (err) {
-          console.error(err);
-          alert("Error starting scanner: " + err);
-          return;
-        }
-        console.log("Initialization finished. Ready to start.");
-        Quagga.start();
-        isScannerActive = true;
-        scanBarcodeBtn.innerHTML = 'Stop Scan';
-      });
+   // Barcode scanner setup
+    const scanBarcodeBtn = $('#scanBarcodeBtn');
+    const addItemInput = $('#addItemInput');
+    const scannerViewport = $('#interactive');
 
-      Quagga.onDetected(async function(result) {
-        if (result && result.codeResult && result.codeResult.code) {
-          Quagga.stop();
-          isScannerActive = false;
-          scanBarcodeBtn.innerHTML = '<img src="data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\'%3E%3Cpath d=\'M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z\'/%3E%3C/svg%3E" alt="Barcode Scanner" style="height:20px;width:20px;">';
-          scannerViewport.style.display = 'none';
-          
-          const barcodeValue = result.codeResult.code;
+    scanBarcodeBtn.addEventListener('click', () => {
+        if (isScannerActive) {
+            Quagga.stop();
+            isScannerActive = false;
+            scanBarcodeBtn.innerHTML = '<img src="data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\'%3E%3Cpath d=\'M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z\'/%3E%3C/svg%3E" alt="Barcode Scanner" style="height:20px;width:20px;">';
+            scannerViewport.style.display = 'none';
+        } else {
+            scannerViewport.style.display = 'block';
+            Quagga.init({
+                inputStream: {
+                    name: "Live",
+                    type: "LiveStream",
+                    target: document.querySelector('#interactive')
+                },
+                decoder: {
+                    readers: ["code_128_reader", "upc_reader", "ean_reader", "ean_8_reader", "code_39_reader"]
+                }
+            }, function(err) {
+                if (err) {
+                    console.error(err);
+                    alert("Error starting scanner: " + err);
+                    return;
+                }
+                console.log("Initialization finished. Ready to start.");
+                Quagga.start();
+                isScannerActive = true;
+                scanBarcodeBtn.innerHTML = 'Stop Scan';
+            });
 
-          // Call Apps Script function to get item data from barcode value
-          google.script.run
-            .withSuccessHandler(function(item) {
-              if (item) {
-                addItemInput.value = item.ItemName;
-                alert(`Barcode detected: ${barcodeValue}`);
-              } else {
-                alert(`Barcode detected, but item not found: ${barcodeValue}`);
-              }
-            })
-            .withFailureHandler(function(error) {
-              console.error('Apps Script Error: ' + error);
-              alert('An error occurred during item lookup.');
-            })
-            .getBarcodeData(barcodeValue);
+            Quagga.onDetected(async function(result) {
+                if (result && result.codeResult && result.codeResult.code) {
+                    Quagga.stop();
+                    isScannerActive = false;
+                    scanBarcodeBtn.innerHTML = '<img src="data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\'%3E%3Cpath d=\'M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z\'/%3E%3C/svg%3E" alt="Barcode Scanner" style="height:20px;width:20px;">';
+                    scannerViewport.style.display = 'none';
+                    
+                    const barcodeValue = result.codeResult.code;
+
+                    // Call Apps Script function to get item data from barcode value
+                    google.script.run
+                        .withSuccessHandler(function(item) {
+                            if (item) {
+                                addItemInput.value = item.ItemName;
+                                alert(`Barcode detected: ${barcodeValue}`);
+                            } else {
+                                alert(`Barcode detected, but item not found: ${barcodeValue}`);
+                            }
+                        })
+                        .withFailureHandler(function(error) {
+                            console.error('Apps Script Error: ' + error);
+                            alert('An error occurred during item lookup.');
+                        })
+                        .getBarcodeData(barcodeValue);
+                }
+            });
         }
-      });
-    }
-  });
+    });
 
   // ===== Add Item modal wiring =====
   const modal = $('#addItemModal');
