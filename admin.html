@@ -4,6 +4,7 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>EMS Supplies — Admin Dashboard</title>
+  <script src="https://unpkg.com/quagga@0.12.1/dist/quagga.min.js"></script>
   <script src="quagga.min.js"></script>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='50' font-size='50'%3E🚑%3C/text%3E%3C/svg%3E">
   <style>
@@ -94,6 +95,17 @@
         <input id="dlgCategory" placeholder="Category" style="flex:1"/>
         <input id="dlgUnit" placeholder="Unit" style="flex:1"/>
         <input id="dlgPackSize" type="number" min="1" placeholder="PackSize" style="flex:1"/>
+      </div>
+      <!-- existing row -->
+      <div class="row" style="gap:10px; margin-top:8px">
+        <input id="dlgBarcode" placeholder="Scan or type barcode" style="flex:2"/>
+        <button class="btn" id="dlgScanBtn">Scan</button>
+      </div>
+
+      <!-- NEW: camera viewport (hidden until scanning) -->
+      <div id="dlgInteractive" style="
+        display:none; position:relative; width:min(640px,95%);
+        height:360px; background:#000; border-radius:10px; overflow:hidden; margin-top:8px">
       </div>
       <div class="row" style="gap:8px; margin-top:14px">
         <button class="btn primary" id="dlgSaveBtn">Save</button>
@@ -392,6 +404,9 @@ function openCatalogDialog(itemId){
 $('dlgCancelBtn').onclick = ()=>{ $('catalogDialog').style.display = 'none'; };
 
 $('dlgSaveBtn').onclick = async ()=>{
+  const btn = $('dlgSaveBtn');
+  btn.disabled = true;
+
   const item = {
     ItemID: $('dlgItemID').value.trim(),
     ItemName: $('dlgItemName').value.trim(),
@@ -399,16 +414,37 @@ $('dlgSaveBtn').onclick = async ()=>{
     ['ItemRef#']: $('dlgItemRef').value.trim(),
     Category: $('dlgCategory').value.trim(),
     Unit: $('dlgUnit').value.trim(),
-    PackSize: Number($('dlgPackSize').value||1)
+    PackSize: Number($('dlgPackSize').value || 1)
   };
-  if(!item.ItemID || !item.ItemName){ alert('Item Name is required'); return; }
-  try{
+
+  if (!item.ItemID || !item.ItemName) {
+    alert('Item Name is required');
+    btn.disabled = false;
+    return;
+  }
+
+  const bc = $('dlgBarcode').value.trim();
+
+  try {
+    // 1) Save catalog item
     await POST('upsertcatalog', { item });
+
+    // 2) (optional) Save/attach barcode if present
+    if (bc) {
+      await POST('upsertbarcode', { barcode: bc, itemId: item.ItemID });
+    }
+
     toast('Catalog item updated');
     $('catalogDialog').style.display = 'none';
     await loadCatalog();
-  }catch(err){ toast(`Save failed: ${err.message}`); }
+
+  } catch (err) {
+    toast(`Save failed: ${err.message}`);
+  } finally {
+    btn.disabled = false;
+  }
 };
+
 function handleBarcode(itemId){
   const item = state.catalog.find(r => String(r.ItemID)===String(itemId));
   if(!item){ toast('Item not found'); return; }
