@@ -5,44 +5,44 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Expiring Supplies – GC EMS</title>
 <style>
-  :root{--bg:#f7f7f7;--card:#fff;--b:#ddd;--muted:#666;--ok:#e7f7ee;--warn:#fff7e6;--bad:#fdecea}
-  *{box-sizing:border-box}
-  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:var(--bg)}
-  .wrap{max-width:1100px;margin:0 auto;padding:16px}
-  .card{background:var(--card);border:1px solid var(--b);border-radius:12px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
-  h1{margin:0 0 6px}
-  .muted{color:var(--muted);font-size:.9rem}
-  .toolbar{display:flex;gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap}
-  select,button,input{padding:8px 10px;border:1px solid var(--b);border-radius:10px;background:#fff}
-  button{cursor:pointer}
-  table{width:100%;border-collapse:collapse}
-  th,td{padding:8px 10px;border-bottom:1px solid #eee;text-align:left;vertical-align:top}
-  th{font-weight:600;background:#fafafa}
-  .ok{background:var(--ok)} .warn{background:var(--warn)} .bad{background:var(--bad)}
-  .actions{display:flex;gap:6px;flex-wrap:wrap}
-  .btn{padding:6px 10px;border:1px solid var(--b);border-radius:10px;background:#fafafa}
-  .btn.red{border-color:#c00} .btn.green{border-color:#090}
-  .right{text-align:right}
-  .spacer{flex:1}
-  .modal{display:none;position:fixed;z-index:99;left:0;top:0;width:100%;height:100%;overflow:auto;background:rgba(0,0,0,.35)}
-  .modal-content{background:#fff;margin:10% auto;padding:16px;border:1px solid var(--b);width:min(540px,92%);border-radius:12px}
-  .close-btn{float:right;font-size:24px;cursor:pointer}
-  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-  .chipbar{display:flex;gap:6px;flex-wrap:wrap}
+    :root{--bg:#f7f7f7;--card:#fff;--b:#ddd;--muted:#666;--ok:#e7f7ee;--warn:#fff7e6;--bad:#fdecea}
+    *{box-sizing:border-box}
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:var(--bg)}
+    .wrap{max-width:1100px;margin:0 auto;padding:16px}
+    .card{background:var(--card);border:1px solid var(--b);border-radius:12px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+    h1{margin:0 0 6px}
+    .muted{color:var(--muted);font-size:.9rem}
+    .toolbar{display:flex;gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap}
+    select,button,input{padding:8px 10px;border:1px solid var(--b);border-radius:10px;background:#fff}
+    button{cursor:pointer}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:8px 10px;border-bottom:1px solid #eee;text-align:left;vertical-align:top}
+    th{font-weight:600;background:#fafafa}
+    .ok{background:var(--ok)} .warn{background:var(--warn)} .bad{background:var(--bad)}
+    .actions{display:flex;gap:6px;flex-wrap:wrap}
+    .btn{padding:6px 10px;border:1px solid var(--b);border-radius:10px;background:#fafafa}
+    .btn.red{border-color:#c00} .btn.green{border-color:#090}
+    .right{text-align:right}
+    .spacer{flex:1}
+    .modal{display:none;position:fixed;z-index:99;left:0;top:0;width:100%;height:100%;overflow:auto;background:rgba(0,0,0,.35)}
+    .modal-content{background:#fff;margin:10% auto;padding:16px;border:1px solid var(--b);width:min(540px,92%);border-radius:12px}
+    .close-btn{float:right;font-size:24px;cursor:pointer}
+    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .chipbar{display:flex;gap:6px;flex-wrap:wrap}
 
-  /* Note trigger styled like an input */
-  .note-trigger{
-    padding:6px 10px;border:1px solid var(--b);border-radius:10px;background:#fff;
-    min-width:140px;text-align:left;cursor:pointer
-  }
-  .btn.is-active{background:var(--warn);}
+    /* Note trigger styled like an input */
+    .note-trigger{
+      padding:6px 10px;border:1px solid var(--b);border-radius:10px;background:#fff;
+      min-width:140px;text-align:left;cursor:pointer
+    }
+    .btn.is-active{background:var(--warn);}
 
-  /* Small note modal */
-  #noteModal{display:none;position:fixed;z-index:120;inset:0;background:rgba(0,0,0,.35)}
-  #noteModal .box{background:#fff;margin:12% auto;max-width:420px;width:92%;
-    border:1px solid var(--b);border-radius:12px;padding:14px}
-  #noteText{width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--b);border-radius:8px}
-  #charLeft{float:right;color:var(--muted);font-size:.85rem}
+    /* Small note modal */
+    #noteModal{display:none;position:fixed;z-index:120;inset:0;background:rgba(0,0,0,.35)}
+    #noteModal .box{background:#fff;margin:12% auto;max-width:420px;width:92%;
+      border:1px solid var(--b);border-radius:12px;padding:14px}
+    #noteText{width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--b);border-radius:8px}
+    #charLeft{float:right;color:var(--muted);font-size:.85rem}
 </style>
 </head>
 <body>
@@ -73,7 +73,6 @@
   <div id="content" class="card"></div>
 </div>
 
-<!-- Note modal -->
 <div id="noteModal">
   <div class="box">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
@@ -88,7 +87,6 @@
   </div>
 </div>
 
-<!-- Add Item Modal -->
 <div id="addItemModal" class="modal">
   <div class="modal-content">
     <span class="close-btn">&times;</span>
@@ -96,7 +94,12 @@
     <div class="grid2">
       <div>
         <label>Item</label>
-        <input id="addItemInput" list="itemsDatalist" placeholder="Start typing name…" />
+        <div style="display:flex; gap:8px; align-items:center;">
+          <input id="addItemInput" list="itemsDatalist" placeholder="Start typing name…" style="flex:1;" />
+          <button id="scanBarcodeBtn" class="btn" title="Scan Barcode">
+            <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z'/%3E%3C/svg%3E" alt="Barcode Scanner" style="height:20px;width:20px;">
+          </button>
+        </div>
         <datalist id="itemsDatalist"></datalist>
       </div>
       <div>
@@ -124,7 +127,7 @@
 <script>
 // ===== CONFIG =====
 const PROXY_URL = 'https://ems-inventory-proxy.kylewelch33.workers.dev'; // no trailing slash
-const TOKEN     = '9mB4zR7kP2fW6vNqE1jH8aLcV5gT_sYx0uI-oZ3pD9bX4wK7eS6hF-EMS';
+const TOKEN     = '9mB4zR7kP2fW6vNqE1jH8aLcV5gT_sYx0uI-oZ3pD9bX4wK7eS6hF-EMS';
 
 // ===== UTIL =====
 const $ = s => document.querySelector(s);
@@ -133,12 +136,12 @@ const debounce = (fn,ms)=>{ let t; return (...a)=>{ clearTimeout(t); t=setTimeou
 
 // Row class from days + status (Pending highlighted; OK/Replaced filtered out server-side)
 function rowClass(days, status){
-  if ((status||'').toLowerCase()==='pending') return 'warn';
-  if (days != null){
-    if (days < 0) return 'bad';
-    if (days <= 30) return 'warn';
-  }
-  return 'ok';
+  if ((status||'').toLowerCase()==='pending') return 'warn';
+  if (days != null){
+    if (days < 0) return 'bad';
+    if (days <= 30) return 'warn';
+  }
+  return 'ok';
 }
 
 // ===== STATE =====
@@ -146,411 +149,411 @@ let units=[], rows=[], catalog=[]; // catalog used for Add Item search
 
 // ===== DATA LOAD =====
 function readWithin(){
-  const sel = $('#rangeSel').value;
-  if (sel === 'CUSTOM') {
-    const v = parseInt($('#customDays').value || '0', 10);
-    return isNaN(v) || v < 0 ? 0 : v;
-  }
-  return sel === 'ALL' ? 'ALL' : parseInt(sel, 10);
+  const sel = $('#rangeSel').value;
+  if (sel === 'CUSTOM') {
+    const v = parseInt($('#customDays').value || '0', 10);
+    return isNaN(v) || v < 0 ? 0 : v;
+  }
+  return sel === 'ALL' ? 'ALL' : parseInt(sel, 10);
 }
 
 async function loadAll() {
-  const within = readWithin();
-  const unit   = $('#unitSel')?.value || 'ALL';
+  const within = readWithin();
+  const unit   = $('#unitSel')?.value || 'ALL';
 
-  // Build expiring URL
-  const url = new URL(PROXY_URL);
-  url.searchParams.set('action','expiring');
-  url.searchParams.set('within', within === 'ALL' ? 'ALL' : String(within));
-  url.searchParams.set('unit', unit);
-  url.searchParams.set('showResolved','false');
+  // Build expiring URL
+  const url = new URL(PROXY_URL);
+  url.searchParams.set('action','expiring');
+  url.searchParams.set('within', within === 'ALL' ? 'ALL' : String(within));
+  url.searchParams.set('unit', unit);
+  url.searchParams.set('showResolved','false');
 
-  const [inv, un, cat] = await Promise.all([
-    fetch(url.toString()).then(r=>r.json()),
-    fetch(`${PROXY_URL}?action=listunits`).then(r=>r.json()),
-    fetch(`${PROXY_URL}?action=listcatalog`).then(r=>r.json())
-  ]);
-  if (!inv.ok) throw new Error(inv.error || 'expiring failed');
-  if (!un.ok)  throw new Error(un.error  || 'units failed');
-  if (!cat.ok) throw new Error(cat.error || 'catalog failed');
+  const [inv, un, cat] = await Promise.all([
+    fetch(url.toString()).then(r=>r.json()),
+    fetch(`${PROXY_URL}?action=listunits`).then(r=>r.json()),
+    fetch(`${PROXY_URL}?action=listcatalog`).then(r=>r.json())
+  ]);
+  if (!inv.ok) throw new Error(inv.error || 'expiring failed');
+  if (!un.ok)  throw new Error(un.error  || 'units failed');
+  if (!cat.ok) throw new Error(cat.error || 'catalog failed');
 
-  rows    = inv.rows || [];
-  units   = un.rows  || [];
-  catalog = cat.rows || [];
+  rows    = inv.rows || [];
+  units   = un.rows  || [];
+  catalog = cat.rows || [];
 }
 
 // ===== RENDER =====
 function fillUnitSelect() {
-  const sel = $('#unitSel'); if (!sel) return;
-  const prev = sel.value || 'ALL';
-  const unitIds   = Array.from(new Set(rows.map(r => String(r.Unit||'').trim()))).filter(Boolean);
-  const unitNames = new Map(units.map(u => [String(u.Unit||'').trim(), String(u.Display||'').trim()]));
-  const unique = Array.from(new Set([...unitIds, ...units.map(u=>String(u.Unit||'').trim())])).filter(Boolean).sort();
-  const options = ['ALL', ...unique].map(u => `<option value="${u}">${u==='ALL'?'ALL':(unitNames.get(u)||u)}</option>`).join('');
-  sel.innerHTML = options;
-  sel.value = options.includes(`value="${prev}"`) ? prev : 'ALL';
+  const sel = $('#unitSel'); if (!sel) return;
+  const prev = sel.value || 'ALL';
+  const unitIds   = Array.from(new Set(rows.map(r => String(r.Unit||'').trim()))).filter(Boolean);
+  const unitNames = new Map(units.map(u => [String(u.Unit||'').trim(), String(u.Display||'').trim()]));
+  const unique = Array.from(new Set([...unitIds, ...units.map(u=>String(u.Unit||'').trim())])).filter(Boolean).sort();
+  const options = ['ALL', ...unique].map(u => `<option value="${u}">${u==='ALL'?'ALL':(unitNames.get(u)||u)}</option>`).join('');
+  sel.innerHTML = options;
+  sel.value = options.includes(`value="${prev}"`) ? prev : 'ALL';
 }
 
 function render() {
-  const q = ($('#searchBox').value||'').toLowerCase();
-  const unitFilter = $('#unitSel').value;
+  const q = ($('#searchBox').value||'').toLowerCase();
+  const unitFilter = $('#unitSel').value;
 
-  // Filter
-  let list = rows.filter(r=>{
-    if (unitFilter !== 'ALL' && String(r.Unit).toUpperCase() !== String(unitFilter).toUpperCase()) return false;
-    const hay = `${r.ItemName||''} ${r.ItemRef||''} ${r.Category||''} ${r.Compartment||''}`.toLowerCase();
-    if (q && !hay.includes(q)) return false;
-    return true;
-  });
+  // Filter
+  let list = rows.filter(r=>{
+    if (unitFilter !== 'ALL' && String(r.Unit).toUpperCase() !== String(unitFilter).toUpperCase()) return false;
+    const hay = `${r.ItemName||''} ${r.ItemRef||''} ${r.Category||''} ${r.Compartment||''}`.toLowerCase();
+    if (q && !hay.includes(q)) return false;
+    return true;
+  });
 
-  // Sort: Days ASC → UnitDisplay (when ALL) → ItemName
-  list = list.sort((a,b)=>{
-    const ax=a.DaysToExpire??1e9, bx=b.DaysToExpire??1e9;
-    if (ax!==bx) return ax-bx;
-    const ua=a.UnitDisplay||a.Unit||'', ub=b.UnitDisplay||b.Unit||'';
-    if ($('#unitSel').value==='ALL' && ua!==ub) return ua.localeCompare(ub);
-    return (a.ItemName||'').localeCompare(b.ItemName||'');
-  });
+  // Sort: Days ASC → UnitDisplay (when ALL) → ItemName
+  list = list.sort((a,b)=>{
+    const ax=a.DaysToExpire??1e9, bx=b.DaysToExpire??1e9;
+    if (ax!==bx) return ax-bx;
+    const ua=a.UnitDisplay||a.Unit||'', ub=b.UnitDisplay||b.Unit||'';
+    if ($('#unitSel').value==='ALL' && ua!==ub) return ua.localeCompare(ub);
+    return (a.ItemName||'').localeCompare(b.ItemName||'');
+  });
 
-  $('#count').textContent = `${list.length} item(s)`;
+  $('#count').textContent = `${list.length} item(s)`;
 
-  const showUnitCol = ($('#unitSel').value === 'ALL');
-  const html = `
-    <table>
-      <thead><tr>
-        <th style="width:30%">Item</th>
-        ${showUnitCol?'<th>Unit</th>':''}
-        <th>Compartment</th>
-        <th>Qty</th>
-        <th>Expiry</th>
-        <th class="right">Days</th>
-        <th>Actions</th>
-      </tr></thead>
-      <tbody>
-        ${list.map(r=>{
-          const cls = rowClass(r.DaysToExpire, r.Status);
-          const ref = r.ItemRef ? `<span class="muted">${escapeHtml(r.ItemRef)}</span>` : '';
-          const unitDisp = r.UnitDisplay || r.Unit || '';
-          const note = r.CrewStatus || '';
-          return `
-            <tr class="${cls}" data-id="${encodeURIComponent(r.InventoryID)}">
-              <td><strong>${escapeHtml(r.ItemName||'')}</strong><br>${ref}</td>
-              ${showUnitCol?`<td>${escapeHtml(unitDisp)}</td>`:''}
-              <td>${escapeHtml(r.Compartment||'')}</td>
-              <td>${(r.Qty??'')!==''?escapeHtml(String(r.Qty)):'—'}</td>
-              <td>${escapeHtml(r.Expiry||'')}</td>
-              <td class="right">${r.DaysToExpire??''}</td>
-              <td>
-                <div class="actions" style="gap:8px;align-items:center;">
-                  <button type="button" class="note-trigger" title="Click to edit note">
-                    ${escapeHtml(note || 'note…')}
-                  </button>
-                  <button class="btn pending ${r.Status==='Pending'?'is-active':''}">Pending</button>
-                  <button class="btn green ok">OK</button>
-                  <button class="btn red replaced">Replaced</button>
-                </div>
-              </td>
-            </tr>`;
-        }).join('')}
-      </tbody>
-    </table>`;
-  $('#content').innerHTML = html;
+  const showUnitCol = ($('#unitSel').value === 'ALL');
+  const html = `
+    <table>
+      <thead><tr>
+        <th style="width:30%">Item</th>
+        ${showUnitCol?'<th>Unit</th>':''}
+        <th>Compartment</th>
+        <th>Qty</th>
+        <th>Expiry</th>
+        <th class="right">Days</th>
+        <th>Actions</th>
+      </tr></thead>
+      <tbody>
+        ${list.map(r=>{
+          const cls = rowClass(r.DaysToExpire, r.Status);
+          const ref = r.ItemRef ? `<span class="muted">${escapeHtml(r.ItemRef)}</span>` : '';
+          const unitDisp = r.UnitDisplay || r.Unit || '';
+          const note = r.CrewStatus || '';
+          return `
+            <tr class="${cls}" data-id="${encodeURIComponent(r.InventoryID)}">
+              <td><strong>${escapeHtml(r.ItemName||'')}</strong><br>${ref}</td>
+              ${showUnitCol?`<td>${escapeHtml(unitDisp)}</td>`:''}
+              <td>${escapeHtml(r.Compartment||'')}</td>
+              <td>${(r.Qty??'')!==''?escapeHtml(String(r.Qty)):'—'}</td>
+              <td>${escapeHtml(r.Expiry||'')}</td>
+              <td class="right">${r.DaysToExpire??''}</td>
+              <td>
+                <div class="actions" style="gap:8px;align-items:center;">
+                  <button type="button" class="note-trigger" title="Click to edit note">
+                    ${escapeHtml(note || 'note…')}
+                  </button>
+                  <button class="btn pending ${r.Status==='Pending'?'is-active':''}">Pending</button>
+                  <button class="btn green ok">OK</button>
+                  <button class="btn red replaced">Replaced</button>
+                </div>
+              </td>
+            </tr>`;
+        }).join('')}
+      </tbody>
+    </table>`;
+  $('#content').innerHTML = html;
 
-  // Wire row actions + note modal per row
-  $('#content').querySelectorAll('tr[data-id]').forEach(tr=>{
-    const id = decodeURIComponent(tr.dataset.id);
-    const noteBtn = tr.querySelector('.note-trigger');
-    let cachedNote = (noteBtn.textContent.trim() === 'note…') ? '' : noteBtn.textContent.trim();
+  // Wire row actions + note modal per row
+  $('#content').querySelectorAll('tr[data-id]').forEach(tr=>{
+    const id = decodeURIComponent(tr.dataset.id);
+    const noteBtn = tr.querySelector('.note-trigger');
+    let cachedNote = (noteBtn.textContent.trim() === 'note…') ? '' : noteBtn.textContent.trim();
 
-    const markPendingActive = () => {
-      tr.classList.add('warn');
-      tr.querySelector('.pending').classList.add('is-active');
-    };
-    const clearPendingActive = () => {
-      tr.classList.remove('warn');
-      tr.querySelector('.pending').classList.remove('is-active');
-    };
+    const markPendingActive = () => {
+      tr.classList.add('warn');
+      tr.querySelector('.pending').classList.add('is-active');
+    };
+    const clearPendingActive = () => {
+      tr.classList.remove('warn');
+      tr.querySelector('.pending').classList.remove('is-active');
+    };
 
-    // open note editor
-    noteBtn.addEventListener('click', ()=>{
-      openNoteEditor(id, cachedNote, async (newNote)=>{
-        // save handler
-        await postUpdate({ inventoryId:id, crewStatus:newNote });
-        cachedNote = newNote;
-        noteBtn.textContent = newNote || 'note…';
-      });
-    });
+    // open note editor
+    noteBtn.addEventListener('click', ()=>{
+      openNoteEditor(id, cachedNote, async (newNote)=>{
+        // save handler
+        await postUpdate({ inventoryId:id, crewStatus:newNote });
+        cachedNote = newNote;
+        noteBtn.textContent = newNote || 'note…';
+      });
+    });
 
-    tr.querySelector('button.pending').addEventListener('click', async ()=>{
-      try{
-        await postUpdate({ inventoryId:id, status:'Pending', crewStatus: cachedNote });
-        markPendingActive();
-      }catch(e){ console.error(e); alert('Update failed'); }
-    });
+    tr.querySelector('button.pending').addEventListener('click', async ()=>{
+      try{
+        await postUpdate({ inventoryId:id, status:'Pending', crewStatus: cachedNote });
+        markPendingActive();
+      }catch(e){ console.error(e); alert('Update failed'); }
+    });
 
-    tr.querySelector('button.ok').addEventListener('click', async ()=>{
-      try{
-        await postUpdate({ inventoryId:id, status:'OK', crewStatus: cachedNote });
-        tr.remove();
-        $('#count').textContent = `${$('#content tbody').children.length} item(s)`;
-      }catch(e){ console.error(e); alert('Update failed'); }
-    });
+    tr.querySelector('button.ok').addEventListener('click', async ()=>{
+      try{
+        await postUpdate({ inventoryId:id, status:'OK', crewStatus: cachedNote });
+        tr.remove();
+        $('#count').textContent = `${$('#content tbody').children.length} item(s)`;
+      }catch(e){ console.error(e); alert('Update failed'); }
+    });
 
-    tr.querySelector('button.replaced').addEventListener('click', async ()=>{
-      try{
-        await postUpdate({ inventoryId:id, status:'Replaced', crewStatus: cachedNote });
-        tr.remove();
-        $('#count').textContent = `${$('#content tbody').children.length} item(s)`;
-      }catch(e){ console.error(e); alert('Update failed'); }
-    });
-  });
+    tr.querySelector('button.replaced').addEventListener('click', async ()=>{
+      try{
+        await postUpdate({ inventoryId:id, status:'Replaced', crewStatus: cachedNote });
+        tr.remove();
+        $('#count').textContent = `${$('#content tbody').children.length} item(s)`;
+      }catch(e){ console.error(e); alert('Update failed'); }
+    });
+  });
 }
 
 // Note modal helper (max 40 chars)
 function openNoteEditor(inventoryId, initialText, onSave){
-  const modal = $('#noteModal'), ta = $('#noteText'), left = $('#charLeft');
-  ta.value = initialText || '';
-  left.textContent = String(40 - ta.value.length);
-  modal.style.display = 'block';
-  ta.focus();
+  const modal = $('#noteModal'), ta = $('#noteText'), left = $('#charLeft');
+  ta.value = initialText || '';
+  left.textContent = String(40 - ta.value.length);
+  modal.style.display = 'block';
+  ta.focus();
 
-  const onInput = ()=> left.textContent = String(40 - ta.value.length);
-  ta.addEventListener('input', onInput);
+  const onInput = ()=> left.textContent = String(40 - ta.value.length);
+  ta.addEventListener('input', onInput);
 
-  const close = ()=>{
-    ta.removeEventListener('input', onInput);
-    modal.style.display = 'none';
-  };
-  $('#noteCancel').onclick = close;
-  modal.onclick = e => { if (e.target===modal) close(); };
+  const close = ()=>{
+    ta.removeEventListener('input', onInput);
+    modal.style.display = 'none';
+  };
+  $('#noteCancel').onclick = close;
+  modal.onclick = e => { if (e.target===modal) close(); };
 
-  $('#noteSave').onclick = async ()=>{
-    const txt = ta.value.trim().slice(0,40);
-    try{
-      await onSave(txt);
-    }catch(e){ console.error(e); alert('Note update failed'); }
-    close();
-  };
+  $('#noteSave').onclick = async ()=>{
+    const txt = ta.value.trim().slice(0,40);
+    try{
+      await onSave(txt);
+    }catch(e){ console.error(e); alert('Note update failed'); }
+    close();
+  };
 }
 
 function updateDatalist(){
-  const names = new Set();
-  const opts = [];
-  for (const r of catalog){
-    const nm = String(r.ItemName||'').trim();
-    const alt= String(r.ItemNameAlt||'').trim();
-    if (nm && !names.has(nm)) { names.add(nm); opts.push(nm); }
-    if (alt && !names.has(alt)) { names.add(alt); opts.push(alt); }
-  }
-  $('#itemsDatalist').innerHTML = opts.map(v => `<option value="${escapeHtml(v)}">`).join('');
+  const names = new Set();
+  const opts = [];
+  for (const r of catalog){
+    const nm = String(r.ItemName||'').trim();
+    const alt= String(r.ItemNameAlt||'').trim();
+    if (nm && !names.has(nm)) { names.add(nm); opts.push(nm); }
+    if (alt && !names.has(alt)) { names.add(alt); opts.push(alt); }
+  }
+  $('#itemsDatalist').innerHTML = opts.map(v => `<option value="${escapeHtml(v)}">`).join('');
 }
 
 // ===== UI wiring (including Add Item modal) =====
 function wireUI(){
-  // Range options: add Custom + All
-  const rangeSel = $('#rangeSel');
-  if (![...rangeSel.options].some(o=>o.value==='CUSTOM')) {
-    rangeSel.insertAdjacentHTML('beforeend', `<option value="CUSTOM">Custom…</option><option value="ALL">All</option>`);
-  }
+  // Range options: add Custom + All
+  const rangeSel = $('#rangeSel');
+  if (![...rangeSel.options].some(o=>o.value==='CUSTOM')) {
+    rangeSel.insertAdjacentHTML('beforeend', `<option value="CUSTOM">Custom…</option><option value="ALL">All</option>`);
+  }
 
-  // custom input
-  const customInput = document.createElement('input');
-  customInput.type = 'number'; customInput.min = '0'; customInput.placeholder = 'days';
-  customInput.id = 'customDays';
-  customInput.style.display = 'none';
-  customInput.style.width = '80px';
-  rangeSel.parentElement.appendChild(customInput);
+  // custom input
+  const customInput = document.createElement('input');
+  customInput.type = 'number'; customInput.min = '0'; customInput.placeholder = 'days';
+  customInput.id = 'customDays';
+  customInput.style.display = 'none';
+  customInput.style.width = '80px';
+  rangeSel.parentElement.appendChild(customInput);
 
-  const onRangeChange = ()=>{
-    const v = rangeSel.value;
-    customInput.style.display = (v==='CUSTOM') ? '' : 'none';
-    if (v!=='CUSTOM') customInput.value = '';
-    init();
-  };
-  rangeSel.addEventListener('change', onRangeChange);
-  customInput.addEventListener('input', debounce(init, 400));
+  const onRangeChange = ()=>{
+    const v = rangeSel.value;
+    customInput.style.display = (v==='CUSTOM') ? '' : 'none';
+    if (v!=='CUSTOM') customInput.value = '';
+    init();
+  };
+  rangeSel.addEventListener('change', onRangeChange);
+  customInput.addEventListener('input', debounce(init, 400));
 
-  $('#refreshBtn').addEventListener('click', init);
-  $('#unitSel').addEventListener('change', init);
-  $('#searchBox').addEventListener('input', debounce(render, 250));
+  $('#refreshBtn').addEventListener('click', init);
+  $('#unitSel').addEventListener('change', init);
+  $('#searchBox').addEventListener('input', debounce(render, 250));
 
-  // ===== Add Item modal wiring =====
-  const modal = $('#addItemModal');
-  const showBtn = $('#showAddItemModal');
-  const closeBtn = $('.close-btn');
-  const chipBar = $('#addExpiryChips');
-  const compSel = $('#addCompartmentSelect');
-  const qtyInp  = $('#addQty');
-  const itemInp = $('#addItemInput');
-  let selectedExp = '';
+  // ===== Add Item modal wiring =====
+  const modal = $('#addItemModal');
+  const showBtn = $('#showAddItemModal');
+  const closeBtn = $('.close-btn');
+  const chipBar = $('#addExpiryChips');
+  const compSel = $('#addCompartmentSelect');
+  const qtyInp  = $('#addQty');
+  const itemInp = $('#addItemInput');
+  let selectedExp = '';
 
-  function endOfMonthISO(year, monthIndexZeroBased){
-    const last = new Date(year, monthIndexZeroBased + 1, 0);
-    const y = last.getFullYear();
-    const m = String(last.getMonth()+1).padStart(2,'0');
-    const d = String(last.getDate()).padStart(2,'0');
-    return `${y}-${m}-${d}`;
-  }
+  function endOfMonthISO(year, monthIndexZeroBased){
+    const last = new Date(year, monthIndexZeroBased + 1, 0);
+    const y = last.getFullYear();
+    const m = String(last.getMonth()+1).padStart(2,'0');
+    const d = String(last.getDate()).padStart(2,'0');
+    return `${y}-${m}-${d}`;
+  }
 
-  function buildChips(){
-    const now = new Date();
-    const chips = [];
-    for (let i=0;i<3;i++){
-      const d = new Date(now.getFullYear(), now.getMonth()+i, 1);
-      const label = d.toLocaleString(undefined,{month:'short',year:'2-digit'});
-      const iso   = endOfMonthISO(d.getFullYear(), d.getMonth());
-      chips.push({label, iso});
-    }
-    chipBar.innerHTML = chips.map(c=>`<button class="btn exp-chip" data-exp="${c.iso}">${c.label}</button>`).join('') +
-                        `<button class="btn exp-chip custom" data-exp="">Custom…</button>`;
+  function buildChips(){
+    const now = new Date();
+    const chips = [];
+    for (let i=0;i<3;i++){
+      const d = new Date(now.getFullYear(), now.getMonth()+i, 1);
+      const label = d.toLocaleString(undefined,{month:'short',year:'2-digit'});
+      const iso   = endOfMonthISO(d.getFullYear(), d.getMonth());
+      chips.push({label, iso});
+    }
+    chipBar.innerHTML = chips.map(c=>`<button class="btn exp-chip" data-exp="${c.iso}">${c.label}</button>`).join('') +
+                        `<button class="btn exp-chip custom" data-exp="">Custom…</button>`;
 
-    // Insert custom pickers (hidden until "Custom…" is clicked)
-    let customWrap = document.getElementById('customExpiryWrap');
-    if (!customWrap){
-      customWrap = document.createElement('div');
-      customWrap.id = 'customExpiryWrap';
-      customWrap.style.display = 'none';
-      customWrap.style.marginTop = '8px';
-      customWrap.innerHTML = `
-        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-          <label style="display:flex; align-items:center; gap:6px;">
-            <span style="min-width:70px;">Month</span>
-            <input id="customMonth" type="month">
-          </label>
-          <label style="display:flex; align-items:center; gap:6px;">
-            <span style="min-width:70px;">Exact date</span>
-            <input id="customDate" type="date">
-          </label>
-          <button id="applyCustomExp" class="btn">Apply</button>
-        </div>`;
-      chipBar.insertAdjacentElement('afterend', customWrap);
-    }
+    // Insert custom pickers (hidden until "Custom…" is clicked)
+    let customWrap = document.getElementById('customExpiryWrap');
+    if (!customWrap){
+      customWrap = document.createElement('div');
+      customWrap.id = 'customExpiryWrap';
+      customWrap.style.display = 'none';
+      customWrap.style.marginTop = '8px';
+      customWrap.innerHTML = `
+        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+          <label style="display:flex; align-items:center; gap:6px;">
+            <span style="min-width:70px;">Month</span>
+            <input id="customMonth" type="month">
+          </label>
+          <label style="display:flex; align-items:center; gap:6px;">
+            <span style="min-width:70px;">Exact date</span>
+            <input id="customDate" type="date">
+          </label>
+          <button id="applyCustomExp" class="btn">Apply</button>
+        </div>`;
+      chipBar.insertAdjacentElement('afterend', customWrap);
+    }
 
-    // Wire the chips
-    chipBar.querySelectorAll('button.exp-chip').forEach(b=>{
-      b.addEventListener('click', ()=>{
-        chipBar.querySelectorAll('button.exp-chip').forEach(x=>x.style.borderColor='#ddd');
-        b.style.borderColor='blue';
+    // Wire the chips
+    chipBar.querySelectorAll('button.exp-chip').forEach(b=>{
+      b.addEventListener('click', ()=>{
+        chipBar.querySelectorAll('button.exp-chip').forEach(x=>x.style.borderColor='#ddd');
+        b.style.borderColor='blue';
 
-        if (b.classList.contains('custom')){
-          document.getElementById('customExpiryWrap').style.display = '';
-          selectedExp = '';
-        } else {
-          document.getElementById('customExpiryWrap').style.display = 'none';
-          selectedExp = b.dataset.exp || '';
-        }
-      });
-    });
+        if (b.classList.contains('custom')){
+          document.getElementById('customExpiryWrap').style.display = '';
+          selectedExp = '';
+        } else {
+          document.getElementById('customExpiryWrap').style.display = 'none';
+          selectedExp = b.dataset.exp || '';
+        }
+      });
+    });
 
-    document.getElementById('applyCustomExp').onclick = ()=>{
-      const monthVal = document.getElementById('customMonth').value; // YYYY-MM
-      const dateVal  = document.getElementById('customDate').value;  // YYYY-MM-DD
+    document.getElementById('applyCustomExp').onclick = ()=>{
+      const monthVal = document.getElementById('customMonth').value; // YYYY-MM
+      const dateVal  = document.getElementById('customDate').value;  // YYYY-MM-DD
 
-      if (dateVal){
-        selectedExp = dateVal;
-      } else if (monthVal){
-        const [y,m] = monthVal.split('-').map(v=>parseInt(v,10));
-        if (y && m) selectedExp = endOfMonthISO(y, m-1);
-      } else {
-        alert('Pick a month or an exact date.');
-        return;
-      }
-      chipBar.querySelectorAll('button.exp-chip').forEach(x=>x.style.borderColor='#ddd');
-      document.getElementById('customExpiryWrap').style.display = 'none';
-    };
-  }
+      if (dateVal){
+        selectedExp = dateVal;
+      } else if (monthVal){
+        const [y,m] = monthVal.split('-').map(v=>parseInt(v,10));
+        if (y && m) selectedExp = endOfMonthISO(y, m-1);
+      } else {
+        alert('Pick a month or an exact date.');
+        return;
+      }
+      chipBar.querySelectorAll('button.exp-chip').forEach(x=>x.style.borderColor='#ddd');
+      document.getElementById('customExpiryWrap').style.display = 'none';
+    };
+  }
 
-  showBtn.addEventListener('click', ()=>{
-    selectedExp = '';
-    itemInp.value = '';
-    compSel.value = '';
-    qtyInp.value = '1';
-    buildChips();
-    updateDatalist();
-    modal.style.display='block';
-  });
-  closeBtn.addEventListener('click', ()=> modal.style.display='none');
-  window.addEventListener('click', e=>{ if(e.target===modal) modal.style.display='none'; });
+  showBtn.addEventListener('click', ()=>{
+    selectedExp = '';
+    itemInp.value = '';
+    compSel.value = '';
+    qtyInp.value = '1';
+    buildChips();
+    updateDatalist();
+    modal.style.display='block';
+  });
+  closeBtn.addEventListener('click', ()=> modal.style.display='none');
+  window.addEventListener('click', e=>{ if(e.target===modal) modal.style.display='none'; });
 
-  // Save (create)
-  $('#saveNewItemBtn').addEventListener('click', async ()=>{
-    const visibleName = itemInp.value.trim();
-    if (!visibleName) { alert('Pick an item name.'); return; }
+  // Save (create)
+  $('#saveNewItemBtn').addEventListener('click', async ()=>{
+    const visibleName = itemInp.value.trim();
+    if (!visibleName) { alert('Pick an item name.'); return; }
 
-    // Resolve ItemID by ItemName or ItemNameAlt
-    const row = catalog.find(c => [String(c.ItemName||'').toLowerCase(), String(c.ItemNameAlt||'').toLowerCase()].includes(visibleName.toLowerCase()));
-    if (!row || !row.ItemID) { alert('Item not found in Catalog.'); return; }
+    // Resolve ItemID by ItemName or ItemNameAlt
+    const row = catalog.find(c => [String(c.ItemName||'').toLowerCase(), String(c.ItemNameAlt||'').toLowerCase()].includes(visibleName.toLowerCase()));
+    if (!row || !row.ItemID) { alert('Item not found in Catalog.'); return; }
 
-    let unit = $('#unitSel').value;
-    if (unit === 'ALL') {
-      unit = prompt('Which unit is this for (e.g., 31, 33, 36)?')?.trim() || '';
-      if (!unit) return;
-    }
+    let unit = $('#unitSel').value;
+    if (unit === 'ALL') {
+      unit = prompt('Which unit is this for (e.g., 31, 33, 36)?')?.trim() || '';
+      if (!unit) return;
+    }
 
-    if (!selectedExp) { alert('Pick an expiry (chip or custom).'); return; }
-    const payload = {
-      itemId: row.ItemID,
-      unit,
-      compartment: $('#addCompartmentSelect').value.trim(),
-      expiry: selectedExp,                  // ISO yyyy-mm-dd
-      qty: Number($('#addQty').value)||1,
-      crewStatus: ''
-    };
+    if (!selectedExp) { alert('Pick an expiry (chip or custom).'); return; }
+    const payload = {
+      itemId: row.ItemID,
+      unit,
+      compartment: $('#addCompartmentSelect').value.trim(),
+      expiry: selectedExp,                  // ISO yyyy-mm-dd
+      qty: Number($('#addQty').value)||1,
+      crewStatus: ''
+    };
 
-    try{
-      await postCreate(payload);
-      modal.style.display='none';
-      await init(); // refresh list
-    }catch(e){
-      console.error(e);
-      alert('Add failed');
-    }
-  });
+    try{
+      await postCreate(payload);
+      modal.style.display='none';
+      await init(); // refresh list
+    }catch(e){
+      console.error(e);
+      alert('Add failed');
+    }
+  });
 }
 
 // ===== POSTs (via proxy) =====
 async function postUpdate(payload){
-  const r = await fetch(PROXY_URL, {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ token: TOKEN, actionType:'updateInventory', ...payload })
-  });
-  let j;
-  try { j = await r.json(); } catch(e){
-    const txt = await r.text();
-    console.error('POST raw text:', txt);
-    throw new Error('Non-JSON response');
-  }
-  if (!j.ok) throw new Error(j.error||'server');
-  return j;
+  const r = await fetch(PROXY_URL, {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ token: TOKEN, actionType:'updateInventory', ...payload })
+  });
+  let j;
+  try { j = await r.json(); } catch(e){
+    const txt = await r.text();
+    console.error('POST raw text:', txt);
+    throw new Error('Non-JSON response');
+  }
+  if (!j.ok) throw new Error(j.error||'server');
+  return j;
 }
 
 async function postCreate(payload){
-  const r = await fetch(PROXY_URL, {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ token: TOKEN, actionType:'createInventory', ...payload })
-  });
-  let j;
-  try { j = await r.json(); } catch(e){
-    const txt = await r.text();
-    console.error('POST raw text:', txt);
-    throw new Error('Non-JSON response');
-  }
-  if (!j.ok) throw new Error(j.error||'server');
-  return j;
+  const r = await fetch(PROXY_URL, {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ token: TOKEN, actionType:'createInventory', ...payload })
+  });
+  let j;
+  try { j = await r.json(); } catch(e){
+    const txt = await r.text();
+    console.error('POST raw text:', txt);
+    throw new Error('Non-JSON response');
+  }
+  if (!j.ok) throw new Error(j.error||'server');
+  return j;
 }
 
 // ===== init flow =====
 async function init(){
-  try{
-    await loadAll();
-    fillUnitSelect();
-    render();
-  }catch(e){
-    console.error(e);
-    $('#content').innerHTML = `<p style="color:#a00;font-weight:700;">Error loading data. Check Worker URL & GAS deployment.</p>`;
-  }
+  try{
+    await loadAll();
+    fillUnitSelect();
+    render();
+  }catch(e){
+    console.error(e);
+    $('#content').innerHTML = `<p style="color:#a00;font-weight:700;">Error loading data. Check Worker URL & GAS deployment.</p>`;
+  }
 }
 
 // boot
