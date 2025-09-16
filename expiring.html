@@ -350,6 +350,7 @@ function updateDatalist(){
 
 // ===== UI wiring (including Add Item modal) =====
 function wireUI(){
+  // --- EXISTING CODE ---
   // Range options: add Custom + All
   const rangeSel = $('#rangeSel');
   if (![...rangeSel.options].some(o=>o.value==='CUSTOM')) {
@@ -474,6 +475,58 @@ function wireUI(){
   });
   closeBtn.addEventListener('click', ()=> modal.style.display='none');
   window.addEventListener('click', e=>{ if(e.target===modal) modal.style.display='none'; });
+
+  // --- START OF NEW CODE ---
+  // A dedicated function to set up the barcode scanner
+  function setupBarcodeScanner(){
+    const scanBarcodeBtn = $('#scanBarcodeBtn');
+    const addItemInput = $('#addItemInput');
+
+    // Create the hidden file input dynamically
+    const barcodeFileInput = document.createElement('input');
+    barcodeFileInput.type = 'file';
+    barcodeFileInput.accept = 'image/*';
+    barcodeFileInput.capture = 'camera';
+    barcodeFileInput.style.display = 'none';
+    document.body.appendChild(barcodeFileInput);
+
+    // Add an event listener to the new button
+    scanBarcodeBtn.addEventListener('click', () => {
+      barcodeFileInput.click();
+    });
+
+    // Event listener for when a file is selected (i.e., a picture is taken)
+    barcodeFileInput.addEventListener('change', async (event) => {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      // You can show a loading indicator here
+      const scanMsg = 'Scanning...'; // Update a message element on your page
+
+      try {
+        // This is where you would call your Apps Script function
+        const item = await google.script.run
+          .withSuccessHandler(item => {
+            if (item) {
+              addItemInput.value = item.ItemName;
+            } else {
+              alert('Item not found for that barcode.');
+            }
+          })
+          .withFailureHandler(error => {
+            console.error('Scanning error:', error);
+            alert('An error occurred during barcode scanning.');
+          })
+          .getBarcodeData('31F19C21'); // Mock barcode for testing, replace with actual scanned value
+      } catch (error) {
+        console.error('Scanning error:', error);
+        alert('An error occurred during barcode scanning.');
+      }
+    });
+  }
+
+  // --- END OF NEW CODE ---
+
 
   // Save (create)
   $('#saveNewItemBtn').addEventListener('click', async ()=>{
