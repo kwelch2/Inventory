@@ -143,6 +143,17 @@ const state = {
   log: []
 };
 
+// Fast lookup maps
+let catalogById = new Map();
+let vendorsById = new Map();
+
+function getId(obj, ...keys){
+  for (const k of keys){
+    if (obj && obj[k] != null && obj[k] !== '') return String(obj[k]).trim();
+  }
+  return '';
+}
+
 /************* UI: Tabs *************/
 const tabs = [
   { id:'catalog', label:'Catalog Manager' },
@@ -169,8 +180,17 @@ function mountTabs(){
 const $ = id => document.getElementById(id);
 const fmt = n => (Number(n||0)).toFixed(2);
 const genId = () => (crypto && crypto.randomUUID ? crypto.randomUUID() : `ID-${Math.random().toString(36).slice(2)}-${Date.now()}`);
-function nameOf(itemId){ return (state.catalog.find(i=>String(i.ItemID)===String(itemId))||{}).ItemName || 'Unknown'; }
-function vendorOf(vendorId){ return (state.vendors.find(v=>String(v.VendorID)===String(vendorId))||{}).VendorName || 'Vendor'; }
+
+function nameOf(itemId){
+  const id = String(itemId||'').trim();
+  const row = catalogById.get(id);
+  return row?.ItemName || 'Unknown';
+}
+function vendorOf(vendorId){
+  const id = String(vendorId||'').trim();
+  const row = vendorsById.get(id);
+  return row?.VendorName || 'Vendor';
+}
 function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 5200); }
 
 // network timeout helper
@@ -211,7 +231,6 @@ async function apiLoad({ postAction, getAction, params }){
     const res = await POST(postAction, params||{});
     return res;
   }catch(err){
-    // Only fallback if server says unknown_action or method not allowed
     const msg = String(err?.data?.error||'').toLowerCase();
     if (msg.includes('unknown_action') || err.code===405) {
       try{ const res = await GET(getAction, params||{}); toast(`Fallback GET ${getAction} ok`); return res; }
@@ -258,7 +277,7 @@ function renderPricingTable(){
   const rows = state.pricingAll.slice(0,400).map(p=>`<tr>
     <td>${nameOf(p.ItemID)}</td>
     <td>${vendorOf(p.VendorID)}</td>
-    <td>${p.VendorItemNumber||p.VendorSKU||''}</td>
+    <td>${p.VendorItemNumber||''}</td>
     <td>${p.PackSize||1}</td>
     <td>$${fmt(p.UnitPrice)}</td>
     <td>${p.Preferred?'<span class="tag">Preferred</span>':''}</td>
@@ -284,16 +303,25 @@ function renderPlan(){
 function renderVendorGroups(){
   const groups = {};
   state.plan.filter(r=>r.selectedVendor).forEach(r=>{ (groups[r.selectedVendor]??=[]).push(r); });
-  const html = Object.entries(groups).map(([vendorId,rows])=>{
+
+  const sorted = Object.entries(groups)
+    .map(([vendorId,rows])=>({ vendorId, rows, vendorName: vendorOf(vendorId) }))
+    .sort((a,b)=> a.vendorName.localeCompare(b.vendorName));
+
+  const html = sorted.map(({vendorId, rows, vendorName})=>{
     const subtotal = rows.reduce((s,r)=> s + (Number(r.unitPrice||0)*Number(r.qty||0)), 0);
-    const lines = rows.map(r=>`<tr><td>${nameOf(r.itemId)}</td><td>${r.vendorSku||''}</td><td>${r.qty}</td><td>$${fmt(r.unitPrice)}</td><td>$${fmt(r.unitPrice*r.qty)}</td></tr>`).join('');
+    const lines = rows
+      .sort((a,b)=> nameOf(a.itemId).localeCompare(nameOf(b.itemId)))
+      .map(r=>`<tr><td>${nameOf(r.itemId)}</td><td>${r.vendorSku||''}</td><td>${r.qty}</td><td>$${fmt(r.unitPrice)}</td><td>$${fmt(r.unitPrice*r.qty)}</td></tr>`)
+      .join('');
     return `<div class="vendor-basket">
-      <div class="row"><strong>${vendorOf(vendorId)}</strong><span class="muted">Subtotal $${fmt(subtotal)}</span>
+      <div class="row"><strong>${vendorName}</strong><span class="muted">Subtotal $${fmt(subtotal)}</span>
       <span class="spacer"></span>
       <button class="btn primary" onclick="quickMarkOrdered('${vendorId}')">Mark Ordered</button></div>
       <table><thead><tr><th>Item</th><th>Vendor SKU</th><th>Qty</th><th>Price</th><th>Total</th></tr></thead><tbody>${lines}</tbody></table>
     </div>`;
   }).join('') || '<p class="muted">Resolve prices to build vendor baskets.</p>';
+
   $('vendorGroups').innerHTML = html;
 }
 
@@ -349,17 +377,25 @@ $('catAddBtn').onclick = async ()=>{
   }catch(err){ toast(`Save failed: ${err.message}`); }
 };
 
+// Ensure new pricing rows have unique PricingID and LastChecked
 $('vpAddBtn').onclick = async ()=>{
   const row = {
+    PricingID: genId(),
     ItemID: $('vpItem').value,
     VendorID: $('vpVendor').value,
     VendorItemNumber: $('vpSku').value.trim(),
     PackSize: Number($('vpPack').value||1),
-    UnitPrice: Number($('vpPrice').value||0)
+    UnitPrice: Number($('vpPrice').value||0),
+    LastChecked: new Date().toISOString().slice(0,10), // YYYY-MM-DD
+    Preferred: false
   };
   if(!row.ItemID || !row.VendorID){ alert('Select item and vendor'); return; }
-  try{ await POST('upsertvendorprice', { row }); toast('Vendor price saved'); await loadPricing(); }
-  catch(err){ toast(`Save failed: ${err.message}`); }
+  try{
+    await POST('upsertvendorprice', { row });
+    toast('Vendor price saved');
+    $('vpSku').value=''; $('vpPack').value=1; $('vpPrice').value='';
+    await loadPricing();
+  }catch(err){ toast(`Save failed: ${err.message}`); }
 };
 $('vpRefreshBtn').onclick = ()=>loadPricing().catch(err=>toast(err.message));
 
@@ -376,7 +412,11 @@ $('resolveBtn').onclick = ()=>{
     const preferred = candidates.find(c=>String(c.Preferred).toLowerCase()==='true' || c.Preferred===true);
     const best = preferred || candidates.map(p=>({p, cmp:(Number(p.UnitPrice)||0)/Math.max(1,Number(p.PackSize||1))}))
                                       .sort((a,b)=>a.cmp-b.cmp)[0].p;
-    return { ...row, selectedVendor: best.VendorID, vendorSku: (best.VendorItemNumber||best.VendorSKU||''), unitPrice: Number(best.UnitPrice)||0 };
+    return { ...row,
+      selectedVendor: best.VendorID,
+      vendorSku: (best.VendorItemNumber||''),
+      unitPrice: Number(best.UnitPrice)||0
+    };
   });
   renderPlan(); renderVendorGroups();
 };
@@ -403,16 +443,26 @@ async function setOrderStatus(orderId, status){
 async function loadCatalog(){
   try{
     const res = await apiLoad({ postAction:'listcatalog', getAction:'listcatalog' });
-    state.catalog = res.rows || [];
+    state.catalog = (res.rows||[]).map(r=>{
+      const ItemID = getId(r, 'ItemID','ItemId','itemId');
+      return { ...r, ItemID };
+    });
+    catalogById = new Map(state.catalog.map(r => [String(r.ItemID).trim(), r]));
     renderCatalog(); hydrateItemSelects();
+    if (state.pricingAll?.length) renderPricingTable();
   }catch(err){ toast(`Catalog load: ${err.message}`); console.error('Catalog load error', err); }
 }
 
 async function loadVendors(){
   try{
     const res = await apiLoad({ postAction:'listvendors', getAction:'listvendors' });
-    state.vendors = res.rows || [];
+    state.vendors = (res.rows||[]).map(r=>{
+      const VendorID = getId(r, 'VendorID','VendorId','vendorId');
+      return { ...r, VendorID };
+    });
+    vendorsById = new Map(state.vendors.map(r => [String(r.VendorID).trim(), r]));
     renderVendors();
+    if (state.pricingAll?.length) renderPricingTable();
   }catch(err){ toast(`Vendors load: ${err.message}`); console.error('Vendors load error', err); }
 }
 
@@ -420,7 +470,17 @@ async function loadPricing(itemId){
   try{
     const params = itemId ? { itemId } : {};
     const res = await apiLoad({ postAction:'listvendorpricing', getAction:'listvendorpricing', params });
-    state.pricingAll = res.rows || [];
+    state.pricingAll = (res.rows||[]).map(p=>{
+      const ItemID   = getId(p, 'ItemID','ItemId','itemId');
+      const VendorID = getId(p, 'VendorID','VendorId','vendorId');
+      const VendorItemNumber = p.VendorItemNumber ?? p.VendorSKU ?? p.vendorSku ?? '';
+      const PackSize = Number(p.PackSize ?? 1);
+      const UnitPrice = Number(p.UnitPrice ?? 0);
+      const Preferred = (String(p.Preferred).toLowerCase()==='true' || p.Preferred===true);
+      const PricingID = getId(p, 'PricingID','PricingId','pricingId');
+      const LastChecked = p.LastChecked ?? '';
+      return { ...p, ItemID, VendorID, VendorItemNumber, PackSize, UnitPrice, Preferred, PricingID, LastChecked };
+    });
     renderPricingTable();
   }catch(err){ toast(`Pricing load: ${err.message}`); console.error('Pricing load error', err); }
 }
@@ -478,6 +538,8 @@ async function boot(){
     .catch(()=>reportConnectivity(false));
   await Promise.allSettled([loadCatalog(), loadVendors(), loadPricing()]);
   await Promise.allSettled([loadOrders(), loadLog()]);
+  // second pass to ensure names resolve after maps are built
+  setTimeout(()=>{ renderPricingTable(); renderPlan(); renderVendorGroups(); }, 0);
   // Hook refresh buttons
   $('ordersRefreshBtn').onclick = ()=>loadOrders().catch(err=>toast(err.message));
   $('toggleHistory').onchange = ()=>renderOrders();
@@ -502,4 +564,3 @@ window.addEventListener('error', (ev)=>{
 </script>
 </body>
 </html>
-
