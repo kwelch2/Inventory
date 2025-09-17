@@ -37,15 +37,19 @@
       min-width:140px;text-align:left;cursor:pointer
     }
     .btn.is-active{background:var(--warn);}
-    #interactive.viewport {
-        position: relative;
-        width: 100%;
-        height: 300px;
-        border: 1px solid #ccc;
+    #interactive-search-modal {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 1000;
+        width: min(640px, 95%);
+        height: 360px;
         background: #000;
+        border: 1px solid #ccc;
         display: none;
     }
-    #interactive.viewport video {
+    #interactive-search-modal video {
         position: absolute;
         top: 0;
         left: 0;
@@ -94,7 +98,6 @@
       <button class="btn" id="showAddItemModal">+ Add Item</button>
       <span id="count" class="muted"></span>
     </div>
-    <div id="interactive" class="viewport"></div>
   </div>
 
   <div id="content" class="card"></div>
@@ -119,7 +122,7 @@
     <span class="close-btn">&times;</span>
     <h3>Add Item to Inventory</h3>
     
-    <div id="interactive-modal" class="viewport"></div>
+    <div id="interactive" class="viewport"></div>
     
     <div class="grid2">
       <div>
@@ -409,7 +412,7 @@ function wireUI(){
   $('#refreshBtn').addEventListener('click', init);
   $('#unitSel').addEventListener('change', init);
   $('#searchBox').addEventListener('input', debounce(render, 250));
-
+  
   // Toolbar scanner button
   $('#startScanBtn').addEventListener('click', () => setupBarcodeScanner(true));
 
@@ -550,7 +553,7 @@ function wireUI(){
 function setupBarcodeScanner(forSearch = false) {
   const scanButton = forSearch ? $('#startScanBtn') : $('#scanBarcodeBtn');
   const viewport = forSearch ? $('#interactive') : $('#interactive-modal');
-  const stopText = 'Stop Scan';
+  const stopIcon = `<img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23c00' d='M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z'/%3E%3C/svg%3E" alt="Stop Scanner" class="scan-icon">`;
 
   if (isScannerActive) {
     Quagga.stop();
@@ -579,7 +582,7 @@ function setupBarcodeScanner(forSearch = false) {
     console.log("Initialization finished. Ready to start.");
     Quagga.start();
     isScannerActive = true;
-    scanButton.textContent = stopText;
+    scanButton.innerHTML = stopIcon;
     
     Quagga.onDetected(async function(result) {
       if (result && result.codeResult && result.codeResult.code) {
