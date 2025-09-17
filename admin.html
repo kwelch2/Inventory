@@ -202,7 +202,6 @@ const state = {
 let catalogById = new Map();
 let vendorsById = new Map();
 let catalogSearch = ''; // current search text
-let isScannerActive = false;
 
 
 function getId(obj, ...keys){
@@ -321,11 +320,11 @@ function renderCatalog(){
     <td>${i.ItemNameAlt||''}</td>
     <td>${i['ItemRef#']||''}</td>
     <td>${i.Category||''}</td>
+    <td>${i.Unit||''}</td>
+    <td>${i.PackSize||1}</td>
     <td>
       <button class="btn" data-edit="${i.ItemID}">Edit</button>
-      <button class="btn ghost" data-barcode="${i.ItemID}">
-        <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z'/%3E%3C/svg%3E" alt="Barcode Scanner" style="height:20px;width:20px;">
-      </button>
+      <button class="btn ghost" data-barcode="${i.ItemID}">Barcode</button>
     </td>
   </tr>`).join('');
 
@@ -337,6 +336,8 @@ function renderCatalog(){
             <th>Alt Name</th>
             <th>Item #</th>
             <th>Category</th>
+            <th>Unit</th>
+            <th>Pack</th>
             <th>Actions</th>
           </tr>
         </thead>
@@ -449,78 +450,11 @@ $('dlgSaveBtn').onclick = async ()=>{
   }
 };
 
-async function handleBarcode(itemId){
+function handleBarcode(itemId){
   const item = state.catalog.find(r => String(r.ItemID)===String(itemId));
   if(!item){ toast('Item not found'); return; }
   // placeholder – hook your future barcode add UI here
   toast(`Barcode: soon for "${item.ItemName}" (${item.ItemID})`);
-}
-
-function startBarcodeScan(forSearch = true) {
-  const scannerViewport = $('interactive');
-  const scanBtn = forSearch ? $('startScanBtn') : $('dlgScanBtn');
-  const catSearch = $('catSearch');
-  const dlgBarcode = $('dlgBarcode');
-  
-  if (isScannerActive) {
-    Quagga.stop();
-    isScannerActive = false;
-    scannerViewport.style.display = 'none';
-    scanBtn.innerHTML = '<img src="data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\'%3E%3Cpath d=\'M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z\'/%3E%3C/svg%3E" alt="Barcode Scanner" style="height:20px;width:20px;">';
-    return;
-  }
-  
-  scannerViewport.style.display = 'block';
-  Quagga.init({
-    inputStream: {
-      name: "Live",
-      type: "LiveStream",
-      target: scannerViewport
-    },
-    decoder: {
-      readers: ["code_128_reader", "upc_reader", "ean_reader", "ean_8_reader", "code_39_reader"]
-    }
-  }, function(err) {
-    if (err) {
-      console.error(err);
-      alert("Error starting scanner: " + err);
-      return;
-    }
-    Quagga.start();
-    isScannerActive = true;
-    scanBtn.innerHTML = 'Stop Scan';
-  });
-
-  Quagga.onDetected(async function(result) {
-    if (result && result.codeResult && result.codeResult.code) {
-      Quagga.stop();
-      isScannerActive = false;
-      scannerViewport.style.display = 'none';
-      scanBtn.innerHTML = '<img src="data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\'%3E%3Cpath d=\'M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z\'/%3E%3C/svg%3E" alt="Barcode Scanner" style="height:20px;width:20px;">';
-
-      const barcodeValue = result.codeResult.code;
-
-      try {
-        const data = await GET('getbarcodedata', { barcode: barcodeValue });
-        if (data.ok && data.item) {
-          if(forSearch) {
-            catalogSearch = data.item.ItemName;
-            catSearch.value = data.item.ItemName;
-            renderCatalog();
-            toast(`Scanned: ${barcodeValue} -> ${data.item.ItemName}`);
-          } else {
-            dlgBarcode.value = barcodeValue;
-            toast(`Scanned: ${barcodeValue} -> ${data.item.ItemName}`);
-          }
-        } else {
-          toast(`Scanned: ${barcodeValue} (item not found)`);
-        }
-      } catch (err) {
-        console.error(err);
-        toast('Barcode lookup failed – check server route.');
-      }
-    }
-  });
 }
 
 
@@ -773,9 +707,6 @@ async function boot(){
     catalogSearch = e.target.value || '';
     renderCatalog();
   });
-  // New barcode scan button for search
-  $('startScanBtn').onclick = ()=> startBarcodeScan(true);
-  $('dlgScanBtn').onclick = ()=> startBarcodeScan(false);
 
 }
 boot();
