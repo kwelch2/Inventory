@@ -65,6 +65,7 @@
       border:1px solid var(--b);border-radius:12px;padding:14px}
     #noteText{width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--b);border-radius:8px}
     #charLeft{float:right;color:var(--muted);font-size:.85rem}
+    .scan-icon { height:20px;width:20px; }
 </style>
 </head>
 <body>
@@ -83,12 +84,17 @@
       <label>Unit
         <select id="unitSel"><option value="ALL">ALL</option></select>
       </label>
-      <input id="searchBox" placeholder="Search item, compartment…"/>
+      <div style="display:flex; gap: 8px; align-items:center; flex:1;">
+        <button class="btn" id="startScanBtn" title="Scan Barcode to Search">
+          <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z'/%3E%3C/svg%3E" alt="Barcode Scanner" class="scan-icon">
+        </button>
+        <input id="searchBox" placeholder="Search item, compartment…" style="flex:1;"/>
+      </div>
       <button class="btn" id="refreshBtn">Refresh</button>
-      <span class="spacer"></span>
       <button class="btn" id="showAddItemModal">+ Add Item</button>
       <span id="count" class="muted"></span>
     </div>
+    <div id="interactive" class="viewport"></div>
   </div>
 
   <div id="content" class="card"></div>
@@ -113,7 +119,7 @@
     <span class="close-btn">&times;</span>
     <h3>Add Item to Inventory</h3>
     
-    <div id="interactive" class="viewport"></div>
+    <div id="interactive-modal" class="viewport"></div>
     
     <div class="grid2">
       <div>
@@ -121,7 +127,7 @@
         <div style="display:flex; gap:8px; align-items:center;">
           <input id="addItemInput" list="itemsDatalist" placeholder="Start typing name…" style="flex:1;" />
           <button id="scanBarcodeBtn" class="btn" title="Scan Barcode">
-            <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z'/%3E%3C/svg%3E" alt="Barcode Scanner" style="height:20px;width:20px;">
+            <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z'/%3E%3C/svg%3E" alt="Barcode Scanner" class="scan-icon">
           </button>
         </div>
         <datalist id="itemsDatalist"></datalist>
@@ -150,7 +156,7 @@
 
 <script>
 // ===== CONFIG =====
-const PROXY_URL = 'https://ems-inventory-proxy.kylewelch33.workers.dev'; // no trailing slash
+const PROXY_URL = 'https://ems-inventory-proxy.kylewelch33.workers.dev';
 const TOKEN     = '9mB4zR7kP2fW6vNqE1jH8aLcV5gT_sYx0uI-oZ3pD9bX4wK7eS6hF-EMS';
 
 // ===== UTIL =====
@@ -169,7 +175,7 @@ function rowClass(days, status){
 }
 
 // ===== STATE =====
-let units = [], rows = [], catalog = []; // catalog used for Add Item search
+let units = [], rows = [], catalog = [];
 let isScannerActive = false;
 let onDetectedCallback = null;
 
@@ -404,6 +410,9 @@ function wireUI(){
   $('#unitSel').addEventListener('change', init);
   $('#searchBox').addEventListener('input', debounce(render, 250));
 
+  // Toolbar scanner button
+  $('#startScanBtn').addEventListener('click', () => setupBarcodeScanner(true));
+
   // ===== Add Item modal wiring =====
   const modal = $('#addItemModal');
   const showBtn = $('#showAddItemModal');
@@ -498,13 +507,7 @@ function wireUI(){
     updateDatalist();
     modal.style.display='block';
   });
-  closeBtn.addEventListener('click', ()=> {
-    if (isScannerActive) {
-      Quagga.stop();
-      isScannerActive = false;
-    }
-    modal.style.display='none';
-  });
+  closeBtn.addEventListener('click', ()=> modal.style.display='none');
   window.addEventListener('click', e=>{ if(e.target===modal) modal.style.display='none'; });
 
 // Save (create)
@@ -544,24 +547,25 @@ function wireUI(){
 }
 
 // This is the function that initializes the barcode scanner.
-function startBarcodeScan(callback) {
-  const scannerViewport = $('#interactive');
-  const scanBtn = $('#scanBarcodeBtn');
+function setupBarcodeScanner(forSearch = false) {
+  const scanButton = forSearch ? $('#startScanBtn') : $('#scanBarcodeBtn');
+  const viewport = forSearch ? $('#interactive') : $('#interactive-modal');
+  const stopText = 'Stop Scan';
 
   if (isScannerActive) {
     Quagga.stop();
     isScannerActive = false;
-    scanBtn.innerHTML = '<img src="data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\'%3E%3Cpath d=\'M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z\'/%3E%3C/svg%3E" alt="Barcode Scanner" style="height:20px;width:20px;">';
-    scannerViewport.style.display = 'none';
+    scanButton.innerHTML = `<img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z'/%3E%3C/svg%3E" alt="Barcode Scanner" class="scan-icon">`;
+    viewport.style.display = 'none';
     return;
   }
 
-  scannerViewport.style.display = 'block';
+  viewport.style.display = 'block';
   Quagga.init({
     inputStream: {
       name: "Live",
       type: "LiveStream",
-      target: document.querySelector('#interactive')
+      target: viewport
     },
     decoder: {
       readers: ["code_128_reader", "upc_reader", "ean_reader", "ean_8_reader", "code_39_reader"]
@@ -572,26 +576,51 @@ function startBarcodeScan(callback) {
       alert("Error starting scanner: " + err);
       return;
     }
+    console.log("Initialization finished. Ready to start.");
     Quagga.start();
     isScannerActive = true;
-    scanBtn.innerHTML = 'Stop Scan';
+    scanButton.textContent = stopText;
     
-    // Unbind previous listener to avoid multiple calls
-    if(onDetectedCallback) {
-        Quagga.offDetected(onDetectedCallback);
-    }
-    
-    onDetectedCallback = async function(result) {
+    Quagga.onDetected(async function(result) {
       if (result && result.codeResult && result.codeResult.code) {
         Quagga.stop();
         isScannerActive = false;
-        scanBtn.innerHTML = '<img src="data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\'%3E%3Cpath d=\'M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z\'/%3E%3C/svg%3E" style="height:20px;width:20px;">';
-        scannerViewport.style.display = 'none';
-        
-        callback(result.codeResult.code);
+        scanButton.innerHTML = `<img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z'/%3E%3C/svg%3E" alt="Barcode Scanner" class="scan-icon">`;
+        viewport.style.display = 'none';
+
+        const barcodeValue = result.codeResult.code;
+        try {
+          const resp = await fetch(PROXY_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              token: TOKEN,
+              actionType: 'getbarcodedata',
+              barcode: barcodeValue
+            })
+          });
+          const txt = await resp.text();
+          let data;
+          try { data = JSON.parse(txt); }
+          catch (e) { throw new Error('Non-JSON from proxy: ' + txt.slice(0,180)); }
+
+          if (data.ok && data.item) {
+            if (forSearch) {
+              $('#searchBox').value = data.item.ItemName || data.item.ItemNameAlt || '';
+              render();
+            } else {
+              $('#addItemInput').value = data.item.ItemName || data.item.ItemNameAlt || '';
+            }
+            alert(`Barcode detected: ${barcodeValue}`);
+          } else {
+            alert(`Barcode detected, but item not found: ${barcodeValue}`);
+          }
+        } catch (err) {
+          console.error(err);
+          alert('Barcode lookup failed – check proxy & GAS routes.');
+        }
       }
-    };
-    Quagga.onDetected(onDetectedCallback);
+    });
   });
 }
 
@@ -642,36 +671,6 @@ async function init(){
 // boot
 wireUI();
 init();
-
-$('#scanBarcodeBtn').addEventListener('click', () => {
-  startBarcodeScan(async (barcodeValue) => {
-    try {
-      const resp = await fetch(PROXY_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          token: TOKEN,
-          actionType: 'getbarcodedata',
-          barcode: barcodeValue
-        })
-      });
-      const txt = await resp.text();
-      let data;
-      try { data = JSON.parse(txt); }
-      catch (e) { throw new Error('Non-JSON from proxy: ' + txt.slice(0,180)); }
-
-      if (data.ok && data.item) {
-        $('#addItemInput').value = data.item.ItemName || data.item.ItemNameAlt || '';
-        alert(`Barcode detected: ${barcodeValue}`);
-      } else {
-        alert(`Barcode detected, but item not found: ${barcodeValue}`);
-      }
-    } catch (err) {
-      console.error(err);
-      alert('Barcode lookup failed – check proxy & GAS routes.');
-    }
-  });
-});
 </script>
 </body>
 </html>
