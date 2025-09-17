@@ -4,8 +4,7 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>EMS Supplies — Admin Dashboard</title>
-  <script src="https://unpkg.com/quagga@0.12.1/dist/quagga.min.js"></script>
-  <script src="quagga.min.js"></script>
+  <script src="https://kwelch2.github.io/Inventory/quagga.min.js"></script>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='50' font-size='50'%3E🚑%3C/text%3E%3C/svg%3E">
   <style>
     :root{--bg:#f7f7f7;--card:#fff;--b:#ddd;--muted:#666;--ink:#111;--accent:#0a66ff;--bad:#b00020;--ok:#137333}
@@ -184,7 +183,7 @@
 /*************************
  * CONFIG — match Apps Script
  *************************/
-const BASE = 'https://script.google.com/macros/s/AKfycbypxL0KxxXMVRieHHuvX98m9Jx6fYJWTdrMLQNkt99Sgt0vNzRDeyGiDz5fILlORP8wFQ/exec';
+const BASE = 'https://ems-inventory-proxy.kylewelch33.workers.dev';
 const TOKEN = '9mB4zR7kP2fW6vNqE1jH8aLcV5gT_sYx0uI-oZ3pD9bX4wK7eS6hF-EMS';
 
 const state = {
@@ -262,7 +261,10 @@ function withTimeout(promise, ms=15000){
 async function POST(actionType, payload={}){
   const body = { token: TOKEN, actionType, ...payload };
   const resp = await withTimeout((signal)=>fetch(BASE, {
-    method:'POST', headers:{ 'Content-Type':'text/plain;charset=UTF-8' }, body: JSON.stringify(body), signal
+    method:'POST',
+    headers:{ 'Content-Type':'application/json' },
+    body: JSON.stringify(body),
+    signal
   }));
   const text = await resp.text();
   let data; try{ data = JSON.parse(text); }catch{ data = { ok:false, error:'Non-JSON response', raw:text }; }

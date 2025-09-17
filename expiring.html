@@ -4,8 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Expiring Supplies – GC EMS</title>
-<script src="https://unpkg.com/quagga@0.12.1/dist/quagga.min.js"></script>
-<script src="quagga.min.js"></script>
+<script src="https://kwelch2.github.io/Inventory/quagga.min.js"></script>
 <style>
     :root{--bg:#f7f7f7;--card:#fff;--b:#ddd;--muted:#666;--ok:#e7f7ee;--warn:#fff7e6;--bad:#fdecea}
     *{box-sizing:border-box}
@@ -574,30 +573,40 @@ function setupBarcodeScanner() {
       });
 
       Quagga.onDetected(async function(result) {
-        if (result && result.codeResult && result.codeResult.code) {
-          Quagga.stop();
-          isScannerActive = false;
-          scanBarcodeBtn.innerHTML = '<img src="data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\'%3E%3Cpath d=\'M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z\'/%3E%3C/svg%3E" alt="Barcode Scanner" style="height:20px;width:20px;">';
-          scannerViewport.style.display = 'none';
-          
-          const barcodeValue = result.codeResult.code;
+      if (result && result.codeResult && result.codeResult.code) {
+        Quagga.stop();
+        isScannerActive = false;
+        scanBarcodeBtn.innerHTML = '<img src="data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\'%3E%3Cpath d=\'M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z\'/%3E%3C/svg%3E" style="height:20px;width:20px;">';
+        scannerViewport.style.display = 'none';
 
-          // Call Apps Script function to get item data from barcode value
-          google.script.run
-            .withSuccessHandler(function(item) {
-              if (item) {
-                addItemInput.value = item.ItemName;
-                alert(`Barcode detected: ${barcodeValue}`);
-              } else {
-                alert(`Barcode detected, but item not found: ${barcodeValue}`);
-              }
+        const barcodeValue = result.codeResult.code;
+
+        try {
+          const resp = await fetch(PROXY_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              token: TOKEN,
+              actionType: 'getbarcodedata',
+              barcode: barcodeValue
             })
-            .withFailureHandler(function(error) {
-              console.error('Apps Script Error: ' + error);
-              alert('An error occurred during item lookup.');
-            })
-            .getBarcodeData(barcodeValue);
+          });
+          const txt = await resp.text();
+          let data;
+          try { data = JSON.parse(txt); }
+          catch (e) { throw new Error('Non-JSON from proxy: ' + txt.slice(0,180)); }
+
+          if (data.ok && data.item) {
+            addItemInput.value = data.item.ItemName || data.item.ItemNameAlt || '';
+            alert(`Barcode detected: ${barcodeValue}`);
+          } else {
+            alert(`Barcode detected, but item not found: ${barcodeValue}`);
+          }
+        } catch (err) {
+          console.error(err);
+          alert('Barcode lookup failed – check proxy & GAS routes.');
         }
+      }
       });
     }
   });
