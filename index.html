@@ -48,11 +48,11 @@
   <img src="Logo-1.jpg" alt="EMS Logo" class="logo" id="logo">
 
   <!-- Main buttons -->
-  <a href="Expiring.html" class="btn">Supplies: Expiring</a>
-  <a href="Orders.html" class="btn">Requests</a>
+  <a href="expiring.html" class="btn">Supplies: Expiring</a>
+  <a href="orders.html" class="btn">Requests</a>
 
   <!-- Hidden admin button -->
-  <a href="Admin.html" class="btn admin-link" id="adminLink">Admin</a>
+  <a href="admin.html" class="btn admin-link" id="adminLink">Admin</a>
 
   <script>
     let clickCount = 0;
@@ -61,7 +61,7 @@
 
     logo.addEventListener('click', () => {
       clickCount++;
-      if (clickCount >= 3) {
+      if (clickCount >= 4) {
         adminLink.style.display = 'inline-block';
         clickCount = 0; // reset after showing
       }
