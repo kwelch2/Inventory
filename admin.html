@@ -41,13 +41,34 @@
     .toast.show{display:block}
     .kvd{font-size:12px;color:#555}
     code.badge{background:#f5f5f5;border:1px solid var(--b);padding:2px 6px;border-radius:6px}
+    #interactive.viewport {
+      position: relative;
+      width: 100%;
+      height: 300px;
+      border: 1px solid #ccc;
+      background: #000;
+      display: none;
+    }
+    #interactive.viewport video {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+    }
+    .drawingBuffer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+    }
   </style>
 </head>
 <body>
 <div class="wrap">
   <h1>EMS Supplies — Admin Dashboard</h1>
 
-  <!-- Connectivity / Diagnostics Banner -->
   <div class="banner" id="diag">
     <strong>Connectivity</strong>
     <span id="statusIcon" class="pill bad">Checking…</span>
@@ -59,26 +80,27 @@
 
   <div class="tabs" id="tabs"></div>
 
-  <!-- Catalog Manager -->
-<section id="panel-catalog" class="panel">
+  <section id="panel-catalog" class="panel">
   <h2>Catalog Manager <span class="kvd" id="kvCatalog"></span></h2>
 
-  <!-- Quick add/upsert (unchanged) -->
   <div class="row">
     <input id="catName" placeholder="Item name"/>
     <input id="catCategory" placeholder="Category"/>
-    <input id="catUnit" placeholder="Unit (ea/box/case)"/>
-    <input id="catPack" type="number" min="1" value="1" placeholder="Pack size"/>
     <button class="btn primary" id="catAddBtn">Add / Upsert</button>
     <span class="muted">Uses <span class="mono">upsertcatalog</span></span>
     <span class="spacer"></span>
-    <input id="catSearch" placeholder="Search items…" style="min-width:240px"/>
+    <div style="display:flex; gap: 8px; align-items:center;">
+      <button class="btn" id="startScanBtn" title="Scan Barcode to Search">
+        <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z'/%3E%3C/svg%3E" alt="Barcode Scanner" style="height:20px;width:20px;">
+      </button>
+      <input id="catSearch" placeholder="Search items…" style="min-width:240px"/>
+    </div>
   </div>
 
+  <div id="interactive" class="viewport"></div>
   <div id="catalogTable" style="margin-top:10px"></div>
 </section>
 
-  <!-- Edit Catalog Dialog -->
   <div id="catalogDialog" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.35); z-index:9999; align-items:center; justify-content:center;">
     <div style="background:#fff; border:1px solid #ddd; border-radius:12px; width:min(720px,90vw); padding:16px; box-shadow:0 10px 30px rgba(0,0,0,.2)">
       <h3 style="margin:.2rem 0 1rem">Edit Catalog Item</h3>
@@ -95,16 +117,11 @@
         <input id="dlgUnit" placeholder="Unit" style="flex:1"/>
         <input id="dlgPackSize" type="number" min="1" placeholder="PackSize" style="flex:1"/>
       </div>
-      <!-- existing row -->
       <div class="row" style="gap:10px; margin-top:8px">
         <input id="dlgBarcode" placeholder="Scan or type barcode" style="flex:2"/>
-        <button class="btn" id="dlgScanBtn">Scan</button>
-      </div>
-
-      <!-- NEW: camera viewport (hidden until scanning) -->
-      <div id="dlgInteractive" style="
-        display:none; position:relative; width:min(640px,95%);
-        height:360px; background:#000; border-radius:10px; overflow:hidden; margin-top:8px">
+        <button class="btn" id="dlgScanBtn" title="Add another barcode">
+          <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z'/%3E%3C/svg%3E" alt="Barcode Scanner" style="height:20px;width:20px;">
+        </button>
       </div>
       <div class="row" style="gap:8px; margin-top:14px">
         <button class="btn primary" id="dlgSaveBtn">Save</button>
@@ -112,19 +129,8 @@
         <span class="spacer"></span>
         <span class="muted">Saves with <span class="mono">upsertcatalog</span></span>
       </div>
-      <div class="row" style="margin-top:6px">
-      <button class="btn" id="scanBarcodeBtn">
-        <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z'/%3E%3C/svg%3E" alt="Barcode Scanner" style="height:20px;width:20px;">
-      </button>
-      <span class="muted">Scan a barcode to lookup an item.</span>
-    </div>
-
-    <!-- Scanner viewport: hidden until scanning -->
-    <div id="interactive" style="display:none; position:relative; max-width:640px; height:360px; background:#000; border-radius:10px; overflow:hidden; margin-top:8px"></div>
-
     </div>
   </div>
-  <!-- Vendor Pricing -->
   <section id="panel-pricing" class="panel">
     <h2>Vendor Pricing <span class="kvd" id="kvPricing"></span></h2>
     <div class="row">
@@ -139,7 +145,6 @@
     <div id="pricingTable" style="margin-top:10px"></div>
   </section>
 
-  <!-- Order Planner -->
   <section id="panel-planner" class="panel">
     <h2>Order Planner <span class="kvd" id="kvPlan"></span></h2>
     <div class="row">
@@ -155,7 +160,6 @@
     <div id="vendorGroups"></div>
   </section>
 
-  <!-- Orders -->
   <section id="panel-orders" class="panel">
     <h2>Orders <span class="kvd" id="kvOrders"></span></h2>
     <div class="row">
@@ -166,7 +170,6 @@
     <div id="ordersTable"></div>
   </section>
 
-  <!-- Activity Log -->
   <section id="panel-log" class="panel">
     <h2>Activity Log <span class="kvd" id="kvLog"></span></h2>
     <div class="row">
@@ -199,6 +202,7 @@ const state = {
 let catalogById = new Map();
 let vendorsById = new Map();
 let catalogSearch = ''; // current search text
+let isScannerActive = false;
 
 
 function getId(obj, ...keys){
@@ -317,11 +321,11 @@ function renderCatalog(){
     <td>${i.ItemNameAlt||''}</td>
     <td>${i['ItemRef#']||''}</td>
     <td>${i.Category||''}</td>
-    <td>${i.Unit||''}</td>
-    <td>${i.PackSize||1}</td>
     <td>
       <button class="btn" data-edit="${i.ItemID}">Edit</button>
-      <button class="btn ghost" data-barcode="${i.ItemID}">Barcode</button>
+      <button class="btn ghost" data-barcode="${i.ItemID}">
+        <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z'/%3E%3C/svg%3E" alt="Barcode Scanner" style="height:20px;width:20px;">
+      </button>
     </td>
   </tr>`).join('');
 
@@ -333,8 +337,6 @@ function renderCatalog(){
             <th>Alt Name</th>
             <th>Item #</th>
             <th>Category</th>
-            <th>Unit</th>
-            <th>Pack</th>
             <th>Actions</th>
           </tr>
         </thead>
@@ -447,11 +449,78 @@ $('dlgSaveBtn').onclick = async ()=>{
   }
 };
 
-function handleBarcode(itemId){
+async function handleBarcode(itemId){
   const item = state.catalog.find(r => String(r.ItemID)===String(itemId));
   if(!item){ toast('Item not found'); return; }
   // placeholder – hook your future barcode add UI here
   toast(`Barcode: soon for "${item.ItemName}" (${item.ItemID})`);
+}
+
+function startBarcodeScan(forSearch = true) {
+  const scannerViewport = $('interactive');
+  const scanBtn = forSearch ? $('startScanBtn') : $('dlgScanBtn');
+  const catSearch = $('catSearch');
+  const dlgBarcode = $('dlgBarcode');
+  
+  if (isScannerActive) {
+    Quagga.stop();
+    isScannerActive = false;
+    scannerViewport.style.display = 'none';
+    scanBtn.innerHTML = '<img src="data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\'%3E%3Cpath d=\'M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z\'/%3E%3C/svg%3E" alt="Barcode Scanner" style="height:20px;width:20px;">';
+    return;
+  }
+  
+  scannerViewport.style.display = 'block';
+  Quagga.init({
+    inputStream: {
+      name: "Live",
+      type: "LiveStream",
+      target: scannerViewport
+    },
+    decoder: {
+      readers: ["code_128_reader", "upc_reader", "ean_reader", "ean_8_reader", "code_39_reader"]
+    }
+  }, function(err) {
+    if (err) {
+      console.error(err);
+      alert("Error starting scanner: " + err);
+      return;
+    }
+    Quagga.start();
+    isScannerActive = true;
+    scanBtn.innerHTML = 'Stop Scan';
+  });
+
+  Quagga.onDetected(async function(result) {
+    if (result && result.codeResult && result.codeResult.code) {
+      Quagga.stop();
+      isScannerActive = false;
+      scannerViewport.style.display = 'none';
+      scanBtn.innerHTML = '<img src="data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\'%3E%3Cpath d=\'M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z\'/%3E%3C/svg%3E" alt="Barcode Scanner" style="height:20px;width:20px;">';
+
+      const barcodeValue = result.codeResult.code;
+
+      try {
+        const data = await GET('getbarcodedata', { barcode: barcodeValue });
+        if (data.ok && data.item) {
+          if(forSearch) {
+            catalogSearch = data.item.ItemName;
+            catSearch.value = data.item.ItemName;
+            renderCatalog();
+            toast(`Scanned: ${barcodeValue} -> ${data.item.ItemName}`);
+          } else {
+            dlgBarcode.value = barcodeValue;
+            toast(`Scanned: ${barcodeValue} -> ${data.item.ItemName}`);
+          }
+        } else {
+          toast(`Scanned: ${barcodeValue} (item not found)`);
+        }
+      } catch (err) {
+        console.error(err);
+        toast('Barcode lookup failed – check server route.');
+      }
+    }
+  });
 }
 
 
@@ -704,6 +773,9 @@ async function boot(){
     catalogSearch = e.target.value || '';
     renderCatalog();
   });
+  // New barcode scan button for search
+  $('startScanBtn').onclick = ()=> startBarcodeScan(true);
+  $('dlgScanBtn').onclick = ()=> startBarcodeScan(false);
 
 }
 boot();
