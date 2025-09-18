@@ -419,9 +419,9 @@ function wireUI(){
   $('#refreshBtn').addEventListener('click', init);
   $('#unitSel').addEventListener('change', init);
   $('#searchBox').addEventListener('input', debounce(render, 250));
-  
-  // Toolbar scanner button
-  $('#startScanBtn').addEventListener('click', () => setupBarcodeScanner(true));
+  
+  // Toolbar scanner button
+  $('#startScanBtn').addEventListener('click', () => setupBarcodeScanner(true));
 
   // ===== Add Item modal wiring =====
   const modal = $('#addItemModal');
@@ -557,7 +557,6 @@ function wireUI(){
 }
 
 // This is the function that initializes the barcode scanner.
-// This is the function that initializes the barcode scanner.
 function setupBarcodeScanner(forSearch = false) {
   const scanButton = forSearch ? $('#startScanBtn') : $('#scanBarcodeBtn');
   const viewport = forSearch ? $('#interactive-search-viewport') : $('#interactive');
@@ -571,7 +570,7 @@ function setupBarcodeScanner(forSearch = false) {
     modal.style.display = 'none';
     return;
   }
-  
+  
   modal.style.display = 'block';
   Quagga.init({
     inputStream: {
