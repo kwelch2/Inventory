@@ -522,8 +522,13 @@ function wireUI(){
     if (!visibleName) { alert('Pick an item name.'); return; }
 
     // Resolve ItemID by ItemName or ItemNameAlt
-    const row = catalog.find(c => [String(c.ItemName||'').toLowerCase(), String(c.ItemNameAlt||'').toLowerCase()].includes(visibleName.toLowerCase()));
-    if (!row || !row.ItemID) { alert('Item not found in Catalog.'); return; }
+    const row = catalog.find(c => {
+  const nm  = (c.ItemName || '').toLowerCase();
+  const alt = (c.ItemNameAlt || '').toLowerCase();
+  const v   = visibleName.toLowerCase();
+  return nm.includes(v) || alt.includes(v);
+});
+if (!row || !row.ItemID) { alert('Item not found in Catalog.'); return; }
 
     let unit = $('#unitSel').value;
     if (unit === 'ALL') {
