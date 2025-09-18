@@ -117,6 +117,13 @@
   </div>
 </div>
 
+<div id="interactive-search-modal" class="modal">
+  <div class="modal-content">
+    <span class="close-btn">&times;</span>
+    <div id="interactive-search-viewport" class="viewport"></div>
+  </div>
+</div>
+
 <div id="addItemModal" class="modal">
   <div class="modal-content">
     <span class="close-btn">&times;</span>
@@ -550,81 +557,83 @@ function wireUI(){
 }
 
 // This is the function that initializes the barcode scanner.
+// This is the function that initializes the barcode scanner.
 function setupBarcodeScanner(forSearch = false) {
-  const scanButton = forSearch ? $('#startScanBtn') : $('#scanBarcodeBtn');
-  const viewport = forSearch ? $('#interactive') : $('#interactive-modal');
-  const stopIcon = `<img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23c00' d='M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z'/%3E%3C/svg%3E" alt="Stop Scanner" class="scan-icon">`;
+  const scanButton = forSearch ? $('#startScanBtn') : $('#scanBarcodeBtn');
+  const viewport = forSearch ? $('#interactive-search-viewport') : $('#interactive');
+  const stopIcon = `<img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23c00' d='M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z'/%3E%3C/svg%3E" alt="Stop Scanner" class="scan-icon">`;
+  const modal = forSearch ? $('#interactive-search-modal') : $('#addItemModal');
 
-  if (isScannerActive) {
-    Quagga.stop();
-    isScannerActive = false;
-    scanButton.innerHTML = `<img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z'/%3E%3C/svg%3E" alt="Barcode Scanner" class="scan-icon">`;
-    viewport.style.display = 'none';
-    return;
-  }
+  if (isScannerActive) {
+    Quagga.stop();
+    isScannerActive = false;
+    scanButton.innerHTML = `<img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z'/%3E%3C/svg%3E" alt="Barcode Scanner" class="scan-icon">`;
+    modal.style.display = 'none';
+    return;
+  }
+  
+  modal.style.display = 'block';
+  Quagga.init({
+    inputStream: {
+      name: "Live",
+      type: "LiveStream",
+      target: viewport
+    },
+    decoder: {
+      readers: ["code_128_reader", "upc_reader", "ean_reader", "ean_8_reader", "code_39_reader"]
+    }
+  }, function(err) {
+    if (err) {
+      console.error(err);
+      alert("Error starting scanner: " + err);
+      return;
+    }
+    console.log("Initialization finished. Ready to start.");
+    Quagga.start();
+    isScannerActive = true;
+    scanButton.innerHTML = stopIcon;
 
-  viewport.style.display = 'block';
-  Quagga.init({
-    inputStream: {
-      name: "Live",
-      type: "LiveStream",
-      target: viewport
-    },
-    decoder: {
-      readers: ["code_128_reader", "upc_reader", "ean_reader", "ean_8_reader", "code_39_reader"]
-    }
-  }, function(err) {
-    if (err) {
-      console.error(err);
-      alert("Error starting scanner: " + err);
-      return;
-    }
-    console.log("Initialization finished. Ready to start.");
-    Quagga.start();
-    isScannerActive = true;
-    scanButton.innerHTML = stopIcon;
-    
-    Quagga.onDetected(async function(result) {
-      if (result && result.codeResult && result.codeResult.code) {
-        Quagga.stop();
-        isScannerActive = false;
-        scanButton.innerHTML = `<img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z'/%3E%3C/svg%3E" alt="Barcode Scanner" class="scan-icon">`;
-        viewport.style.display = 'none';
+    Quagga.onDetected(async function(result) {
+      if (result && result.codeResult && result.codeResult.code) {
+        Quagga.stop();
+        isScannerActive = false;
+        scanButton.innerHTML = `<img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z'/%3E%3C/svg%3E" alt="Barcode Scanner" class="scan-icon">`;
+        modal.style.display = 'none';
 
-        const barcodeValue = result.codeResult.code;
-        try {
-          const resp = await fetch(PROXY_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              token: TOKEN,
-              actionType: 'getbarcodedata',
-              barcode: barcodeValue
-            })
-          });
-          const txt = await resp.text();
-          let data;
-          try { data = JSON.parse(txt); }
-          catch (e) { throw new Error('Non-JSON from proxy: ' + txt.slice(0,180)); }
+        const barcodeValue = result.codeResult.code;
+        try {
+          const resp = await fetch(PROXY_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              token: TOKEN,
+              actionType: 'getbarcodedata',
+              barcode: barcodeValue
+            })
+          });
+          const txt = await resp.text();
+          let data;
+          try { data = JSON.parse(txt); }
+          catch (e) { throw new Error('Non-JSON from proxy: ' + txt.slice(0,180)); }
 
-          if (data.ok && data.item) {
-            if (forSearch) {
-              $('#searchBox').value = data.item.ItemName || data.item.ItemNameAlt || '';
-              render();
-            } else {
-              $('#addItemInput').value = data.item.ItemName || data.item.ItemNameAlt || '';
-            }
-            alert(`Barcode detected: ${barcodeValue}`);
-          } else {
-            alert(`Barcode detected, but item not found: ${barcodeValue}`);
-          }
-        } catch (err) {
-          console.error(err);
-          alert('Barcode lookup failed – check proxy & GAS routes.');
-        }
-      }
-    });
-  });
+          if (data.ok && data.item) {
+            if (forSearch) {
+              $('#searchBox').value = data.item.ItemName || data.item.ItemNameAlt || '';
+              render();
+            } else {
+              $('#addItemInput').value = data.item.ItemName || data.item.ItemNameAlt || '';
+            }
+            alert(`Barcode detected: ${barcodeValue}`);
+          } else {
+            alert(`Barcode detected, but item not found: ${barcodeValue}`);
+          }
+        } catch (err) {
+          console.error(err);
+          alert('Barcode lookup failed – check proxy & GAS routes.');
+        }
+      }
+    });
+  });
 }
 
 // ===== POSTs (via proxy) =====
