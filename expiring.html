@@ -260,45 +260,44 @@ function render() {
   $('#count').textContent = `${list.length} item(s)`;
 
   const showUnitCol = ($('#unitSel').value === 'ALL');
-  const html = `
-    <table>
-      <thead><tr>
-        <th style="width:30%">Item</th>
-        ${showUnitCol?'<th>Unit</th>':''}
-        <th>Compartment</th>
-        <th>Qty</th>
-        <th>Expiry</th>
-        <th class="right">Days</th>
-        <th>Actions</th>
-      </tr></thead>
-      <tbody>
-        ${list.map(r=>{
-          const cls = rowClass(r.DaysToExpire, r.Status);
-          const ref = r.ItemRef ? `<span class="muted">${escapeHtml(r.ItemRef)}</span>` : '';
-          const unitDisp = r.UnitDisplay || r.Unit || '';
-          const note = r.CrewStatus || '';
-          return `
-            <tr class="${cls}" data-id="${encodeURIComponent(r.InventoryID)}">
-              <td><strong>${escapeHtml(r.ItemName||'')}</strong><br>${ref}</td>
-              ${showUnitCol?`<td>${escapeHtml(unitDisp)}</td>`:''}
-              <td>${escapeHtml(r.Compartment||'')}</td>
-              <td>${(r.Qty??'')!==''?escapeHtml(String(r.Qty)):'—'}</td>
-              <td>${escapeHtml(r.Expiry||'')}</td>
-              <td class="right">${r.DaysToExpire??''}</td>
-              <td>
-                <div class="actions" style="gap:8px;align-items:center;">
-                  <button type="button" class="note-trigger" title="Click to edit note">
-                    ${escapeHtml(note || 'note…')}
-                  </button>
-                  <button class="btn pending ${r.Status==='Pending'?'is-active':''}">Pending</button>
-                  <button class="btn green ok">OK</button>
-                  <button class="btn red replaced">Replaced</button>
-                </div>
-              </td>
-            </tr>`;
+  const html = `<table>
+    <thead><tr>
+      <th style="width:30%">Item</th>
+      ${showUnitCol?'<th>Unit</th>':''}
+      <th>Compartment</th>
+      <th>Qty</th>
+      <th>Expiry</th>
+      <th class="right">Days</th>
+      <th>Actions</th>
+    </tr></thead>
+    <tbody>
+      ${list.map(r=>{
+        const cls = rowClass(r.DaysToExpire, r.Status);
+        const ref = r.ItemRef ? `<span class="muted">${escapeHtml(r.ItemRef)}</span>` : '';
+        const unitDisp = r.UnitDisplay || r.Unit || '';
+        const note = r.CrewStatus || '';
+        return `
+          <tr class="${cls}" data-id="${encodeURIComponent(r.InventoryID)}">
+            <td><strong>${escapeHtml(r.ItemName||'')}</strong><br>${ref}</td>
+            ${showUnitCol?`<td>${escapeHtml(unitDisp)}</td>`:''}
+            <td>${escapeHtml(r.Compartment||'')}</td>
+            <td>${(r.Qty??'')!==''?escapeHtml(String(r.Qty)):'—'}</td>
+            <td>${escapeHtml(r.Expiry||'')}</td>
+            <td class="right">${r.DaysToExpire??''}</td>
+            <td>
+              <div class="actions" style="gap:8px;align-items:center;">
+                <button type="button" class="note-trigger" title="Click to edit note">
+                  ${escapeHtml(note || 'note…')}
+                </button>
+                <button class="btn pending ${r.Status==='Pending'?'is-active':''}">Pending</button>
+                <button class="btn green ok">OK</button>
+                <button class="btn red replaced">Replaced</button>
+              </div>
+            </td>
+          </tr>`;
         }).join('')}
-      </tbody>
-    </table>`;
+    </tbody>
+  </table>`;
   $('#content').innerHTML = html;
 
   // Wire row actions + note modal per row
