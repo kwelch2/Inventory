@@ -136,9 +136,7 @@
         <label>Item</label>
         <div style="display:flex; gap:8px; align-items:center;">
           <input id="addItemInput" list="itemsDatalist" placeholder="Start typing name…" style="flex:1;" />
-          <input id="otherItemInput" placeholder="Enter custom item name…" style="flex:1; display:none;"/>
           <button id="scanBarcodeBtn" class="btn" title="Scan Barcode">
-          <button id="toggleItemInput" class="btn" title="Toggle between catalog search and custom entry">Other?</button>
             <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z'/%3E%3C/svg%3E" alt="Barcode Scanner" class="scan-icon">
           </button>
         </div>
@@ -524,58 +522,39 @@ function wireUI(){
 
 // Save (create)
   $('#saveNewItemBtn').addEventListener('click', async ()=>{
-  let visibleName = '';
-  let payload = {};
+    const visibleName = itemInp.value.trim();
+    if (!visibleName) { alert('Pick an item name.'); return; }
 
-  const useOtherInput = $('#otherItemInput').style.display !== 'none';
-  if (useOtherInput) {
-    visibleName = $('#otherItemInput').value.trim();
-    if (!visibleName) { alert('Enter a custom item name.'); return; }
-    payload.otherItemName = visibleName;
-    // Use a temporary ID for non-catalog items
-    payload.itemId = 'CUSTOM-' + Date.now(); 
-  } else {
-    visibleName = itemInp.value.trim();
-    const row = catalog.find(c => [String(c.ItemName||'').toLowerCase(), String(c.ItemNameAlt||'').toLowerCase()].includes(visibleName.toLowerCase()));
-    if (!row || !row.ItemID) { alert('Item not found in Catalog.'); return; }
-    payload.itemId = row.ItemID;
-  }
+    // Resolve ItemID by ItemName or ItemNameAlt
+    const row = catalog.find(c => [String(c.ItemName||'').toLowerCase(), String(c.ItemNameAlt||'').toLowerCase()].includes(visibleName.toLowerCase()));
+    if (!row || !row.ItemID) { alert('Item not found in Catalog.'); return; }
 
-  let unit = $('#unitSel').value;
-  if (unit === 'ALL') {
-    unit = prompt('Which unit is this for (e.g., 31, 33, 36)?')?.trim() || '';
-    if (!unit) return;
-  }
-  if (!selectedExp) { alert('Pick an expiry (chip or custom).'); return; }
+    let unit = $('#unitSel').value;
+    if (unit === 'ALL') {
+      unit = prompt('Which unit is this for (e.g., 31, 33, 36)?')?.trim() || '';
+      if (!unit) return;
+    }
 
-  // Fill remaining payload fields
-  payload.unit = unit;
-  payload.compartment = $('#addCompartmentSelect').value.trim();
-  payload.expiry = selectedExp;
-  payload.qty = Number($('#addQty').value) || 1;
-  payload.crewStatus = '';
+    if (!selectedExp) { alert('Pick an expiry (chip or custom).'); return; }
+    const payload = {
+      itemId: row.ItemID,
+      unit,
+      compartment: $('#addCompartmentSelect').value.trim(),
+      expiry: selectedExp,                  // ISO yyyy-mm-dd
+      qty: Number($('#addQty').value)||1,
+      crewStatus: ''
+    };
 
-  try {
-    await postCreate(payload);
-    modal.style.display='none';
-    await init();
-  } catch(e){
-    console.error(e);
-    alert('Add failed');
-  }
-});
-
-// Toggle button logic
-$('#toggleItemInput').addEventListener('click', () => {
-    const isOtherVisible = $('#otherItemInput').style.display !== 'none';
-    $('#otherItemInput').style.display = isOtherVisible ? 'none' : '';
-    $('#addItemInput').style.display = isOtherVisible ? '' : 'none';
-    if (isOtherVisible) {
-      $('#addItemInput').value = '';
-    } else {
-      $('#otherItemInput').value = '';
-    }
-});
+    try{
+      await postCreate(payload);
+      modal.style.display='none';
+      await init(); // refresh list
+    }catch(e){
+      console.error(e);
+      alert('Add failed');
+    }
+  });
+}
 
 // This is the function that initializes the barcode scanner.
 function setupBarcodeScanner(forSearch = false) {
