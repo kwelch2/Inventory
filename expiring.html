@@ -22,9 +22,28 @@ body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-se
 .card{background:var(--card);border:1px solid var(--b);border-radius:12px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
 h1{margin:0 0 6px}
 .muted{color:var(--muted);font-size:.9rem}
-.toolbar{display:flex;gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap}
+/* New toolbar layout */
+.toolbar{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-top: 10px;
+}
+.toolbar-actions {
+  display: flex;
+  gap: 10px;
+  margin-left: auto; /* Pushes action buttons to the right */
+}
 select,button,input{padding:8px 10px;border:1px solid var(--b);border-radius:10px;background:#fff}
 button{cursor:pointer}
+/* Make Add Item button stand out */
+#showAddItemModal {
+  background-color: #007bff;
+  color: #fff;
+  border-color: #007bff;
+  font-weight: 600;
+}
 table{width:100%;border-collapse:collapse}
 th,td{padding:8px 10px;border-bottom:1px solid #eee;text-align:left;vertical-align:top}
 th{font-weight:600;background:#fafafa}
@@ -42,65 +61,64 @@ th{font-weight:600;background:#fafafa}
 
 /* Note trigger styled like an input */
 .note-trigger{
-padding:6px 10px;border:1px solid var(--b);border-radius:10px;background:#fff;
-min-width:140px;text-align:left;cursor:pointer
+  padding:6px 10px;border:1px solid var(--b);border-radius:10px;background:#fff;
+  min-width:140px;text-align:left;cursor:pointer
 }
 /* Bright yellow highlight for Pending button */
 .btn.pending.is-active {
-background: #ffeb3b !important; /* Material bright yellow */
-color: #000;                       /* keep text readable */
-font-weight: 600;
-border-color: #fdd835;              /* darker yellow border */
+  background: #ffeb3b !important; /* Material bright yellow */
+  color: #000;                       /* keep text readable */
+  font-weight: 600;
+  border-color: #fdd835;              /* darker yellow border */
 }
 
 .btn.is-active{background:var(--warn);}
 #interactive-search-modal {
-position: fixed;
-top: 50%;
-left: 50%;
-transform: translate(-50%, -50%);
-z-index: 1000;
-width: min(640px, 95%);
-height: 360px;
-background: #000;
-border: 1px solid #ccc;
-display: none;
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1000;
+  width: min(640px, 95%);
+  height: 360px;
+  background: #000;
+  border: 1px solid #ccc;
+  display: none;
 }
 #interactive-search-modal video {
-position: absolute;
-top: 0;
-left: 0;
-width: 100%;
-height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
 }
 .drawingBuffer {
-position: absolute;
-top: 0;
-left: 0;
-width: 100%;
-height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
 }
 /* Small note modal */
 #noteModal{display:none;position:fixed;z-index:120;inset:0;background:rgba(0,0,0,.35)}
 #noteModal .box{background:#fff;margin:12% auto;max-width:420px;width:92%;
-border:1px solid var(--b);border-radius:12px;padding:14px}
+  border:1px solid var(--b);border-radius:12px;padding:14px}
 #noteText{width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--b);border-radius:8px}
 #charLeft{float:right;color:var(--muted);font-size:.85rem}
 .scan-icon { height:20px;width:20px; }
 /* Force dropdown and single selected item to keep text inline */
 .choices__list--dropdown .choices__item,
 .choices__list--single .choices__item {
-white-space: normal; /* Allow text to wrap naturally */
-word-break: normal;     /* don't break inside words */
-overflow: hidden;
-text-overflow: ellipsis;
-line-height: 1.4em;             /* tighten spacing */
+  white-space: normal; /* Allow text to wrap naturally */
+  word-break: normal;     /* don't break inside words */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.4em;             /* tighten spacing */
 }
 /* Make the main select box taller and wider */
 #addItemSelect {
   display: none !important;
 }
-
 .choices__inner {
   min-height: 55px;
   font-size: 1.1rem;
@@ -109,19 +127,16 @@ line-height: 1.4em;             /* tighten spacing */
   border: 1px solid var(--b);
   width: 100%;
 }
-
 /* The main flexbox for the Item line */
 .item-row {
   display: flex;
   gap: 8px; /* space between the select box and button */
   align-items: center;
 }
-
 #addItemSelect + .choices {
-  min-width: 90%; 
+  min-width: 300px;
   max-width: 100%;
 }
-
 .item-row #scanBarcodeBtn {
   flex-shrink: 0;
 }
@@ -129,91 +144,99 @@ line-height: 1.4em;             /* tighten spacing */
 </head>
 <body>
 <div class="wrap">
-  <div class="card">
-    <h1>Expiring Supplies</h1>
-    <div class="muted">Typed JSON from Apps Script; no CSV parsing. Server computes Days to Expire.</div>
-    <div class="toolbar">
-      <label>Window
-        <select id="rangeSel">
-          <option value="30">30 days</option>
-          <option value="60">60 days</option>
-          <option value="90" selected>90 days</option>
-        </select>
-      </label>
-      <label>Unit
-        <select id="unitSel"><option value="ALL">ALL</option></select>
-      </label>
-      <div style="display:flex; gap: 8px; align-items:center; flex:1;">
-        <button class="btn" id="startScanBtn" title="Scan Barcode to Search">
-          <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z'/%3E%3C/svg%3E" alt="Barcode Scanner" class="scan-icon">
-        </button>
-        <input id="searchBox" placeholder="Search item, compartment…" style="flex:1;"/>
-      </div>
-      <button class="btn" id="refreshBtn">Refresh</button>
-      <button class="btn" id="showAddItemModal">+ Add Item</button>
-      <span id="count" class="muted"></span>
-    </div>
-  </div>
+  <div class="card">
+    <h1>Expiring Supplies</h1>
+    <div class="muted">Typed JSON from Apps Script; no CSV parsing. Server computes Days to Expire.</div>
+    <div class="toolbar">
+      <label>Window
+        <select id="rangeSel">
+          <option value="30">30 days</option>
+          <option value="60">60 days</option>
+          <option value="90" selected>90 days</option>
+        </select>
+      </label>
+      <label>Unit
+        <select id="unitSel"><option value="ALL">ALL</option></select>
+      </label>
+      <div style="display:flex; gap: 8px; align-items:center; flex:1;">
+        <button class="btn" id="startScanBtn" title="Scan Barcode to Search">
+          <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z'/%3E%3C/svg%3E" alt="Barcode Scanner" class="scan-icon">
+        </button>
+        <input id="searchBox" placeholder="Search item, compartment…" style="flex:1;"/>
+      </div>
+      <div class="toolbar-actions">
+        <button class="btn" id="refreshBtn">Refresh</button>
+        <button class="btn" id="showAddItemModal">+ Add Item</button>
+      </div>
+      <span id="count" class="muted"></span>
+    </div>
+  </div>
 
-  <div id="content" class="card"></div>
+  <div id="content" class="card"></div>
 </div>
 
 <div id="noteModal">
-  <div class="box">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-      <strong>Edit note</strong>
-      <span id="charLeft">40</span>
-    </div>
-    <textarea id="noteText" rows="3" maxlength="40" placeholder="Short note (max 40 chars)"></textarea>
-    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
-      <button id="noteCancel" class="btn">Cancel</button>
-      <button id="noteSave" class="btn">Save</button>
-    </div>
-  </div>
+  <div class="box">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <strong>Edit note</strong>
+      <span id="charLeft">40</span>
+    </div>
+    <textarea id="noteText" rows="3" maxlength="40" placeholder="Short note (max 40 chars)"></textarea>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
+      <button id="noteCancel" class="btn">Cancel</button>
+      <button id="noteSave" class="btn">Save</button>
+    </div>
+  </div>
 </div>
 
 <div id="interactive-search-modal" class="modal">
-  <div class="modal-content">
-    <span class="close-btn">&times;</span>
-    <div id="interactive-search-viewport" class="viewport"></div>
-  </div>
+  <div class="modal-content">
+    <span class="close-btn">&times;</span>
+    <div id="interactive-search-viewport" class="viewport"></div>
+  </div>
 </div>
 
 <div id="addItemModal" class="modal">
     <div class="modal-content">
-        <span class="close-btn">&times;</span>
-        <h3>Add Item to Inventory</h3>
+      <span class="close-btn">&times;</span>
+      <h3>Add Item to Inventory</h3>
+      
+      <div id="interactive" class="viewport"></div>
+      
+      <label>Item</label>
+      <div class="item-row">
+        <select id="addItemSelect"></select>
+        <button id="scanBarcodeBtn" class="btn" title="Scan Barcode">
+          <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z'/%3E%3C/svg%3E" alt="Barcode Scanner" class="scan-icon">
+        </button>
+      </div>
 
-        <div id="interactive" class="viewport"></div>
-
-        <label>Item</label>
-        <div class="item-row">
-            <select id="addItemSelect"></select>
-            <button id="scanBarcodeBtn" class="btn" title="Scan Barcode">
-                <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z'/%3E%3C/svg%3E" alt="Barcode Scanner" class="scan-icon">
-            </button>
-        </div>
-
-        <div id="customNameWrap" style="display:none; margin-top:8px;">
-            <label>Custom Name</label>
-            <input id="customNameInput" placeholder="Enter custom item name…"/>
-        </div>
-
-        <label style="margin-top: 10px;">Compartment</label>
-        <select id="addCompartmentSelect">
+      <div id="customNameWrap" style="display:none; margin-top:8px;">
+        <label>Custom Name</label>
+        <input id="customNameInput" placeholder="Enter custom item name…"/>
+      </div>
+      
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <div>
+          <label>Compartment</label>
+          <select id="addCompartmentSelect">
             <option value="">Select…</option>
             <option>Wall</option>
             <option>Bag</option>
             <option>Supply RM</option>
-        </select>
+          </select>
+        </div>
+        <div>
+          <label>Expiry Month</label>
+          <div id="addExpiryChips" class="chipbar"></div>
+        </div>
+        <div>
+          <label>Quantity</label>
+          <input id="addQty" type="number" min="1" step="1" value="1"/>
+        </div>
+      </div>
 
-        <label style="margin-top: 10px;">Expiry Month</label>
-        <div id="addExpiryChips" class="chipbar"></div>
-
-        <label style="margin-top: 10px;">Quantity</label>
-        <input id="addQty" type="number" min="1" step="1" value="1"/>
-
-        <button id="saveNewItemBtn" class="btn" style="width:100%;margin-top:12px;">Save Item</button>
+      <button id="saveNewItemBtn" class="btn" style="width:100%;margin-top:12px;">Save Item</button>
     </div>
 </div>
 <script>
