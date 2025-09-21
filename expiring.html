@@ -4,7 +4,6 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Expiring Supplies – GC EMS</title>
-<!-- Favicons -->
 <link rel="icon" type="image/x-icon" href="https://kwelch2.github.io/Inventory/favicon.ico">
 <link rel="icon" type="image/png" sizes="16x16" href="https://kwelch2.github.io/Inventory/favicon-16x16.png">
 <link rel="icon" type="image/png" sizes="32x32" href="https://kwelch2.github.io/Inventory/favicon-32x32.png">
@@ -43,189 +42,186 @@ th{font-weight:600;background:#fafafa}
 
 /* Note trigger styled like an input */
 .note-trigger{
-  padding:6px 10px;border:1px solid var(--b);border-radius:10px;background:#fff;
-  min-width:140px;text-align:left;cursor:pointer
+padding:6px 10px;border:1px solid var(--b);border-radius:10px;background:#fff;
+min-width:140px;text-align:left;cursor:pointer
 }
 /* Bright yellow highlight for Pending button */
 .btn.pending.is-active {
-  background: #ffeb3b !important; /* Material bright yellow */
-  color: #000;                       /* keep text readable */
-  font-weight: 600;
-  border-color: #fdd835;              /* darker yellow border */
+background: #ffeb3b !important; /* Material bright yellow */
+color: #000;                       /* keep text readable */
+font-weight: 600;
+border-color: #fdd835;              /* darker yellow border */
 }
 
 .btn.is-active{background:var(--warn);}
 #interactive-search-modal {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    z-index: 1000;
-    width: min(640px, 95%);
-    height: 360px;
-    background: #000;
-    border: 1px solid #ccc;
-    display: none;
+position: fixed;
+top: 50%;
+left: 50%;
+transform: translate(-50%, -50%);
+z-index: 1000;
+width: min(640px, 95%);
+height: 360px;
+background: #000;
+border: 1px solid #ccc;
+display: none;
 }
 #interactive-search-modal video {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
+position: absolute;
+top: 0;
+left: 0;
+width: 100%;
+height: 100%;
 }
 .drawingBuffer {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
+position: absolute;
+top: 0;
+left: 0;
+width: 100%;
+height: 100%;
 }
 /* Small note modal */
 #noteModal{display:none;position:fixed;z-index:120;inset:0;background:rgba(0,0,0,.35)}
 #noteModal .box{background:#fff;margin:12% auto;max-width:420px;width:92%;
-  border:1px solid var(--b);border-radius:12px;padding:14px}
+border:1px solid var(--b);border-radius:12px;padding:14px}
 #noteText{width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--b);border-radius:8px}
 #charLeft{float:right;color:var(--muted);font-size:.85rem}
 .scan-icon { height:20px;width:20px; }
 /* Force dropdown and single selected item to keep text inline */
 .choices__list--dropdown .choices__item,
 .choices__list--single .choices__item {
-  white-space: normal; /* Allow text to wrap naturally */
-  word-break: normal;     /* don't break inside words */
-  overflow: hidden;
-  text-overflow: ellipsis;
-  line-height: 1.4em;             /* tighten spacing */
+white-space: normal; /* Allow text to wrap naturally */
+word-break: normal;     /* don't break inside words */
+overflow: hidden;
+text-overflow: ellipsis;
+line-height: 1.4em;             /* tighten spacing */
 }
 /* Make the main select box taller and wider */
 #addItemSelect,
 .choices__inner {
-  min-height: 50px;       /* default ~38px, bump it up */
-  font-size: 1.1rem;      /* bigger text */
-  padding: 10px 12px;     /* more breathing room */
+min-height: 50px;       /* default ~38px, bump it up */
+font-size: 1.1rem;      /* bigger text */
+padding: 10px 12px;     /* more breathing room */
 }
 
 .choices__inner {
-  border-radius: 10px;
-  border: 1px solid var(--b);
-  width: 100%;            /* stretch full width of container */
+border-radius: 10px;
+border: 1px solid var(--b);
+width: 100%;            /* stretch full width of container */
 }
-/* Make the item select box wider (about half the modal) */
-/* Make the item select take ~70% of the modal row */
-#addItemSelect {
-  display: none !important; /* Choices.js hides this anyway */
+/* The main flexbox for the Item line */
+.item-row {
+display: flex;
+gap: 8px; /* space between the select box and button */
+align-items: center;
+margin-bottom: 10px;
 }
-
+/* This is the key rule to make the select box take up 90% */
 #addItemSelect + .choices {
-  flex: 1 1 auto;
-  min-width: 70%;       /* this controls how wide the box is */
-  max-width: 100%;
+flex: 1 1 90%;   /* Flex-grow, flex-shrink, and base width */
 }
-
-#addItemSelect + .choices .choices__inner {
-  min-height: 55px;     /* bigger click area */
-  font-size: 1.1rem;
-  padding: 12px 14px;
+/* This is the rule to make the button take up the rest of the space */
+.item-row #scanBarcodeBtn {
+flex: 0 0 auto;
 }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <div class="card">
-    <h1>Expiring Supplies</h1>
-    <div class="muted">Typed JSON from Apps Script; no CSV parsing. Server computes Days to Expire.</div>
-    <div class="toolbar">
-      <label>Window
-        <select id="rangeSel">
-          <option value="30">30 days</option>
-          <option value="60">60 days</option>
-          <option value="90" selected>90 days</option>
-        </select>
-      </label>
-      <label>Unit
-        <select id="unitSel"><option value="ALL">ALL</option></select>
-      </label>
-      <div style="display:flex; gap: 8px; align-items:center; flex:1;">
-        <button class="btn" id="startScanBtn" title="Scan Barcode to Search">
-          <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z'/%3E%3C/svg%3E" alt="Barcode Scanner" class="scan-icon">
-        </button>
-        <input id="searchBox" placeholder="Search item, compartment…" style="flex:1;"/>
-      </div>
-      <button class="btn" id="refreshBtn">Refresh</button>
-      <button class="btn" id="showAddItemModal">+ Add Item</button>
-      <span id="count" class="muted"></span>
-    </div>
-  </div>
+  <div class="card">
+    <h1>Expiring Supplies</h1>
+    <div class="muted">Typed JSON from Apps Script; no CSV parsing. Server computes Days to Expire.</div>
+    <div class="toolbar">
+      <label>Window
+        <select id="rangeSel">
+          <option value="30">30 days</option>
+          <option value="60">60 days</option>
+          <option value="90" selected>90 days</option>
+        </select>
+      </label>
+      <label>Unit
+        <select id="unitSel"><option value="ALL">ALL</option></select>
+      </label>
+      <div style="display:flex; gap: 8px; align-items:center; flex:1;">
+        <button class="btn" id="startScanBtn" title="Scan Barcode to Search">
+          <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z'/%3E%3C/svg%3E" alt="Barcode Scanner" class="scan-icon">
+        </button>
+        <input id="searchBox" placeholder="Search item, compartment…" style="flex:1;"/>
+      </div>
+      <button class="btn" id="refreshBtn">Refresh</button>
+      <button class="btn" id="showAddItemModal">+ Add Item</button>
+      <span id="count" class="muted"></span>
+    </div>
+  </div>
 
-  <div id="content" class="card"></div>
+  <div id="content" class="card"></div>
 </div>
 
 <div id="noteModal">
-  <div class="box">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-      <strong>Edit note</strong>
-      <span id="charLeft">40</span>
-    </div>
-    <textarea id="noteText" rows="3" maxlength="40" placeholder="Short note (max 40 chars)"></textarea>
-    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
-      <button id="noteCancel" class="btn">Cancel</button>
-      <button id="noteSave" class="btn">Save</button>
-    </div>
-  </div>
+  <div class="box">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <strong>Edit note</strong>
+      <span id="charLeft">40</span>
+    </div>
+    <textarea id="noteText" rows="3" maxlength="40" placeholder="Short note (max 40 chars)"></textarea>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
+      <button id="noteCancel" class="btn">Cancel</button>
+      <button id="noteSave" class="btn">Save</button>
+    </div>
+  </div>
 </div>
 
 <div id="interactive-search-modal" class="modal">
-  <div class="modal-content">
-    <span class="close-btn">&times;</span>
-    <div id="interactive-search-viewport" class="viewport"></div>
-  </div>
+  <div class="modal-content">
+    <span class="close-btn">&times;</span>
+    <div id="interactive-search-viewport" class="viewport"></div>
+  </div>
 </div>
 
 <div id="addItemModal" class="modal">
-  <div class="modal-content">
-    <span class="close-btn">&times;</span>
-    <h3>Add Item to Inventory</h3>
-    
-    <div id="interactive" class="viewport"></div>
-    
-    <div class="grid2">
-      <div>
-  <label>Item</label>
-  <div style="display:flex; gap:8px; align-items:center;">
-    <select id="addItemSelect" style="width:100%"></select>
-    <button id="scanBarcodeBtn" class="btn" title="Scan Barcode">
-      <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z'/%3E%3C/svg%3E" alt="Barcode Scanner" class="scan-icon">
-    </button>
-  </div>
+  <div class="modal-content">
+    <span class="close-btn">&times;</span>
+    <h3>Add Item to Inventory</h3>
+    
+    <div id="interactive" class="viewport"></div>
+    
+        <div>
+      <label>Item</label>
+      <div class="item-row">
+        <select id="addItemSelect"></select>
+        <button id="scanBarcodeBtn" class="btn" title="Scan Barcode">
+          <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z'/%3E%3C/svg%3E" alt="Barcode Scanner" class="scan-icon">
+        </button>
+      </div>
+    </div>
 
-  <!-- Custom name field (hidden until "Other / Custom" is selected) -->
-  <div id="customNameWrap" style="display:none; margin-top:8px;">
-    <label>Custom Name</label>
-    <input id="customNameInput" placeholder="Enter custom item name…"/>
-  </div>
+        <div id="customNameWrap" style="display:none; margin-top:8px;">
+      <label>Custom Name</label>
+      <input id="customNameInput" placeholder="Enter custom item name…"/>
+    </div>
+    
+        <div class="grid2">
+      <div>
+        <label>Compartment</label>
+        <select id="addCompartmentSelect">
+          <option value="">Select…</option>
+          <option>Wall</option>
+          <option>Bag</option>
+          <option>Supply RM</option>
+        </select>
+      </div>
+      <div>
+        <label>Expiry Month</label>
+        <div id="addExpiryChips" class="chipbar"></div>
+      </div>
+      <div>
+        <label>Quantity</label>
+        <input id="addQty" type="number" min="1" step="1" value="1"/>
+      </div>
+    </div>
+    <button id="saveNewItemBtn" class="btn" style="width:100%;margin-top:12px;">Save Item</button>
+  </div>
 </div>
-      <div>
-        <label>Compartment</label>
-        <select id="addCompartmentSelect">
-          <option value="">Select…</option>
-          <option>Wall</option>
-          <option>Bag</option>
-          <option>Supply RM</option>
-        </select>
-      </div>
-            <div>
-        <label>Expiry Month</label>
-        <div id="addExpiryChips" class="chipbar"></div>
-      </div>
-      <div>
-        <label>Quantity</label>
-        <input id="addQty" type="number" min="1" step="1" value="1"/>
-      </div>
-    </div>
-    <button id="saveNewItemBtn" class="btn" style="width:100%;margin-top:12px;">Save Item</button>
-  </div>
-</div>
-
 <script>
 // ===== CONFIG =====
 const PROXY_URL = 'https://ems-inventory-proxy.kylewelch33.workers.dev';
@@ -301,7 +297,7 @@ function fillUnitSelect() {
 function render() {
   const q = ($('#searchBox').value||'').toLowerCase();
   const unitFilter = $('#unitSel').value;
-   // Filter
+   // Filter
   let list = rows.filter(r=>{
     if (unitFilter !== 'ALL' && String(r.Unit).toUpperCase() !== String(unitFilter).toUpperCase()) return false;
     const hay = `${r.ItemName||''} ${r.ItemRef||''} ${r.Category||''} ${r.Compartment||''}`.toLowerCase();
@@ -335,7 +331,7 @@ function render() {
       const ref = r.ItemRef ? `<span class="muted">${escapeHtml(r.ItemRef)}</span>` : '';
       const unitDisp = r.UnitDisplay || r.Unit || '';
       const note = r.CrewStatus || '';
-      const displayName = r.ItemName || r.Notes || '';
+      const displayName = r.ItemName || r.Notes || '';
       return `
         <tr class="${cls}" data-id="${encodeURIComponent(r.InventoryID)}">
           <td><strong>${escapeHtml(r.ItemName||'')}</strong><br>${ref}</td>
@@ -436,34 +432,34 @@ function openNoteEditor(inventoryId, initialText, onSave){
   };
 }
 
-let itemSelect;  // Choices instance
+let itemSelect;  // Choices instance
 
 function initItemSelect() {
-  const sel = document.getElementById('addItemSelect');
+  const sel = document.getElementById('addItemSelect');
 
-  // If already initialized, clear/reset
-  if (itemSelect) {
-    itemSelect.clearStore();
-  } else {
-    itemSelect = new Choices(sel, {
-      searchEnabled: true,
-      placeholderValue: 'Select item…',
-      allowHTML: false,
-    });
-  }
+  // If already initialized, clear/reset
+  if (itemSelect) {
+    itemSelect.clearStore();
+  } else {
+    itemSelect = new Choices(sel, {
+      searchEnabled: true,
+      placeholderValue: 'Select item…',
+      allowHTML: false,
+    });
+  }
 
-  // Build options
-  const options = [];
-  const names = new Set();
-  for (const r of catalog) {
-    const nm  = (r.ItemName || '').trim();
-    const alt = (r.ItemNameAlt || '').trim();
-    if (nm && !names.has(nm)) { names.add(nm); options.push({ value: r.ItemID, label: nm }); }
-    if (alt && !names.has(alt)) { names.add(alt); options.push({ value: r.ItemID, label: alt }); }
-  }
-  options.push({ value: 'CUSTOM', label: 'Other / Custom' });
+  // Build options
+  const options = [];
+  const names = new Set();
+  for (const r of catalog) {
+    const nm  = (r.ItemName || '').trim();
+    const alt = (r.ItemNameAlt || '').trim();
+    if (nm && !names.has(nm)) { names.add(nm); options.push({ value: r.ItemID, label: nm }); }
+    if (alt && !names.has(alt)) { names.add(alt); options.push({ value: r.ItemID, label: alt }); }
+  }
+  options.push({ value: 'CUSTOM', label: 'Other / Custom' });
 
-  itemSelect.setChoices(options, 'value', 'label', true);
+  itemSelect.setChoices(options, 'value', 'label', true);
 }
 
 // ===== UI wiring (including Add Item modal) =====
@@ -474,7 +470,7 @@ function wireUI(){
   if (![...rangeSel.options].some(o=>o.value==='CUSTOM')) {
     rangeSel.insertAdjacentHTML('beforeend', `<option value="CUSTOM">Custom…</option><option value="ALL">All</option>`);
   }
-  
+  
   // custom input
   const customInput = document.createElement('input');
   customInput.type = 'number'; customInput.min = '0'; customInput.placeholder = 'days';
@@ -510,12 +506,12 @@ function wireUI(){
   let selectedExp = '';
 
 itemSel.addEventListener('change', ()=>{
-  if (itemSel.value === 'CUSTOM'){
-    $('#customNameWrap').style.display = '';
-  } else {
-    $('#customNameWrap').style.display = 'none';
-    $('#customNameInput').value = '';
-  }
+  if (itemSel.value === 'CUSTOM'){
+    $('#customNameWrap').style.display = '';
+  } else {
+    $('#customNameWrap').style.display = 'none';
+    $('#customNameInput').value = '';
+  }
 });
   function endOfMonthISO(year, monthIndexZeroBased){
     const last = new Date(year, monthIndexZeroBased + 1, 0);
@@ -593,20 +589,20 @@ itemSel.addEventListener('change', ()=>{
   }
 
   showBtn.addEventListener('click', ()=>{
-  selectedExp = '';
-  compSel.value = '';
-  qtyInp.value = '1';
+  selectedExp = '';
+  compSel.value = '';
+  qtyInp.value = '1';
 
-  // Reset item select
-  if (itemSelect) {
-    itemSelect.clearStore();
-  }
-  initItemSelect();
-  $('#customNameWrap').style.display = 'none';
-  $('#customNameInput').value = '';
+  // Reset item select
+  if (itemSelect) {
+    itemSelect.clearStore();
+  }
+  initItemSelect();
+  $('#customNameWrap').style.display = 'none';
+  $('#customNameInput').value = '';
 
-  buildChips();
-  modal.style.display = 'block';
+  buildChips();
+  modal.style.display = 'block';
 });
 
   closeBtn.addEventListener('click', ()=> modal.style.display='none');
@@ -614,50 +610,50 @@ itemSel.addEventListener('change', ()=>{
 
 // Save (create)
 $('#saveNewItemBtn').addEventListener('click', async ()=> {
-  const selectedVal = $('#addItemSelect').value;
-  let itemId = '';
-  let itemName = '';
-  let notes = '';
+  const selectedVal = $('#addItemSelect').value;
+  let itemId = '';
+  let itemName = '';
+  let notes = '';
 
-  if (selectedVal === 'CUSTOM') {
-    const customName = $('#customNameInput').value.trim();
-    if (!customName) { alert('Enter a custom name.'); return; }
-    // Leave itemId blank for custom, use Notes to hold the name
-    notes = customName;
-  } else {
-    const row = catalog.find(c => c.ItemID === selectedVal);
-    if (!row) { alert('Item not found in Catalog.'); return; }
-    itemId = row.ItemID;
-    itemName = row.ItemName;
-  }
+  if (selectedVal === 'CUSTOM') {
+    const customName = $('#customNameInput').value.trim();
+    if (!customName) { alert('Enter a custom name.'); return; }
+    // Leave itemId blank for custom, use Notes to hold the name
+    notes = customName;
+  } else {
+    const row = catalog.find(c => c.ItemID === selectedVal);
+    if (!row) { alert('Item not found in Catalog.'); return; }
+    itemId = row.ItemID;
+    itemName = row.ItemName;
+  }
 
-  let unit = $('#unitSel').value;
-  if (unit === 'ALL') {
-    unit = prompt('Which unit is this for (e.g., 31, 33, 36)?')?.trim() || '';
-    if (!unit) return;
-  }
+  let unit = $('#unitSel').value;
+  if (unit === 'ALL') {
+    unit = prompt('Which unit is this for (e.g., 31, 33, 36)?')?.trim() || '';
+    if (!unit) return;
+  }
 
-  if (!selectedExp) { alert('Pick an expiry (chip or custom).'); return; }
+  if (!selectedExp) { alert('Pick an expiry (chip or custom).'); return; }
 
-  const payload = {
-    itemId,             // uses catalog ID if known, blank if custom
-    itemName,           // populated only for catalog items
-    unit,
-    compartment: $('#addCompartmentSelect').value.trim(),
-    expiry: selectedExp,
-    qty: Number($('#addQty').value)||1,
-    notes,              // custom names go here
-    crewStatus: ''
-  };
+  const payload = {
+    itemId,             // uses catalog ID if known, blank if custom
+    itemName,           // populated only for catalog items
+    unit,
+    compartment: $('#addCompartmentSelect').value.trim(),
+    expiry: selectedExp,
+    qty: Number($('#addQty').value)||1,
+    notes,              // custom names go here
+    crewStatus: ''
+  };
 
-  try{
-    await postCreate(payload);
-    modal.style.display='none';
-    await init();
-  }catch(e){
-    console.error(e);
-    alert('Add failed');
-  }
+  try{
+    await postCreate(payload);
+    modal.style.display='none';
+    await init();
+  }catch(e){
+    console.error(e);
+    alert('Add failed');
+  }
 });
 }
 
@@ -726,9 +722,9 @@ function setupBarcodeScanner(forSearch = false) {
               render();
             } else {
               if (itemSelect) {
-                itemSelect.clearStore();      // remove old options
-                initItemSelect();             // rebuild fresh options
-              }
+                itemSelect.clearStore();      // remove old options
+                initItemSelect();             // rebuild fresh options
+              }
             }
             alert(`Barcode detected: ${barcodeValue}`);
           } else {
