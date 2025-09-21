@@ -96,7 +96,19 @@
       text-overflow: ellipsis;
       line-height: 1.4em;               /* tighten spacing */
     }
+    /* Make the main select box taller and wider */
+    #addItemSelect,
+    .choices__inner {
+      min-height: 50px;        /* default ~38px, bump it up */
+      font-size: 1.1rem;       /* bigger text */
+      padding: 10px 12px;      /* more breathing room */
+    }
 
+    .choices__inner {
+      border-radius: 10px;
+      border: 1px solid var(--b);
+      width: 100%;             /* stretch full width of container */
+    }
 </style>
 </head>
 <body>
