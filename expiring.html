@@ -409,15 +409,7 @@ function wireUI(){
   if (![...rangeSel.options].some(o=>o.value==='CUSTOM')) {
     rangeSel.insertAdjacentHTML('beforeend', `<option value="CUSTOM">Custom…</option><option value="ALL">All</option>`);
   }
-  itemInp.addEventListener('input', ()=>{
-  if (itemInp.value.trim().toLowerCase() === 'other / custom'){
-    $('#customNameWrap').style.display = '';
-  } else {
-    $('#customNameWrap').style.display = 'none';
-    $('#customNameInput').value = '';
-  }
-});
-
+  
   // custom input
   const customInput = document.createElement('input');
   customInput.type = 'number'; customInput.min = '0'; customInput.placeholder = 'days';
@@ -452,6 +444,14 @@ function wireUI(){
   const itemInp = $('#addItemInput');
   let selectedExp = '';
 
+itemInp.addEventListener('input', ()=>{
+  if (itemInp.value.trim().toLowerCase() === 'other / custom'){
+    $('#customNameWrap').style.display = '';
+  } else {
+    $('#customNameWrap').style.display = 'none';
+    $('#customNameInput').value = '';
+  }
+});
   function endOfMonthISO(year, monthIndexZeroBased){
     const last = new Date(year, monthIndexZeroBased + 1, 0);
     const y = last.getFullYear();
