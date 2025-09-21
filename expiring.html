@@ -99,30 +99,30 @@ line-height: 1.4em;             /* tighten spacing */
 /* Make the main select box taller and wider */
 #addItemSelect,
 .choices__inner {
-min-height: 50px;       /* default ~38px, bump it up */
-font-size: 1.1rem;      /* bigger text */
-padding: 10px 12px;     /* more breathing room */
+  min-height: 50px;       /* default ~38px, bump it up */
+  font-size: 1.1rem;      /* bigger text */
+  padding: 10px 12px;     /* more breathing room */
 }
 
 .choices__inner {
-border-radius: 10px;
-border: 1px solid var(--b);
-width: 100%;            /* stretch full width of container */
+  border-radius: 10px;
+  border: 1px solid var(--b);
+  width: 100%;            /* stretch full width of container */
 }
+
 /* The main flexbox for the Item line */
 .item-row {
-display: flex;
-gap: 8px; /* space between the select box and button */
-align-items: center;
-margin-bottom: 10px;
+  display: flex;
+  gap: 8px; /* space between the select box and button */
+  align-items: center;
 }
-/* This is the key rule to make the select box take up 90% */
+
 #addItemSelect + .choices {
-flex: 1 1 90%;   /* Flex-grow, flex-shrink, and base width */
+  flex-grow: 1; /* This will make the select box grow to fill all available space */
 }
-/* This is the rule to make the button take up the rest of the space */
+
 .item-row #scanBarcodeBtn {
-flex: 0 0 auto;
+  flex-shrink: 0;
 }
 </style>
 </head>
@@ -179,48 +179,41 @@ flex: 0 0 auto;
 </div>
 
 <div id="addItemModal" class="modal">
-  <div class="modal-content">
-    <span class="close-btn">&times;</span>
-    <h3>Add Item to Inventory</h3>
-    
-    <div id="interactive" class="viewport"></div>
-    
-        <div>
-      <label>Item</label>
-      <div class="item-row">
-        <select id="addItemSelect"></select>
-        <button id="scanBarcodeBtn" class="btn" title="Scan Barcode">
-          <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z'/%3E%3C/svg%3E" alt="Barcode Scanner" class="scan-icon">
-        </button>
-      </div>
-    </div>
+    <div class="modal-content">
+        <span class="close-btn">&times;</span>
+        <h3>Add Item to Inventory</h3>
 
-        <div id="customNameWrap" style="display:none; margin-top:8px;">
-      <label>Custom Name</label>
-      <input id="customNameInput" placeholder="Enter custom item name…"/>
-    </div>
-    
-        <div class="grid2">
-      <div>
-        <label>Compartment</label>
-        <select id="addCompartmentSelect">
-          <option value="">Select…</option>
-          <option>Wall</option>
-          <option>Bag</option>
-          <option>Supply RM</option>
-        </select>
-      </div>
-      <div>
-        <label>Expiry Month</label>
-        <div id="addExpiryChips" class="chipbar"></div>
-      </div>
-      <div>
-        <label>Quantity</label>
-        <input id="addQty" type="number" min="1" step="1" value="1"/>
-      </div>
-    </div>
-    <button id="saveNewItemBtn" class="btn" style="width:100%;margin-top:12px;">Save Item</button>
-  </div>
+        <div id="interactive" class="viewport"></div>
+
+        <label>Item</label>
+        <div class="item-row">
+            <select id="addItemSelect"></select>
+            <button id="scanBarcodeBtn" class="btn" title="Scan Barcode">
+                <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z'/%3E%3C/svg%3E" alt="Barcode Scanner" class="scan-icon">
+            </button>
+        </div>
+
+        <div id="customNameWrap" style="display:none; margin-top:8px;">
+            <label>Custom Name</label>
+            <input id="customNameInput" placeholder="Enter custom item name…"/>
+        </div>
+
+        <label style="margin-top: 10px;">Compartment</label>
+        <select id="addCompartmentSelect">
+            <option value="">Select…</option>
+            <option>Wall</option>
+            <option>Bag</option>
+            <option>Supply RM</option>
+        </select>
+
+        <label style="margin-top: 10px;">Expiry Month</label>
+        <div id="addExpiryChips" class="chipbar"></div>
+
+        <label style="margin-top: 10px;">Quantity</label>
+        <input id="addQty" type="number" min="1" step="1" value="1"/>
+
+        <button id="saveNewItemBtn" class="btn" style="width:100%;margin-top:12px;">Save Item</button>
+    </div>
 </div>
 <script>
 // ===== CONFIG =====
