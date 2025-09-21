@@ -87,11 +87,16 @@
     #noteText{width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--b);border-radius:8px}
     #charLeft{float:right;color:var(--muted);font-size:.85rem}
     .scan-icon { height:20px;width:20px; }
+    /* Force dropdown and single selected item to keep text inline */
     .choices__list--dropdown .choices__item,
     .choices__list--single .choices__item {
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
+      white-space: normal !important;   /* allow words */
+      word-break: normal !important;    /* don't break inside words */
+      overflow: hidden;
+      text-overflow: ellipsis;
+      line-height: 1.4em;               /* tighten spacing */
+    }
+
 </style>
 </head>
 <body>
