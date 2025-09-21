@@ -266,9 +266,7 @@ function fillUnitSelect() {
 function render() {
   const q = ($('#searchBox').value||'').toLowerCase();
   const unitFilter = $('#unitSel').value;
-  const displayName = r.ItemName || r.Notes || '';
-
-  // Filter
+   // Filter
   let list = rows.filter(r=>{
     if (unitFilter !== 'ALL' && String(r.Unit).toUpperCase() !== String(unitFilter).toUpperCase()) return false;
     const hay = `${r.ItemName||''} ${r.ItemRef||''} ${r.Category||''} ${r.Compartment||''}`.toLowerCase();
@@ -302,6 +300,7 @@ function render() {
       const ref = r.ItemRef ? `<span class="muted">${escapeHtml(r.ItemRef)}</span>` : '';
       const unitDisp = r.UnitDisplay || r.Unit || '';
       const note = r.CrewStatus || '';
+      const displayName = r.ItemName || r.Notes || '';
       return `
         <tr class="${cls}" data-id="${encodeURIComponent(r.InventoryID)}">
           <td><strong>${escapeHtml(r.ItemName||'')}</strong><br>${ref}</td>
