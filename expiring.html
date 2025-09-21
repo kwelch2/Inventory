@@ -466,11 +466,11 @@ function wireUI(){
   const chipBar = $('#addExpiryChips');
   const compSel = $('#addCompartmentSelect');
   const qtyInp  = $('#addQty');
-  const itemInp = $('#addItemInput');
+  const itemSel = $('#addItemSelect');
   let selectedExp = '';
 
-itemInp.addEventListener('input', ()=>{
-  if (itemInp.value.trim().toLowerCase() === 'other / custom'){
+itemSel.addEventListener('change', ()=>{
+  if (itemSel.value === 'CUSTOM'){
     $('#customNameWrap').style.display = '';
   } else {
     $('#customNameWrap').style.display = 'none';
@@ -553,14 +553,22 @@ itemInp.addEventListener('input', ()=>{
   }
 
   showBtn.addEventListener('click', ()=>{
-    selectedExp = '';
-    itemInp.value = '';
-    compSel.value = '';
-    qtyInp.value = '1';
-    buildChips();
-    updateDatalist();
-    modal.style.display='block';
-  });
+  selectedExp = '';
+  compSel.value = '';
+  qtyInp.value = '1';
+
+  // Reset item select
+  if (itemSelect) {
+    itemSelect.clearStore();
+  }
+  initItemSelect();
+  $('#customNameWrap').style.display = 'none';
+  $('#customNameInput').value = '';
+
+  buildChips();
+  modal.style.display = 'block';
+});
+
   closeBtn.addEventListener('click', ()=> modal.style.display='none');
   window.addEventListener('click', e=>{ if(e.target===modal) modal.style.display='none'; });
 
@@ -674,7 +682,10 @@ function setupBarcodeScanner(forSearch = false) {
               $('#searchBox').value = data.item.ItemName || data.item.ItemNameAlt || '';
               render();
             } else {
-              $('#addItemInput').value = data.item.ItemName || data.item.ItemNameAlt || '';
+              if (itemSelect) {
+                itemSelect.clearStore();      // remove old options
+                initItemSelect();             // rebuild fresh options
+              }
             }
             alert(`Barcode detected: ${barcodeValue}`);
           } else {
