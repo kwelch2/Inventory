@@ -141,15 +141,21 @@
     
     <div class="grid2">
       <div>
-        <label>Item</label>
-        <div style="display:flex; gap:8px; align-items:center;">
-          <input id="addItemInput" list="itemsDatalist" placeholder="Start typing name…" style="flex:1;" />
-          <button id="scanBarcodeBtn" class="btn" title="Scan Barcode">
-            <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z'/%3E%3C/svg%3E" alt="Barcode Scanner" class="scan-icon">
-          </button>
-        </div>
-        <datalist id="itemsDatalist"></datalist>
-      </div>
+  <label>Item</label>
+  <div style="display:flex; gap:8px; align-items:center;">
+    <input id="addItemInput" list="itemsDatalist" placeholder="Start typing name…" style="flex:1;" />
+    <button id="scanBarcodeBtn" class="btn" title="Scan Barcode">
+      <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z'/%3E%3C/svg%3E" alt="Barcode Scanner" class="scan-icon">
+    </button>
+  </div>
+  <datalist id="itemsDatalist"></datalist>
+
+  <!-- Custom name field (hidden until "Other / Custom" is selected) -->
+  <div id="customNameWrap" style="display:none; margin-top:8px;">
+    <label>Custom Name</label>
+    <input id="customNameInput" placeholder="Enter custom item name…"/>
+  </div>
+</div>
       <div>
         <label>Compartment</label>
         <select id="addCompartmentSelect">
@@ -159,7 +165,7 @@
           <option>Supply RM</option>
         </select>
       </div>
-      <div>
+            <div>
         <label>Expiry Month</label>
         <div id="addExpiryChips" class="chipbar"></div>
       </div>
@@ -383,15 +389,16 @@ function openNoteEditor(inventoryId, initialText, onSave){
 }
 
 function updateDatalist(){
-  const names = new Set();
-  const opts = [];
-  for (const r of catalog){
-    const nm = String(r.ItemName||'').trim();
-    const alt= String(r.ItemNameAlt||'').trim();
-    if (nm && !names.has(nm)) { names.add(nm); opts.push(nm); }
-    if (alt && !names.has(alt)) { names.add(alt); opts.push(alt); }
-  }
-  $('#itemsDatalist').innerHTML = opts.map(v => `<option value="${escapeHtml(v)}">`).join('');
+  const names = new Set();
+  const opts = [];
+  for (const r of catalog){
+    const nm = String(r.ItemName||'').trim();
+    const alt= String(r.ItemNameAlt||'').trim();
+    if (nm && !names.has(nm)) { names.add(nm); opts.push(nm); }
+    if (alt && !names.has(alt)) { names.add(alt); opts.push(alt); }
+  }
+  opts.push("Other / Custom");  // <-- NEW
+  $('#itemsDatalist').innerHTML = opts.map(v => `<option value="${escapeHtml(v)}">`).join('');
 }
 
 // ===== UI wiring (including Add Item modal) =====
@@ -402,6 +409,14 @@ function wireUI(){
   if (![...rangeSel.options].some(o=>o.value==='CUSTOM')) {
     rangeSel.insertAdjacentHTML('beforeend', `<option value="CUSTOM">Custom…</option><option value="ALL">All</option>`);
   }
+  itemInp.addEventListener('input', ()=>{
+  if (itemInp.value.trim().toLowerCase() === 'other / custom'){
+    $('#customNameWrap').style.display = '';
+  } else {
+    $('#customNameWrap').style.display = 'none';
+    $('#customNameInput').value = '';
+  }
+});
 
   // custom input
   const customInput = document.createElement('input');
@@ -525,45 +540,55 @@ function wireUI(){
   window.addEventListener('click', e=>{ if(e.target===modal) modal.style.display='none'; });
 
 // Save (create)
-  $('#saveNewItemBtn').addEventListener('click', async ()=>{
-    const visibleName = itemInp.value.trim();
-    if (!visibleName) { alert('Pick an item name.'); return; }
+ $('#saveNewItemBtn').addEventListener('click', async ()=> {
+  let visibleName = itemInp.value.trim();
+  let itemId, itemName;
 
-    // Resolve ItemID by ItemName or ItemNameAlt
-    const row = catalog.find(c => {
-  const nm  = (c.ItemName || '').toLowerCase();
-  const alt = (c.ItemNameAlt || '').toLowerCase();
-  const v   = visibleName.toLowerCase();
-  return nm.includes(v) || alt.includes(v);
+  if (visibleName.toLowerCase() === 'other / custom'){
+    const customName = $('#customNameInput').value.trim();
+    if (!customName){ alert('Enter a custom name.'); return; }
+    itemId = `CUSTOM-${Date.now()}`;
+    itemName = customName;
+  } else {
+    const row = catalog.find(c => {
+      const nm  = (c.ItemName || '').toLowerCase();
+      const alt = (c.ItemNameAlt || '').toLowerCase();
+      const v   = visibleName.toLowerCase();
+      return nm === v || alt === v;
+    });
+    if (!row || !row.ItemID){ alert('Item not found in Catalog.'); return; }
+    itemId = row.ItemID;
+    itemName = row.ItemName;
+  }
+
+  let unit = $('#unitSel').value;
+  if (unit === 'ALL') {
+    unit = prompt('Which unit is this for (e.g., 31, 33, 36)?')?.trim() || '';
+    if (!unit) return;
+  }
+
+  if (!selectedExp) { alert('Pick an expiry (chip or custom).'); return; }
+
+  const payload = {
+    itemId,
+    itemName,   // <-- send name along for custom items
+    unit,
+    compartment: $('#addCompartmentSelect').value.trim(),
+    expiry: selectedExp,
+    qty: Number($('#addQty').value)||1,
+    crewStatus: ''
+  };
+
+  try{
+    await postCreate(payload);
+    modal.style.display='none';
+    await init();
+  }catch(e){
+    console.error(e);
+    alert('Add failed');
+  }
 });
-if (!row || !row.ItemID) { alert('Item not found in Catalog.'); return; }
 
-    let unit = $('#unitSel').value;
-    if (unit === 'ALL') {
-      unit = prompt('Which unit is this for (e.g., 31, 33, 36)?')?.trim() || '';
-      if (!unit) return;
-    }
-
-    if (!selectedExp) { alert('Pick an expiry (chip or custom).'); return; }
-    const payload = {
-      itemId: row.ItemID,
-      unit,
-      compartment: $('#addCompartmentSelect').value.trim(),
-      expiry: selectedExp,                  // ISO yyyy-mm-dd
-      qty: Number($('#addQty').value)||1,
-      crewStatus: ''
-    };
-
-    try{
-      await postCreate(payload);
-      modal.style.display='none';
-      await init(); // refresh list
-    }catch(e){
-      console.error(e);
-      alert('Add failed');
-    }
-  });
-}
 
 // This is the function that initializes the barcode scanner.
 function setupBarcodeScanner(forSearch = false) {
