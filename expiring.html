@@ -15,118 +15,118 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css"/>
 <script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
 <style>
-    :root{--bg:#f7f7f7;--card:#fff;--b:#ddd;--muted:#666;--ok:#e7f7ee;--warn:#fff7e6;--bad:#fdecea}
-    *{box-sizing:border-box}
-    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:var(--bg)}
-    .wrap{max-width:1100px;margin:0 auto;padding:16px}
-    .card{background:var(--card);border:1px solid var(--b);border-radius:12px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
-    h1{margin:0 0 6px}
-    .muted{color:var(--muted);font-size:.9rem}
-    .toolbar{display:flex;gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap}
-    select,button,input{padding:8px 10px;border:1px solid var(--b);border-radius:10px;background:#fff}
-    button{cursor:pointer}
-    table{width:100%;border-collapse:collapse}
-    th,td{padding:8px 10px;border-bottom:1px solid #eee;text-align:left;vertical-align:top}
-    th{font-weight:600;background:#fafafa}
-    .ok{background:var(--ok)} .warn{background:var(--warn)} .bad{background:var(--bad)}
-    .actions{display:flex;gap:6px;flex-wrap:wrap}
-    .btn{padding:6px 10px;border:1px solid var(--b);border-radius:10px;background:#fafafa}
-    .btn.red{border-color:#c00} .btn.green{border-color:#090}
-    .right{text-align:right}
-    .spacer{flex:1}
-    .modal{display:none;position:fixed;z-index:99;left:0;top:0;width:100%;height:100%;overflow:auto;background:rgba(0,0,0,.35)}
-    .modal-content{background:#fff;margin:10% auto;padding:16px;border:1px solid var(--b);width:min(540px,92%);border-radius:12px}
-    .close-btn{float:right;font-size:24px;cursor:pointer}
-    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-    .chipbar{display:flex;gap:6px;flex-wrap:wrap}
+/* ** Revised Styles ** */
+:root{--bg:#f7f7f7;--card:#fff;--b:#ddd;--muted:#666;--ok:#e7f7ee;--warn:#fff7e6;--bad:#fdecea}
+*{box-sizing:border-box}
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:var(--bg)}
+.wrap{max-width:1100px;margin:0 auto;padding:16px}
+.card{background:var(--card);border:1px solid var(--b);border-radius:12px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+h1{margin:0 0 6px}
+.muted{color:var(--muted);font-size:.9rem}
+.toolbar{display:flex;gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap}
+select,button,input{padding:8px 10px;border:1px solid var(--b);border-radius:10px;background:#fff}
+button{cursor:pointer}
+table{width:100%;border-collapse:collapse}
+th,td{padding:8px 10px;border-bottom:1px solid #eee;text-align:left;vertical-align:top}
+th{font-weight:600;background:#fafafa}
+.ok{background:var(--ok)} .warn{background:var(--warn)} .bad{background:var(--bad)}
+.actions{display:flex;gap:6px;flex-wrap:wrap}
+.btn{padding:6px 10px;border:1px solid var(--b);border-radius:10px;background:#fafafa}
+.btn.red{border-color:#c00} .btn.green{border-color:#090}
+.right{text-align:right}
+.spacer{flex:1}
+.modal{display:none;position:fixed;z-index:99;left:0;top:0;width:100%;height:100%;overflow:auto;background:rgba(0,0,0,.35)}
+.modal-content{background:#fff;margin:10% auto;padding:16px;border:1px solid var(--b);width:min(540px,92%);border-radius:12px}
+.close-btn{float:right;font-size:24px;cursor:pointer}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.chipbar{display:flex;gap:6px;flex-wrap:wrap}
 
-    /* Note trigger styled like an input */
-    .note-trigger{
-      padding:6px 10px;border:1px solid var(--b);border-radius:10px;background:#fff;
-      min-width:140px;text-align:left;cursor:pointer
-    }
-    /* Bright yellow highlight for Pending button */
+/* Note trigger styled like an input */
+.note-trigger{
+  padding:6px 10px;border:1px solid var(--b);border-radius:10px;background:#fff;
+  min-width:140px;text-align:left;cursor:pointer
+}
+/* Bright yellow highlight for Pending button */
 .btn.pending.is-active {
   background: #ffeb3b !important; /* Material bright yellow */
-  color: #000;                    /* keep text readable */
+  color: #000;                       /* keep text readable */
   font-weight: 600;
-  border-color: #fdd835;          /* darker yellow border */
+  border-color: #fdd835;              /* darker yellow border */
 }
 
-    .btn.is-active{background:var(--warn);}
-    #interactive-search-modal {
-        position: fixed;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        z-index: 1000;
-        width: min(640px, 95%);
-        height: 360px;
-        background: #000;
-        border: 1px solid #ccc;
-        display: none;
-    }
-    #interactive-search-modal video {
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-    }
-    .drawingBuffer {
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-    }
-    /* Small note modal */
-    #noteModal{display:none;position:fixed;z-index:120;inset:0;background:rgba(0,0,0,.35)}
-    #noteModal .box{background:#fff;margin:12% auto;max-width:420px;width:92%;
-      border:1px solid var(--b);border-radius:12px;padding:14px}
-    #noteText{width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--b);border-radius:8px}
-    #charLeft{float:right;color:var(--muted);font-size:.85rem}
-    .scan-icon { height:20px;width:20px; }
-    /* Force dropdown and single selected item to keep text inline */
-    .choices__list--dropdown .choices__item,
-    .choices__list--single .choices__item {
-      white-space: normal !important;   /* allow words */
-      word-break: normal !important;    /* don't break inside words */
-      overflow: hidden;
-      text-overflow: ellipsis;
-      line-height: 1.4em;               /* tighten spacing */
-    }
-    /* Make the main select box taller and wider */
-    #addItemSelect,
-    .choices__inner {
-      min-height: 50px;        /* default ~38px, bump it up */
-      font-size: 1.1rem;       /* bigger text */
-      padding: 10px 12px;      /* more breathing room */
-    }
+.btn.is-active{background:var(--warn);}
+#interactive-search-modal {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 1000;
+    width: min(640px, 95%);
+    height: 360px;
+    background: #000;
+    border: 1px solid #ccc;
+    display: none;
+}
+#interactive-search-modal video {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}
+.drawingBuffer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}
+/* Small note modal */
+#noteModal{display:none;position:fixed;z-index:120;inset:0;background:rgba(0,0,0,.35)}
+#noteModal .box{background:#fff;margin:12% auto;max-width:420px;width:92%;
+  border:1px solid var(--b);border-radius:12px;padding:14px}
+#noteText{width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--b);border-radius:8px}
+#charLeft{float:right;color:var(--muted);font-size:.85rem}
+.scan-icon { height:20px;width:20px; }
+/* Force dropdown and single selected item to keep text inline */
+.choices__list--dropdown .choices__item,
+.choices__list--single .choices__item {
+  white-space: normal; /* Allow text to wrap naturally */
+  word-break: normal;     /* don't break inside words */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.4em;             /* tighten spacing */
+}
+/* Make the main select box taller and wider */
+#addItemSelect,
+.choices__inner {
+  min-height: 50px;       /* default ~38px, bump it up */
+  font-size: 1.1rem;      /* bigger text */
+  padding: 10px 12px;     /* more breathing room */
+}
 
-    .choices__inner {
-      border-radius: 10px;
-      border: 1px solid var(--b);
-      width: 100%;             /* stretch full width of container */
-    }
-    /* Make the item select box wider (about half the modal) */
-    /* Make the item select take ~70% of the modal row */
+.choices__inner {
+  border-radius: 10px;
+  border: 1px solid var(--b);
+  width: 100%;            /* stretch full width of container */
+}
+/* Make the item select box wider (about half the modal) */
+/* Make the item select take ~70% of the modal row */
 #addItemSelect {
   display: none !important; /* Choices.js hides this anyway */
 }
 
 #addItemSelect + .choices {
   flex: 1 1 auto;
-  min-width: 70%;        /* this controls how wide the box is */
+  min-width: 70%;       /* this controls how wide the box is */
   max-width: 100%;
 }
 
 #addItemSelect + .choices .choices__inner {
-  min-height: 55px;      /* bigger click area */
+  min-height: 55px;     /* bigger click area */
   font-size: 1.1rem;
   padding: 12px 14px;
 }
-
 </style>
 </head>
 <body>
@@ -502,7 +502,7 @@ function wireUI(){
   // ===== Add Item modal wiring =====
   const modal = $('#addItemModal');
   const showBtn = $('#showAddItemModal');
-  const closeBtn = $('.close-btn');
+  const closeBtn = modal.querySelector('.close-btn');
   const chipBar = $('#addExpiryChips');
   const compSel = $('#addCompartmentSelect');
   const qtyInp  = $('#addQty');
