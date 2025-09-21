@@ -12,6 +12,8 @@
 <link rel="icon" type="image/png" sizes="192x192" href="https://kwelch2.github.io/Inventory/android-chrome-192x192.png">
 <link rel="icon" type="image/png" sizes="512x512" href="https://kwelch2.github.io/Inventory/android-chrome-512x512.png">
 <script src="https://kwelch2.github.io/Inventory/quagga.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css"/>
+<script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
 <style>
     :root{--bg:#f7f7f7;--card:#fff;--b:#ddd;--muted:#666;--ok:#e7f7ee;--warn:#fff7e6;--bad:#fdecea}
     *{box-sizing:border-box}
@@ -150,12 +152,11 @@
       <div>
   <label>Item</label>
   <div style="display:flex; gap:8px; align-items:center;">
-    <input id="addItemInput" list="itemsDatalist" placeholder="Start typing name…" style="flex:1;" />
+    <select id="addItemSelect" style="width:100%"></select>
     <button id="scanBarcodeBtn" class="btn" title="Scan Barcode">
       <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z'/%3E%3C/svg%3E" alt="Barcode Scanner" class="scan-icon">
     </button>
   </div>
-  <datalist id="itemsDatalist"></datalist>
 
   <!-- Custom name field (hidden until "Other / Custom" is selected) -->
   <div id="customNameWrap" style="display:none; margin-top:8px;">
@@ -395,17 +396,34 @@ function openNoteEditor(inventoryId, initialText, onSave){
   };
 }
 
-function updateDatalist(){
-  const names = new Set();
-  const opts = [];
-  for (const r of catalog){
-    const nm = String(r.ItemName||'').trim();
-    const alt= String(r.ItemNameAlt||'').trim();
-    if (nm && !names.has(nm)) { names.add(nm); opts.push(nm); }
-    if (alt && !names.has(alt)) { names.add(alt); opts.push(alt); }
+let itemSelect;  // Choices instance
+
+function initItemSelect() {
+  const sel = document.getElementById('addItemSelect');
+
+  // If already initialized, clear/reset
+  if (itemSelect) {
+    itemSelect.clearStore();
+  } else {
+    itemSelect = new Choices(sel, {
+      searchEnabled: true,
+      placeholderValue: 'Select item…',
+      allowHTML: false,
+    });
   }
-  opts.push("Other / Custom");  // <-- NEW
-  $('#itemsDatalist').innerHTML = opts.map(v => `<option value="${escapeHtml(v)}">`).join('');
+
+  // Build options
+  const options = [];
+  const names = new Set();
+  for (const r of catalog) {
+    const nm  = (r.ItemName || '').trim();
+    const alt = (r.ItemNameAlt || '').trim();
+    if (nm && !names.has(nm)) { names.add(nm); options.push({ value: r.ItemID, label: nm }); }
+    if (alt && !names.has(alt)) { names.add(alt); options.push({ value: r.ItemID, label: alt }); }
+  }
+  options.push({ value: 'CUSTOM', label: 'Other / Custom' });
+
+  itemSelect.setChoices(options, 'value', 'label', true);
 }
 
 // ===== UI wiring (including Add Item modal) =====
@@ -548,22 +566,17 @@ itemInp.addEventListener('input', ()=>{
 
 // Save (create)
  $('#saveNewItemBtn').addEventListener('click', async ()=> {
-  let visibleName = itemInp.value.trim();
+  const selectedVal = $('#addItemSelect').value;
   let itemId, itemName;
 
-  if (visibleName.toLowerCase() === 'other / custom'){
+  if (selectedVal === 'CUSTOM') {
     const customName = $('#customNameInput').value.trim();
-    if (!customName){ alert('Enter a custom name.'); return; }
+    if (!customName) { alert('Enter a custom name.'); return; }
     itemId = `CUSTOM-${Date.now()}`;
     itemName = customName;
   } else {
-    const row = catalog.find(c => {
-      const nm  = (c.ItemName || '').toLowerCase();
-      const alt = (c.ItemNameAlt || '').toLowerCase();
-      const v   = visibleName.toLowerCase();
-      return nm === v || alt === v;
-    });
-    if (!row || !row.ItemID){ alert('Item not found in Catalog.'); return; }
+    const row = catalog.find(c => c.ItemID === selectedVal);
+    if (!row) { alert('Item not found in Catalog.'); return; }
     itemId = row.ItemID;
     itemName = row.ItemName;
   }
