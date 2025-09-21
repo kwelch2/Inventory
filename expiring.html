@@ -109,6 +109,13 @@
       border: 1px solid var(--b);
       width: 100%;             /* stretch full width of container */
     }
+    /* Make the item select box wider (about half the modal) */
+    #addItemSelect,
+    #addItemSelect ~ .choices {
+      flex: 1 1 auto;        /* let it grow */
+      min-width: 65%;        /* force it to be at least 65% of the row */
+      max-width: 100%;       /* don't overflow */
+    }
 </style>
 </head>
 <body>
