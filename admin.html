@@ -390,7 +390,7 @@ function renderPlan(){
     <td>${r.vendorSku||''}</td>
     <td>${r.unitPrice? '$'+fmt(r.unitPrice):''}</td>
   </tr>`).join('');
-  $('planTable').innerHTML = `<table><thead><tr><th>Item</th><th>Qty</th><th>Vendor</th><th>Vendor SKU</th><th>Price</th></tr></thead><tbody>${rows}</tbody></tbody></table>`;
+  $('planTable').innerHTML = `<table><thead><tr><th>Item</th><th>Qty</th><th>Vendor</th><th>Vendor SKU</th><th>Price</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 function openCatalogDialog(itemId){
   const i = state.catalog.find(r => String(r.ItemID)===String(itemId));
