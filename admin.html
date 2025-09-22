@@ -267,7 +267,6 @@ async function POST(actionType, payload={}){
   const resp = await withTimeout((signal)=>fetch(BASE, {
     method:'POST',
     headers:{ 'Content-Type':'application/json' },
-    credentials:'include',
     body: JSON.stringify(body),
     signal
   }));
@@ -280,7 +279,7 @@ async function POST(actionType, payload={}){
 }
 async function GET(action, params={}){
   const q = new URLSearchParams({ action, ...params, _ts: Date.now() }).toString();
-  const resp = await withTimeout((signal)=>fetch(`${BASE}?${q}`, { signal, credentials:'include' }));
+  const resp = await withTimeout((signal)=>fetch(`${BASE}?${q}`, { signal }));
   const text = await resp.text();
   let data; try{ data = JSON.parse(text); }catch{ data = { ok:false, error:'Non-JSON response', raw:text }; }
   if(!resp.ok || data.ok===false){ const err = new Error(data.error || `GET ${action} failed`); err.code = resp.status; err.data = data; throw err; }
@@ -391,7 +390,7 @@ function renderPlan(){
     <td>${r.vendorSku||''}</td>
     <td>${r.unitPrice? '$'+fmt(r.unitPrice):''}</td>
   </tr>`).join('');
-  $('planTable').innerHTML = `<table><thead><tr><th>Item</th><th>Qty</th><th>Vendor</th><th>Vendor SKU</th><th>Price</th></tr></thead><tbody>${rows}</tbody></table>`;
+  $('planTable').innerHTML = `<table><thead><tr><th>Item</th><th>Qty</th><th>Vendor</th><th>Vendor SKU</th><th>Price</th></tr></thead><tbody>${rows}</tbody></tbody></table>`;
 }
 function openCatalogDialog(itemId){
   const i = state.catalog.find(r => String(r.ItemID)===String(itemId));
