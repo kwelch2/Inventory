@@ -251,25 +251,14 @@ function vendorOf(vendorId){
 }
 function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 5200); }
 
-// network timeout helper
-function withTimeout(promise, ms=15000){
-  const ctl = new AbortController();
-  const timer = setTimeout(()=>ctl.abort(), ms);
-  return Promise.race([
-    promise(ctl.signal).finally(()=>clearTimeout(timer)),
-    new Promise((_,rej)=>setTimeout(()=>rej(new Error('Request timed out')), ms+20))
-  ]);
-}
-
 /************* API *************/
 async function POST(actionType, payload={}){
   const body = { actionType, ...payload };
-  const resp = await withTimeout((signal)=>fetch(BASE, {
+  const resp = await fetch(BASE, {
     method:'POST',
     headers:{ 'Content-Type':'application/json' },
-    body: JSON.stringify(body),
-    signal
-  }));
+    body: JSON.stringify(body)
+  });
   const text = await resp.text();
   let data; try{ data = JSON.parse(text); }catch{ data = { ok:false, error:'Non-JSON response', raw:text }; }
   if(!resp.ok || data.ok===false){
@@ -279,7 +268,7 @@ async function POST(actionType, payload={}){
 }
 async function GET(action, params={}){
   const q = new URLSearchParams({ action, ...params, _ts: Date.now() }).toString();
-  const resp = await withTimeout((signal)=>fetch(`${BASE}?${q}`, { signal }));
+  const resp = await fetch(`${BASE}?${q}`);
   const text = await resp.text();
   let data; try{ data = JSON.parse(text); }catch{ data = { ok:false, error:'Non-JSON response', raw:text }; }
   if(!resp.ok || data.ok===false){ const err = new Error(data.error || `GET ${action} failed`); err.code = resp.status; err.data = data; throw err; }
