@@ -257,7 +257,6 @@ async function POST(actionType, payload={}){
   const resp = await fetch(BASE, {
     method:'POST',
     headers:{ 'Content-Type':'application/json' },
-    credentials:'include',
     body: JSON.stringify(body)
   });
   const text = await resp.text();
@@ -269,7 +268,7 @@ async function POST(actionType, payload={}){
 }
 async function GET(action, params={}){
   const q = new URLSearchParams({ action, ...params, _ts: Date.now() }).toString();
-  const resp = await fetch(`${BASE}?${q}`, { credentials:'include' });
+  const resp = await fetch(`${BASE}?${q}`);
   const text = await resp.text();
   let data; try{ data = JSON.parse(text); }catch{ data = { ok:false, error:'Non-JSON response', raw:text }; }
   if(!resp.ok || data.ok===false){ const err = new Error(data.error || `GET ${action} failed`); err.code = resp.status; err.data = data; throw err; }
