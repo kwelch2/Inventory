@@ -187,7 +187,6 @@
  * CONFIG — match Apps Script
  *************************/
 const BASE = 'https://ems-inventory-proxy.kylewelch33.workers.dev';
-const TOKEN = '9mB4zR7kP2fW6vNqE1jH8aLcV5gT_sYx0uI-oZ3pD9bX4wK7eS6hF-EMS';
 
 const state = {
   catalog: [],
@@ -203,6 +202,7 @@ let catalogById = new Map();
 let vendorsById = new Map();
 let catalogSearch = ''; // current search text
 let isScannerActive = false;
+let quaggaHandler = null;
 
 
 function getId(obj, ...keys){
@@ -263,10 +263,11 @@ function withTimeout(promise, ms=15000){
 
 /************* API *************/
 async function POST(actionType, payload={}){
-  const body = { token: TOKEN, actionType, ...payload };
+  const body = { actionType, ...payload };
   const resp = await withTimeout((signal)=>fetch(BASE, {
     method:'POST',
     headers:{ 'Content-Type':'application/json' },
+    credentials:'include',
     body: JSON.stringify(body),
     signal
   }));
@@ -279,7 +280,7 @@ async function POST(actionType, payload={}){
 }
 async function GET(action, params={}){
   const q = new URLSearchParams({ action, ...params, _ts: Date.now() }).toString();
-  const resp = await withTimeout((signal)=>fetch(`${BASE}?${q}`, { signal }));
+  const resp = await withTimeout((signal)=>fetch(`${BASE}?${q}`, { signal, credentials:'include' }));
   const text = await resp.text();
   let data; try{ data = JSON.parse(text); }catch{ data = { ok:false, error:'Non-JSON response', raw:text }; }
   if(!resp.ok || data.ok===false){ const err = new Error(data.error || `GET ${action} failed`); err.code = resp.status; err.data = data; throw err; }
@@ -456,6 +457,11 @@ function startScanner(onDetected) {
   const viewport = $('interactive');
   viewport.style.display = 'block';
 
+  if (quaggaHandler && typeof Quagga.offDetected === 'function') {
+    Quagga.offDetected(quaggaHandler);
+    quaggaHandler = null;
+  }
+
   Quagga.init({
     inputStream: {
       name: "Live",
@@ -470,25 +476,38 @@ function startScanner(onDetected) {
     if (err) {
       console.error(err);
       toast("Scanner error: " + err.message);
-      isScannerActive = false;
+      stopScanner();
       return;
     }
     Quagga.start();
   });
 
-  Quagga.onDetected(function(result) {
-    const code = result.codeResult.code;
+  quaggaHandler = function(result) {
+    const code = result.codeResult?.code;
     if (code) {
       toast("Scanned: " + code);
       if (onDetected) onDetected(code);
       stopScanner();
     }
-  });
+  };
+
+  if (typeof Quagga.onDetected === 'function') {
+    Quagga.onDetected(quaggaHandler);
+  }
 }
 
 function stopScanner() {
-  if (!isScannerActive) return;
-  Quagga.stop();
+  try {
+    if (typeof Quagga.stop === 'function') {
+      Quagga.stop();
+    }
+  } catch(err){
+    console.warn('Quagga.stop failed', err);
+  }
+  if (quaggaHandler && typeof Quagga.offDetected === 'function') {
+    Quagga.offDetected(quaggaHandler);
+  }
+  quaggaHandler = null;
   $('interactive').style.display = 'none';
   isScannerActive = false;
 }
@@ -517,7 +536,8 @@ function renderVendorGroups(){
   const html = sorted.map(({vendorId, rows, vendorName})=>{
     const subtotal = rows.reduce((s,r)=> s + (Number(r.unitPrice||0)*Number(r.qty||0)), 0);
     const lines = rows
-      .sort((a,b)=> nameOf(a.itemId).localeCompare(b.itemId))
+      .slice()
+      .sort((a,b)=> nameOf(a.itemId).localeCompare(nameOf(b.itemId)))
       .map(r=>`<tr><td>${nameOf(r.itemId)}</td><td>${r.vendorSku||''}</td><td>${r.qty}</td><td>$${fmt(r.unitPrice)}</td><td>$${fmt(r.unitPrice*r.qty)}</td></tr>`)
       .join('');
     return `<div class="vendor-basket">
