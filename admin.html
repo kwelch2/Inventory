@@ -187,6 +187,7 @@
  * CONFIG — match Apps Script
  *************************/
 const BASE = 'https://ems-inventory-proxy.kylewelch33.workers.dev';
+const AUTH_TOKEN = '9mB4zR7kP2fW6vNqE1jH8aLcV5gT_sYx0uI-oZ3pD9bX4wK7eS6hF-EMS';
 
 const state = {
   catalog: [],
@@ -253,7 +254,7 @@ function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('sho
 
 /************* API *************/
 async function POST(actionType, payload={}){
-  const body = { actionType, ...payload };
+  const body = { actionType, ...payload, token: AUTH_TOKEN };
   const resp = await fetch(BASE, {
     method:'POST',
     headers:{ 'Content-Type':'application/json' },
