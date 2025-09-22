@@ -81,7 +81,6 @@
 <script>
 /*** CONFIG: use the Cloudflare Worker, not the raw Apps Script URL ***/
 const PROXY_URL = 'https://ems-inventory-proxy.kylewelch33.workers.dev';
-const TOKEN     = '9mB4zR7kP2fW6vNqE1jH8aLcV5gT_sYx0uI-oZ3pD9bX4wK7eS6hF-EMS';
 
 /*** STATE ***/
 let catRows = [], orderRows = [], vpRows = [];
@@ -89,6 +88,40 @@ let catRows = [], orderRows = [], vpRows = [];
 /*** UTIL ***/
 const $ = s => document.querySelector(s);
 function money(v){ const n = Number(v); return Number.isFinite(n) ? `$${n.toFixed(2)}` : 'N/A'; }
+
+async function apiPost(actionType, payload={}){
+  const resp = await fetch(PROXY_URL, {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    credentials:'include',
+    body: JSON.stringify({ actionType, ...payload })
+  });
+  const text = await resp.text();
+  let data;
+  try { data = JSON.parse(text); }
+  catch { throw new Error(`Non-JSON response: ${text.slice(0,200)}`); }
+  if(!resp.ok || data.ok === false){
+    const err = new Error(data?.error || `Action ${actionType} failed`);
+    err.data = data;
+    throw err;
+  }
+  return data;
+}
+
+async function apiGet(action, params={}){
+  const q = new URLSearchParams({ action, ...params, _ts: Date.now() }).toString();
+  const resp = await fetch(`${PROXY_URL}?${q}`, { credentials:'include' });
+  const text = await resp.text();
+  let data;
+  try { data = JSON.parse(text); }
+  catch { throw new Error(`Non-JSON response: ${text.slice(0,200)}`); }
+  if(!resp.ok || data.ok === false){
+    const err = new Error(data?.error || `Action ${action} failed`);
+    err.data = data;
+    throw err;
+  }
+  return data;
+}
 
 /*** RENDERERS ***/
 function renderPending(){
@@ -152,14 +185,7 @@ function renderPending(){
       const orderId = btn.dataset.orderid;
       const status  = btn.dataset.status;
       try{
-        const res = await fetch(PROXY_URL, {
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({ token:TOKEN, actionType:'updateOrderStatus', orderId, status })
-        });
-        const j = await res.json();
-        if (!j.ok) throw new Error(j.error||'server');
-
+        await apiPost('updateOrderStatus', { orderId, status });
         const row = orderRows.find(r => r.OrderID === orderId);
         if (row) row.Status = status;
         renderPending();
@@ -233,9 +259,7 @@ function renderHistory(days, query=''){
 async function boot(){
   try{
     // GET all page data via proxy
-    const res = await fetch(`${PROXY_URL}?action=getRequestPageData`);
-    const data = await res.json();
-    if (!data.ok) throw new Error(data.error||'Failed to load');
+    const data = await apiGet('getRequestPageData');
 
     catRows = data.catalog || [];
     orderRows = data.orders || [];
@@ -287,7 +311,7 @@ async function boot(){
       const qty = $('#qty').value.trim();
       const notes = $('#notes').value.trim();
 
-      const payload = { token:TOKEN, actionType:'createRequest', qty, notes };
+      const payload = { qty, notes };
 
       if (onOther){
         if (!otherName){ msg.textContent='Please enter the item name.'; return; }
@@ -300,18 +324,11 @@ async function boot(){
 
       msg.textContent = 'Submitting...';
       try{
-        const res = await fetch(PROXY_URL, {
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body: JSON.stringify(payload)
-        });
-        const j = await res.json();
-        if (!j.ok) throw new Error(j.error||'server');
+        await apiPost('createRequest', payload);
 
         msg.textContent = 'Request submitted. Refreshing...';
         // Refresh only the order list, not the whole page
-        const r2 = await fetch(`${PROXY_URL}?action=getRequestPageData`);
-        const d2 = await r2.json();
+        const d2 = await apiGet('getRequestPageData');
         orderRows = d2.orders || [];
         renderPending();
         // Clear form

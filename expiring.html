@@ -278,114 +278,144 @@ th{font-weight:600;background:#fafafa}
 <script>
 // ===== CONFIG =====
 const PROXY_URL = 'https://ems-inventory-proxy.kylewelch33.workers.dev';
-const TOKEN     = '9mB4zR7kP2fW6vNqE1jH8aLcV5gT_sYx0uI-oZ3pD9bX4wK7eS6hF-EMS';
 
 // ===== UTIL =====
 const $ = s => document.querySelector(s);
 const escapeHtml = s => (s??'').toString().replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;' }[m]));
 const debounce = (fn,ms)=>{ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),ms); }; };
 
+async function apiPost(actionType, payload={}){
+  const resp = await fetch(PROXY_URL, {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    credentials:'include',
+    body: JSON.stringify({ actionType, ...payload })
+  });
+  const text = await resp.text();
+  let data;
+  try { data = JSON.parse(text); }
+  catch { throw new Error(`Non-JSON response: ${text.slice(0,200)}`); }
+  if(!resp.ok || data.ok === false){
+    const err = new Error(data?.error || `Action ${actionType} failed`);
+    err.data = data;
+    throw err;
+  }
+  return data;
+}
+
+async function apiGet(action, params={}){
+  const q = new URLSearchParams({ action, ...params, _ts: Date.now() }).toString();
+  const resp = await fetch(`${PROXY_URL}?${q}`, { credentials:'include' });
+  const text = await resp.text();
+  let data;
+  try { data = JSON.parse(text); }
+  catch { throw new Error(`Non-JSON response: ${text.slice(0,200)}`); }
+  if(!resp.ok || data.ok === false){
+    const err = new Error(data?.error || `Action ${action} failed`);
+    err.data = data;
+    throw err;
+  }
+  return data;
+}
+
 // Row class from days + status (Pending highlighted; OK/Replaced filtered out server-side)
 function rowClass(days, status){
-  if ((status||'').toLowerCase() === 'pending') return 'warn';
-  if (days != null){
-    if (days < 0) return 'bad';
-    if (days <= 30) return 'warn';
-  }
-  return 'ok';
+  if ((status||'').toLowerCase() === 'pending') return 'warn';
+  if (days != null){
+    if (days < 0) return 'bad';
+    if (days <= 30) return 'warn';
+  }
+  return 'ok';
 }
 
 // ===== STATE =====
 let units = [], rows = [], catalog = [];
 let isScannerActive = false;
-let onDetectedCallback = null;
+let quaggaDetectHandler = null;
 
 // ===== DATA LOAD =====
 function readWithin(){
-  const sel = $('#rangeSel').value;
-  if (sel === 'CUSTOM') {
-    const v = parseInt($('#customDays').value || '0', 10);
-    return isNaN(v) || v < 0 ? 0 : v;
-  }
-  return sel === 'ALL' ? 'ALL' : parseInt(sel, 10);
+  const sel = $('#rangeSel').value;
+  if (sel === 'CUSTOM') {
+    const v = parseInt($('#customDays').value || '0', 10);
+    return isNaN(v) || v < 0 ? 0 : v;
+  }
+  return sel === 'ALL' ? 'ALL' : parseInt(sel, 10);
 }
 
 async function loadAll() {
-  const within = readWithin();
-  const unit   = $('#unitSel')?.value || 'ALL';
- 
-  const refreshBtn = $('#refreshBtn');
+  const within = readWithin();
+  const unit   = $('#unitSel')?.value || 'ALL';
+
+  const refreshBtn = $('#refreshBtn');
   const refreshSpinner = $('#refreshSpinner');
   refreshBtn.disabled = true;
   refreshSpinner.style.display = 'inline-block';
-  
-  try {
-    const [inv, un, cat] = await Promise.all([
-      fetch(`${PROXY_URL}?action=expiring&within=${within}&unit=${unit}&showResolved=false`).then(r=>r.json()),
-      fetch(`${PROXY_URL}?action=listunits`).then(r=>r.json()),
-      fetch(`${PROXY_URL}?action=listcatalog`).then(r=>r.json())
-    ]);
-    if (!inv.ok) throw new Error(inv.error || 'expiring failed');
-    if (!un.ok)  throw new Error(un.error  || 'units failed');
-    if (!cat.ok) throw new Error(cat.error || 'catalog failed');
 
-    rows    = inv.rows || [];
-    units   = un.rows  || [];
-    catalog = cat.rows || [];
-  } catch(e) {
-    console.error(e);
-    $('#content').innerHTML = `<p style="color:#a00;font-weight:700;">Error loading data. Check Worker URL & GAS deployment.</p>`;
-  } finally {
-    refreshBtn.disabled = false;
+  try {
+    const [inv, un, cat] = await Promise.all([
+      apiGet('expiring', { within, unit, showResolved:'false' }),
+      apiGet('listunits'),
+      apiGet('listcatalog')
+    ]);
+
+    rows    = inv.rows || [];
+    units   = un.rows || [];
+    catalog = cat.rows || [];
+  } catch(e) {
+    console.error(e);
+    $('#content').innerHTML = `<p style="color:#a00;font-weight:700;">Error loading data. Check Worker URL & GAS deployment.</p>`;
+  } finally {
+    refreshBtn.disabled = false;
     refreshSpinner.style.display = 'none';
-  }
+  }
 }
 
 // ===== RENDER =====
 function fillUnitSelect() {
-  const sel = $('#unitSel'); if (!sel) return;
-  const prev = sel.value || 'ALL';
-  const unitIds   = Array.from(new Set(rows.map(r => String(r.Unit||'').trim()))).filter(Boolean);
-  const unitNames = new Map(units.map(u => [String(u.Unit||'').trim(), String(u.Display||'').trim()]));
-  const unique = Array.from(new Set([...unitIds, ...units.map(u=>String(u.Unit||'').trim())])).filter(Boolean).sort();
-  const options = ['ALL', ...unique].map(u => `<option value="${u}">${u==='ALL'?'ALL':(unitNames.get(u)||u)}</option>`).join('');
-  sel.innerHTML = options;
-  sel.value = options.includes(`value="${prev}"`) ? prev : 'ALL';
+  const sel = $('#unitSel'); if (!sel) return;
+  const prev = sel.value || 'ALL';
+  const unitIds   = Array.from(new Set(rows.map(r => String(r.Unit||'').trim()))).filter(Boolean);
+  const unitNames = new Map(units.map(u => [String(u.Unit||'').trim(), String(u.Display||'').trim()]));
+  const unique = Array.from(new Set([...unitIds, ...units.map(u=>String(u.Unit||'').trim())])).filter(Boolean).sort();
+  const options = ['ALL', ...unique].map(u => `<option value="${u}">${u==='ALL'?'ALL':(unitNames.get(u)||u)}</option>`).join('');
+  sel.innerHTML = options;
+  sel.value = options.includes(`value="${prev}"`) ? prev : 'ALL';
 }
 
 function render() {
-  const q = ($('#searchBox').value||'').toLowerCase();
-  const unitFilter = $('#unitSel').value;
-   // Filter
-  let list = rows.filter(r=>{
-    if (unitFilter !== 'ALL' && String(r.Unit).toUpperCase() !== String(unitFilter).toUpperCase()) return false;
-    const hay = `${r.ItemName||''} ${r.ItemRef||''} ${r.Category||''} ${r.Compartment||''}`.toLowerCase();
-    if (q && !hay.includes(q)) return false;
-    return true;
-  });
+  const q = ($('#searchBox').value||'').toLowerCase();
+  const unitFilter = $('#unitSel').value;
+   // Filter
+  let list = rows.filter(r=>{
+    if (unitFilter !== 'ALL' && String(r.Unit).toUpperCase() !== String(unitFilter).toUpperCase()) return false;
+    const hay = `${r.ItemName||''} ${r.ItemRef||''} ${r.Category||''} ${r.Compartment||''}`.toLowerCase();
+    if (q && !hay.includes(q)) return false;
+    return true;
+  });
 
-  // Sort: Days ASC → UnitDisplay (when ALL) → ItemName
-  list = list.sort((a,b)=>{
-    const ax=a.DaysToExpire??1e9, bx=b.DaysToExpire??1e9;
-    if (ax!==bx) return ax-bx;
-    const ua=a.UnitDisplay||a.Unit||'', ub=b.UnitDisplay||b.Unit||'';
-    if ($('#unitSel').value==='ALL' && ua!==ub) return ua.localeCompare(ub);
-    return (a.ItemName||'').localeCompare(b.ItemName||'');
-  });
+  // Sort: Days ASC → UnitDisplay (when ALL) → ItemName
+  list = list.sort((a,b)=>{
+    const ax=a.DaysToExpire??1e9, bx=b.DaysToExpire??1e9;
+    if (ax!==bx) return ax-bx;
+    const ua=a.UnitDisplay||a.Unit||'', ub=b.UnitDisplay||b.Unit||'';
+    if ($('#unitSel').value==='ALL' && ua!==ub) return ua.localeCompare(ub);
+    return (a.ItemName||'').localeCompare(b.ItemName||'');
+  });
 
-  $('#count').textContent = `${list.length} item(s)`;
+  $('#count').textContent = `${list.length} item(s)`;
 
-  const showUnitCol = ($('#unitSel').value === 'ALL');
-  const html = `<table><thead><tr>
-    <th style="width:30%">Item</th>
-    ${showUnitCol?'<th>Unit</th>':''}
-    <th>Compartment</th>
-    <th>Qty</th>
-    <th>Expiry</th>
-    <th class="right">Days</th>
-    <th>Actions</th>
-  </tr></thead><tbody>
-    ${list.map(r=>{
+  const showUnitCol = ($('#unitSel').value === 'ALL');
+  const html = `<table><thead><tr>
+    <th style="width:30%">Item</th>
+    ${showUnitCol?'<th>Unit</th>':''}
+    <th>Compartment</th>
+    <th>Qty</th>
+    <th>Expiry</th>
+    <th class="right">Days</th>
+    <th>Actions</th>
+  </tr></thead><tbody>
+    ${list.map(r=>{
       const cls = rowClass(r.DaysToExpire, r.Status);
       const ref = r.ItemRef ? `<span class="muted">${escapeHtml(r.ItemRef)}</span>` : '';
       const unitDisp = r.UnitDisplay || r.Unit || '';
@@ -531,112 +561,112 @@ function render() {
 
 // Note modal helper (max 40 chars)
 function openNoteEditor(inventoryId, initialText, onSave){
-  const modal = $('#noteModal'), ta = $('#noteText'), left = $('#charLeft');
-  ta.value = initialText || '';
-  left.textContent = String(40 - ta.value.length);
-  modal.style.display = 'block';
-  ta.focus();
+  const modal = $('#noteModal'), ta = $('#noteText'), left = $('#charLeft');
+  ta.value = initialText || '';
+  left.textContent = String(40 - ta.value.length);
+  modal.style.display = 'block';
+  ta.focus();
 
-  const onInput = ()=> left.textContent = String(40 - ta.value.length);
-  ta.addEventListener('input', onInput);
+  const onInput = ()=> left.textContent = String(40 - ta.value.length);
+  ta.addEventListener('input', onInput);
 
-  const close = ()=>{
-    ta.removeEventListener('input', onInput);
-    modal.style.display = 'none';
-  };
-  $('#noteCancel').onclick = close;
-  modal.onclick = e => { if (e.target===modal) close(); };
+  const close = ()=>{
+    ta.removeEventListener('input', onInput);
+    modal.style.display = 'none';
+  };
+  $('#noteCancel').onclick = close;
+  modal.onclick = e => { if (e.target===modal) close(); };
 
-  $('#noteSave').onclick = async ()=>{
-    const txt = ta.value.trim().slice(0,40);
-    try{
-      await onSave(txt);
-    }catch(e){ console.error(e); alert('Note update failed'); }
-    close();
-  };
+  $('#noteSave').onclick = async ()=>{
+    const txt = ta.value.trim().slice(0,40);
+    try{
+      await onSave(txt);
+    }catch(e){ console.error(e); alert('Note update failed'); }
+    close();
+  };
 }
 
-let itemSelect;  // Choices instance
+let itemSelect;  // Choices instance
 
 function initItemSelect() {
-  const sel = document.getElementById('addItemSelect');
+  const sel = document.getElementById('addItemSelect');
 
-  // If already initialized, clear/reset
-  if (itemSelect) {
-    itemSelect.clearStore();
-  } else {
-    itemSelect = new Choices(sel, {
-      searchEnabled: true,
-      placeholderValue: 'Select item…',
-      allowHTML: false,
-    });
-  }
+  // If already initialized, clear/reset
+  if (itemSelect) {
+    itemSelect.clearStore();
+  } else {
+    itemSelect = new Choices(sel, {
+      searchEnabled: true,
+      placeholderValue: 'Select item…',
+      allowHTML: false,
+    });
+  }
 
-  // Build options
-  const options = [];
-  const names = new Set();
-  for (const r of catalog) {
-    const nm  = (r.ItemName || '').trim();
-    const alt = (r.ItemNameAlt || '').trim();
-    if (nm && !names.has(nm)) { names.add(nm); options.push({ value: r.ItemID, label: nm }); }
-    if (alt && !names.has(alt)) { names.add(alt); options.push({ value: r.ItemID, label: alt }); }
-  }
-  options.push({ value: 'CUSTOM', label: 'Other / Custom' });
+  // Build options
+  const options = [];
+  const names = new Set();
+  for (const r of catalog) {
+    const nm  = (r.ItemName || '').trim();
+    const alt = (r.ItemNameAlt || '').trim();
+    if (nm && !names.has(nm)) { names.add(nm); options.push({ value: r.ItemID, label: nm }); }
+    if (alt && !names.has(alt)) { names.add(alt); options.push({ value: r.ItemID, label: alt }); }
+  }
+  options.push({ value: 'CUSTOM', label: 'Other / Custom' });
 
-  itemSelect.setChoices(options, 'value', 'label', true);
+  itemSelect.setChoices(options, 'value', 'label', true);
 }
 
 // ===== UI wiring (including Add Item modal) =====
 function wireUI(){
-  // --- EXISTING CODE ---
-  // Range options: add Custom + All
-  const rangeSel = $('#rangeSel');
-  if (![...rangeSel.options].some(o=>o.value==='CUSTOM')) {
-    rangeSel.insertAdjacentHTML('beforeend', `<option value="CUSTOM">Custom…</option><option value="ALL">All</option>`);
-  }
-  
-  // custom input
-  const customInput = document.createElement('input');
-  customInput.type = 'number'; customInput.min = '0'; customInput.placeholder = 'days';
-  customInput.id = 'customDays';
-  customInput.style.display = 'none';
-  customInput.style.width = '80px';
-  rangeSel.parentElement.appendChild(customInput);
+  // --- EXISTING CODE ---
+  // Range options: add Custom + All
+  const rangeSel = $('#rangeSel');
+  if (![...rangeSel.options].some(o=>o.value==='CUSTOM')) {
+    rangeSel.insertAdjacentHTML('beforeend', `<option value="CUSTOM">Custom…</option><option value="ALL">All</option>`);
+  }
+  
+  // custom input
+  const customInput = document.createElement('input');
+  customInput.type = 'number'; customInput.min = '0'; customInput.placeholder = 'days';
+  customInput.id = 'customDays';
+  customInput.style.display = 'none';
+  customInput.style.width = '80px';
+  rangeSel.parentElement.appendChild(customInput);
 
-  const onRangeChange = ()=>{
-    const v = rangeSel.value;
-    customInput.style.display = (v==='CUSTOM') ? '' : 'none';
-    if (v!=='CUSTOM') customInput.value = '';
-    init();
-  };
-  rangeSel.addEventListener('change', onRangeChange);
-  customInput.addEventListener('input', debounce(init, 400));
+  const onRangeChange = ()=>{
+    const v = rangeSel.value;
+    customInput.style.display = (v==='CUSTOM') ? '' : 'none';
+    if (v!=='CUSTOM') customInput.value = '';
+    init();
+  };
+  rangeSel.addEventListener('change', onRangeChange);
+  customInput.addEventListener('input', debounce(init, 400));
 
-  $('#refreshBtn').addEventListener('click', init);
-  $('#unitSel').addEventListener('change', init);
-  $('#searchBox').addEventListener('input', debounce(render, 250));
-  
-  // Toolbar scanner button
-  $('#startScanBtn').addEventListener('click', () => setupBarcodeScanner(true));
+  $('#refreshBtn').addEventListener('click', init);
+  $('#unitSel').addEventListener('change', init);
+  $('#searchBox').addEventListener('input', debounce(render, 250));
+  
+  // Toolbar scanner button
+  $('#startScanBtn').addEventListener('click', () => setupBarcodeScanner(true));
 
-  // ===== Add Item modal wiring =====
-  const modal = $('#addItemModal');
-  const showBtn = $('#showAddItemModal');
-  const closeBtn = modal.querySelector('.close-btn');
-  const chipBar = $('#addExpiryChips');
-  const compSel = $('#addCompartmentSelect');
-  const addUnitSelect = $('#addUnitSelect');
-  const qtyInp  = $('#addQty');
-  const itemSel = $('#addItemSelect');
-  let selectedExp = '';
+  // ===== Add Item modal wiring =====
+  const modal = $('#addItemModal');
+  const showBtn = $('#showAddItemModal');
+  const closeBtn = modal.querySelector('.close-btn');
+  const chipBar = $('#addExpiryChips');
+  const compSel = $('#addCompartmentSelect');
+  const addUnitSelect = $('#addUnitSelect');
+  const qtyInp  = $('#addQty');
+  const itemSel = $('#addItemSelect');
+  let selectedExp = '';
 
 itemSel.addEventListener('change', ()=>{
-  if (itemSel.value === 'CUSTOM'){
-    $('#customNameWrap').style.display = '';
-  } else {
-    $('#customNameWrap').style.display = 'none';
-    $('#customNameInput').value = '';
-  }
+  if (itemSel.value === 'CUSTOM'){
+    $('#customNameWrap').style.display = '';
+  } else {
+    $('#customNameWrap').style.display = 'none';
+    $('#customNameInput').value = '';
+  }
 });
 
   function fillAddUnitSelect() {
@@ -644,104 +674,104 @@ itemSel.addEventListener('change', ()=>{
     addUnitSelect.innerHTML = `<option value="">Select...</option>${options}`;
   }
 
-  function endOfMonthISO(year, monthIndexZeroBased){
-    const last = new Date(year, monthIndexZeroBased + 1, 0);
-    const y = last.getFullYear();
-    const m = String(last.getMonth()+1).padStart(2,'0');
-    const d = String(last.getDate()).padStart(2,'0');
-    return `${y}-${m}-${d}`;
-  }
-  function buildChips(){
-    const now = new Date();
-    const chips = [];
-    for (let i=0;i<3;i++){
-      const d = new Date(now.getFullYear(), now.getMonth()+i, 1);
-      const label = d.toLocaleString(undefined,{month:'short',year:'2-digit'});
-      const iso   = endOfMonthISO(d.getFullYear(), d.getMonth());
-      chips.push({label, iso});
-    }
-    chipBar.innerHTML = chips.map(c=>`<button class="btn exp-chip" data-exp="${c.iso}">${c.label}</button>`).join('') +
-                        `<button class="btn exp-chip custom" data-exp="">Custom…</button>`;
+  function endOfMonthISO(year, monthIndexZeroBased){
+    const last = new Date(year, monthIndexZeroBased + 1, 0);
+    const y = last.getFullYear();
+    const m = String(last.getMonth()+1).padStart(2,'0');
+    const d = String(last.getDate()).padStart(2,'0');
+    return `${y}-${m}-${d}`;
+  }
+  function buildChips(){
+    const now = new Date();
+    const chips = [];
+    for (let i=0;i<3;i++){
+      const d = new Date(now.getFullYear(), now.getMonth()+i, 1);
+      const label = d.toLocaleString(undefined,{month:'short',year:'2-digit'});
+      const iso   = endOfMonthISO(d.getFullYear(), d.getMonth());
+      chips.push({label, iso});
+    }
+    chipBar.innerHTML = chips.map(c=>`<button class="btn exp-chip" data-exp="${c.iso}">${c.label}</button>`).join('') +
+                        `<button class="btn exp-chip custom" data-exp="">Custom…</button>`;
 
-    // Insert custom pickers (hidden until "Custom…" is clicked)
-    let customWrap = document.getElementById('customExpiryWrap');
-    if (!customWrap){
-      customWrap = document.createElement('div');
-      customWrap.id = 'customExpiryWrap';
-      customWrap.style.display = 'none';
-      customWrap.style.marginTop = '8px';
-      customWrap.innerHTML = `
-        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-          <label style="display:flex; align-items:center; gap:6px;">
-            <span style="min-width:70px;">Month</span>
-            <input id="customMonth" type="month">
-          </label>
-          <label style="display:flex; align-items:center; gap:6px;">
-            <span style="min-width:70px;">Exact date</span>
-            <input id="customDate" type="date">
-          </label>
-          <button id="applyCustomExp" class="btn">Apply</button>
-        </div>`;
-      chipBar.insertAdjacentElement('afterend', customWrap);
-    }
+    // Insert custom pickers (hidden until "Custom…" is clicked)
+    let customWrap = document.getElementById('customExpiryWrap');
+    if (!customWrap){
+      customWrap = document.createElement('div');
+      customWrap.id = 'customExpiryWrap';
+      customWrap.style.display = 'none';
+      customWrap.style.marginTop = '8px';
+      customWrap.innerHTML = `
+        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+          <label style="display:flex; align-items:center; gap:6px;">
+            <span style="min-width:70px;">Month</span>
+            <input id="customMonth" type="month">
+          </label>
+          <label style="display:flex; align-items:center; gap:6px;">
+            <span style="min-width:70px;">Exact date</span>
+            <input id="customDate" type="date">
+          </label>
+          <button id="applyCustomExp" class="btn">Apply</button>
+        </div>`;
+      chipBar.insertAdjacentElement('afterend', customWrap);
+    }
 
-    // Wire the chips
-    chipBar.querySelectorAll('button.exp-chip').forEach(b=>{
-      b.addEventListener('click', ()=>{
-        chipBar.querySelectorAll('button.exp-chip').forEach(x=>x.style.borderColor='#ddd');
-        b.style.borderColor='blue';
+    // Wire the chips
+    chipBar.querySelectorAll('button.exp-chip').forEach(b=>{
+      b.addEventListener('click', ()=>{
+        chipBar.querySelectorAll('button.exp-chip').forEach(x=>x.style.borderColor='#ddd');
+        b.style.borderColor='blue';
 
-        if (b.classList.contains('custom')){
-          document.getElementById('customExpiryWrap').style.display = '';
-          selectedExp = '';
-        } else {
-          document.getElementById('customExpiryWrap').style.display = 'none';
-          selectedExp = b.dataset.exp || '';
-        }
-      });
-    });
+        if (b.classList.contains('custom')){
+          document.getElementById('customExpiryWrap').style.display = '';
+          selectedExp = '';
+        } else {
+          document.getElementById('customExpiryWrap').style.display = 'none';
+          selectedExp = b.dataset.exp || '';
+        }
+      });
+    });
 
-    document.getElementById('applyCustomExp').onclick = ()=>{
-      const monthVal = document.getElementById('customMonth').value; // YYYY-MM
-      const dateVal  = document.getElementById('customDate').value;  // YYYY-MM-DD
+    document.getElementById('applyCustomExp').onclick = ()=>{
+      const monthVal = document.getElementById('customMonth').value; // YYYY-MM
+      const dateVal  = document.getElementById('customDate').value;  // YYYY-MM-DD
 
-      if (dateVal){
-        selectedExp = dateVal;
-      } else if (monthVal){
-        const [y,m] = monthVal.split('-').map(v=>parseInt(v,10));
-        if (y && m) selectedExp = endOfMonthISO(y, m-1);
-      } else {
-        alert('Pick a month or an exact date.');
-        return;
-      }
-      chipBar.querySelectorAll('button.exp-chip').forEach(x=>x.style.borderColor='#ddd');
-      document.getElementById('customExpiryWrap').style.display = 'none';
-    };
-  }
+      if (dateVal){
+        selectedExp = dateVal;
+      } else if (monthVal){
+        const [y,m] = monthVal.split('-').map(v=>parseInt(v,10));
+        if (y && m) selectedExp = endOfMonthISO(y, m-1);
+      } else {
+        alert('Pick a month or an exact date.');
+        return;
+      }
+      chipBar.querySelectorAll('button.exp-chip').forEach(x=>x.style.borderColor='#ddd');
+      document.getElementById('customExpiryWrap').style.display = 'none';
+    };
+  }
 
-  showBtn.addEventListener('click', ()=>{
-  selectedExp = '';
-  compSel.value = '';
-  qtyInp.value = '1';
+  showBtn.addEventListener('click', ()=>{
+  selectedExp = '';
+  compSel.value = '';
+  qtyInp.value = '1';
 
-  // Reset item select
-  if (itemSelect) {
-    itemSelect.clearStore();
-  }
-  initItemSelect();
-  $('#customNameWrap').style.display = 'none';
-  $('#customNameInput').value = '';
+  // Reset item select
+  if (itemSelect) {
+    itemSelect.clearStore();
+  }
+  initItemSelect();
+  $('#customNameWrap').style.display = 'none';
+  $('#customNameInput').value = '';
 
-  buildChips();
-  modal.style.display = 'block';
+  buildChips();
+  modal.style.display = 'block';
   fillAddUnitSelect();
   if ($('#unitSel').value !== 'ALL') {
     addUnitSelect.value = $('#unitSel').value;
   }
 });
 
-  closeBtn.addEventListener('click', ()=> modal.style.display='none');
-  window.addEventListener('click', e=>{ if(e.target===modal) modal.style.display='none'; });
+  closeBtn.addEventListener('click', ()=> modal.style.display='none');
+  window.addEventListener('click', e=>{ if(e.target===modal) modal.style.display='none'; });
 
 // Save (create)
 $('#saveNewItemBtn').addEventListener('click', async ()=> {
@@ -750,47 +780,47 @@ $('#saveNewItemBtn').addEventListener('click', async ()=> {
   saveBtn.textContent = 'Saving...';
   saveBtn.disabled = true;
   
-  const selectedVal = $('#addItemSelect').value;
-  let itemId = '';
-  let itemName = '';
-  let notes = '';
+  const selectedVal = $('#addItemSelect').value;
+  let itemId = '';
+  let itemName = '';
+  let notes = '';
 
-  if (selectedVal === 'CUSTOM') {
-    const customName = $('#customNameInput').value.trim();
-    if (!customName) { alert('Enter a custom name.'); return; }
-    // Leave itemId blank for custom, use Notes to hold the name
-    notes = customName;
-  } else {
-    const row = catalog.find(c => c.ItemID === selectedVal);
-    if (!row) { alert('Item not found in Catalog.'); return; }
-    itemId = row.ItemID;
-    itemName = row.ItemName;
-  }
+  if (selectedVal === 'CUSTOM') {
+    const customName = $('#customNameInput').value.trim();
+    if (!customName) { alert('Enter a custom name.'); return; }
+    // Leave itemId blank for custom, use Notes to hold the name
+    notes = customName;
+  } else {
+    const row = catalog.find(c => c.ItemID === selectedVal);
+    if (!row) { alert('Item not found in Catalog.'); return; }
+    itemId = row.ItemID;
+    itemName = row.ItemName;
+  }
 
-  const unit = $('#addUnitSelect').value;
-  if (!unit) { alert('Please select a unit.'); return; }
+  const unit = $('#addUnitSelect').value;
+  if (!unit) { alert('Please select a unit.'); return; }
 
-  if (!selectedExp) { alert('Pick an expiry (chip or custom).'); return; }
+  if (!selectedExp) { alert('Pick an expiry (chip or custom).'); return; }
 
-  const payload = {
-    itemId,             // uses catalog ID if known, blank if custom
-    itemName,           // populated only for catalog items
-    unit,
-    compartment: $('#addCompartmentSelect').value.trim(),
-    expiry: selectedExp,
-    qty: Number($('#addQty').value)||1,
-    notes,              // custom names go here
-    crewStatus: ''
-  };
+  const payload = {
+    itemId,             // uses catalog ID if known, blank if custom
+    itemName,           // populated only for catalog items
+    unit,
+    compartment: $('#addCompartmentSelect').value.trim(),
+    expiry: selectedExp,
+    qty: Number($('#addQty').value)||1,
+    notes,              // custom names go here
+    crewStatus: ''
+  };
 
-  try{
-    await postCreate(payload);
-    modal.style.display='none';
-    await init();
-  }catch(e){
-    console.error(e);
-    alert('Add failed');
-  } finally {
+  try{
+    await postCreate(payload);
+    modal.style.display='none';
+    await init();
+  }catch(e){
+    console.error(e);
+    alert('Add failed');
+  } finally {
     saveBtn.textContent = originalText;
     saveBtn.disabled = false;
   }
@@ -799,129 +829,115 @@ $('#saveNewItemBtn').addEventListener('click', async ()=> {
 
 // This is the function that initializes the barcode scanner.
 function setupBarcodeScanner(forSearch = false) {
-  const scanButton = forSearch ? $('#startScanBtn') : $('#scanBarcodeBtn');
-  const viewport = forSearch ? $('#interactive-search-viewport') : $('#interactive');
-  const stopIcon = `<img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23c00' d='M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z'/%3E%3C/svg%3E" alt="Stop Scanner" class="scan-icon">`;
-  const modal = forSearch ? $('#interactive-search-modal') : $('#addItemModal');
+  const scanButton = forSearch ? $('#startScanBtn') : $('#scanBarcodeBtn');
+  const viewport = forSearch ? $('#interactive-search-viewport') : $('#interactive');
+  const stopIcon = `<img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23c00' d='M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z'/%3E%3C/svg%3E" alt="Stop Scanner" class="scan-icon">`;
+  const modal = forSearch ? $('#interactive-search-modal') : $('#addItemModal');
 
-  if (isScannerActive) {
-    Quagga.stop();
-    isScannerActive = false;
-    scanButton.innerHTML = `<img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z'/%3E%3C/svg%3E" alt="Barcode Scanner" class="scan-icon">`;
-    modal.style.display = 'none';
-    return;
-  }
-  
-  modal.style.display = 'block';
-  Quagga.init({
-    inputStream: {
-      name: "Live",
-      type: "LiveStream",
-      target: viewport
-    },
-    decoder: {
-      readers: ["code_128_reader", "upc_reader", "ean_reader", "ean_8_reader", "code_39_reader"]
-    }
-  }, function(err) {
-    if (err) {
-      console.error(err);
-      alert("Error starting scanner: " + err);
-      return;
-    }
-    console.log("Initialization finished. Ready to start.");
-    Quagga.start();
-    isScannerActive = true;
-    scanButton.innerHTML = stopIcon;
+  if (isScannerActive) {
+    Quagga.stop();
+    isScannerActive = false;
+    if (quaggaDetectHandler && typeof Quagga.offDetected === 'function') {
+      Quagga.offDetected(quaggaDetectHandler);
+      quaggaDetectHandler = null;
+    }
+    scanButton.innerHTML = `<img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z'/%3E%3C/svg%3E" alt="Barcode Scanner" class="scan-icon">`;
+    modal.style.display = 'none';
+    return;
+  }
+  
+  modal.style.display = 'block';
+  Quagga.init({
+    inputStream: {
+      name: "Live",
+      type: "LiveStream",
+      target: viewport
+    },
+    decoder: {
+      readers: ["code_128_reader", "upc_reader", "ean_reader", "ean_8_reader", "code_39_reader"]
+    }
+  }, function(err) {
+    if (err) {
+      console.error(err);
+      alert("Error starting scanner: " + err);
+      if (quaggaDetectHandler && typeof Quagga.offDetected === 'function') {
+        Quagga.offDetected(quaggaDetectHandler);
+        quaggaDetectHandler = null;
+      }
+      return;
+    }
+    console.log("Initialization finished. Ready to start.");
+    Quagga.start();
+    isScannerActive = true;
+    scanButton.innerHTML = stopIcon;
 
-    Quagga.onDetected(async function(result) {
-      if (result && result.codeResult && result.codeResult.code) {
-        Quagga.stop();
-        isScannerActive = false;
-        scanButton.innerHTML = `<img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z'/%3E%3C/svg%3E" alt="Barcode Scanner" class="scan-icon">`;
-        modal.style.display = 'none';
+    if (quaggaDetectHandler && typeof Quagga.offDetected === 'function') {
+      Quagga.offDetected(quaggaDetectHandler);
+      quaggaDetectHandler = null;
+    }
 
-        const barcodeValue = result.codeResult.code;
-        try {
-          const resp = await fetch(PROXY_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              token: TOKEN,
-              actionType: 'getbarcodedata',
-              barcode: barcodeValue
-            })
-          });
-          const txt = await resp.text();
-          let data;
-          try { data = JSON.parse(txt); }
-          catch (e) { throw new Error('Non-JSON from proxy: ' + txt.slice(0,180)); }
+    quaggaDetectHandler = async function(result) {
+      if (!result || !result.codeResult || !result.codeResult.code) return;
 
-          if (data.ok && data.item) {
-            if (forSearch) {
-              $('#searchBox').value = data.item.ItemName || data.item.ItemNameAlt || '';
-              render();
-            } else {
-              if (itemSelect) {
-                itemSelect.clearStore();      // remove old options
-                initItemSelect();             // rebuild fresh options
-              }
-            }
-            alert(`Barcode detected: ${barcodeValue}`);
-          } else {
-            alert(`Barcode detected, but item not found: ${barcodeValue}`);
-          }
-        } catch (err) {
-          console.error(err);
-          alert('Barcode lookup failed – check proxy & GAS routes.');
-        }
-      }
-    });
-  });
+      try {
+        Quagga.stop();
+      } catch (stopErr) {
+        console.warn('Quagga.stop failed', stopErr);
+      }
+      isScannerActive = false;
+      if (typeof Quagga.offDetected === 'function') {
+        Quagga.offDetected(quaggaDetectHandler);
+      }
+      quaggaDetectHandler = null;
+      scanButton.innerHTML = `<img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z'/%3E%3C/svg%3E" alt="Barcode Scanner" class="scan-icon">`;
+      modal.style.display = 'none';
+
+      const barcodeValue = result.codeResult.code;
+      try {
+        const data = await apiPost('getbarcodedata', { barcode: barcodeValue });
+        if (data.ok && data.item) {
+          if (forSearch) {
+            $('#searchBox').value = data.item.ItemName || data.item.ItemNameAlt || '';
+            render();
+          } else if (itemSelect) {
+            itemSelect.clearStore();
+            initItemSelect();
+          }
+          alert(`Barcode detected: ${barcodeValue}`);
+        } else {
+          alert(`Barcode detected, but item not found: ${barcodeValue}`);
+        }
+      } catch (err) {
+        console.error(err);
+        alert('Barcode lookup failed – check proxy & GAS routes.');
+      }
+    };
+
+    if (typeof Quagga.onDetected === 'function') {
+      Quagga.onDetected(quaggaDetectHandler);
+    }
+  });
 }
 
 // ===== POSTs (via proxy) =====
 async function postUpdate(payload){
-  const r = await fetch(PROXY_URL, {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ token: TOKEN, actionType:'updateInventory', ...payload })
-  });
-  let j;
-  try { j = await r.json(); } catch(e){
-    const txt = await r.text();
-    console.error('POST raw text:', txt);
-    throw new Error('Non-JSON response');
-  }
-  if (!j.ok) throw new Error(j.error||'server');
-  return j;
+  return apiPost('updateInventory', payload);
 }
 
 async function postCreate(payload){
-  const r = await fetch(PROXY_URL, {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ token: TOKEN, actionType:'createInventory', ...payload })
-  });
-  let j;
-  try { j = await r.json(); } catch(e){
-    const txt = await r.text();
-    console.error('POST raw text:', txt);
-    throw new Error('Non-JSON response');
-  }
-  if (!j.ok) throw new Error(j.error||'server');
-  return j;
+  return apiPost('createInventory', payload);
 }
 
 // ===== init flow =====
 async function init(){
-  try{
-    await loadAll();
-    fillUnitSelect();
-    render();
-  }catch(e){
-    console.error(e);
-    $('#content').innerHTML = `<p style="color:#a00;font-weight:700;">Error loading data. Check Worker URL & GAS deployment.</p>`;
-  }
+  try{
+    await loadAll();
+    fillUnitSelect();
+    render();
+  }catch(e){
+    console.error(e);
+    $('#content').innerHTML = `<p style="color:#a00;font-weight:700;">Error loading data. Check Worker URL & GAS deployment.</p>`;
+  }
 }
 // boot
 wireUI();

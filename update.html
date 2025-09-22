@@ -97,8 +97,7 @@
 /*** CONFIG: replace these three constants ***/
 const CSV_INVENTORY = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTsY8xyyVE4V7e39KHEB5Y5fg64JGK7Aslg6s7dF8-QfpM8myyR1henDuhzyorR8pjPjcj5aJJY9Q3T/pub?gid=0&single=true&output=csv';
 const CSV_CATALOG   = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTsY8xyyVE4V7e39KHEB5Y5fg64JGK7Aslg6s7dF8-QfpM8myyR1henDuhzyorR8pjPjcj5aJJY9Q3T/pub?gid=1603897332&single=true&output=csv';
-const WEBAPP_URL    = 'https://script.google.com/macros/s/AKfycbypxL0KxxXMVRieHHuvX98m9Jx6fYJWTdrMLQNkt99Sgt0vNzRDeyGiDz5fILlORP8wFQ/exec';
-const TOKEN         = '9mB4zR7kP2fW6vNqE1jH8aLcV5gT_sYx0uI-oZ3pD9bX4wK7eS6hF-EMS';
+const API_URL       = 'https://ems-inventory-proxy.kylewelch33.workers.dev';
 const UNITS = ["31","36","37","33","35","38","39","847","Fire Command","Fire Trucks"];
 
 /*** CSV + helpers ***/
@@ -109,6 +108,25 @@ function parseCSV(text){
     const m = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || [];
     return m.map(s=>s.replace(/^"|"$/g,''));
   });
+}
+
+async function callApi(actionType, payload={}){
+  const resp = await fetch(API_URL, {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    credentials:'include',
+    body: JSON.stringify({ actionType, ...payload })
+  });
+  const text = await resp.text();
+  let data;
+  try { data = JSON.parse(text); }
+  catch { throw new Error(`Non-JSON response: ${text.slice(0,200)}`); }
+  if(!resp.ok || data.ok === false){
+    const err = new Error(data?.error || `Action ${actionType} failed`);
+    err.data = data;
+    throw err;
+  }
+  return data;
 }
 function uniqueSorted(a){ return [...new Set(a.filter(Boolean))].sort((x,y)=>x.localeCompare(y)); }
 
@@ -183,8 +201,6 @@ document.getElementById('compartment').addEventListener('input', searchMatches);
 
 document.getElementById('submit').addEventListener('click', async ()=>{
   const payload = {
-    token: TOKEN,
-    actionType: 'updateInventory',
     row: Number(document.getElementById('row').value||0),
     qty: document.getElementById('qty').value,
     expiry: document.getElementById('expiry').value,
@@ -194,11 +210,12 @@ document.getElementById('submit').addEventListener('click', async ()=>{
   const msg = document.getElementById('msg');
   msg.textContent = 'Submitting…';
   try {
-    await fetch(WEBAPP_URL, { method:'POST', mode:'no-cors', body: JSON.stringify(payload) });
+    await callApi('updateInventory', payload);
     msg.innerHTML = '<span class="ok">Submitted ✔</span>';
     document.getElementById('qty').value = '';
     document.getElementById('notes').value = '';
   } catch(e){
+    console.error(e);
     msg.innerHTML = '<span class="err">Submit failed</span>';
   }
 });

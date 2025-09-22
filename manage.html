@@ -126,8 +126,7 @@
 const CSV_CATALOG  = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTsY8xyyVE4V7e39KHEB5Y5fg64JGK7Aslg6s7dF8-QfpM8myyR1henDuhzyorR8pjPjcj5aJJY9Q3T/pubhtml?gid=1603897332&single=true&output=csv';
 const CSV_VENDORPR = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTsY8xyyVE4V7e39KHEB5Y5fg64JGK7Aslg6s7dF8-QfpM8myyR1henDuhzyorR8pjPjcj5aJJY9Q3T/pubhtml?gid=1795212434&single=true&output=csv';
 const CSV_VENDORS  = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTsY8xyyVE4V7e39KHEB5Y5fg64JGK7Aslg6s7dF8-QfpM8myyR1henDuhzyorR8pjPjcj5aJJY9Q3T/pubhtml?gid=1079994552&single=true&output=csv';
-const WEBAPP_URL   = 'https://script.google.com/macros/s/AKfycbypxL0KxxXMVRieHHuvX98m9Jx6fYJWTdrMLQNkt99Sgt0vNzRDeyGiDz5fILlORP8wFQ/exec';
-const TOKEN        = '9mB4zR7kP2fW6vNqE1jH8aLcV5gT_sYx0uI-oZ3pD9bX4wK7eS6hF-EMS'; 
+const API_URL      = 'https://ems-inventory-proxy.kylewelch33.workers.dev';
 /*******************/
 
 let catHead=[], catRows=[], vendors=[], vpHead=[], vpRows=[];
@@ -154,6 +153,25 @@ function toObj(head, row){
 function objToTable(tbody, rows, cols, rowClick){
   tbody.innerHTML = rows.map(r=>`<tr>${cols.map(c=>`<td>${r[c]||''}</td>`).join('')}</tr>`).join('') || '<tr><td colspan="'+cols.length+'">No rows</td></tr>';
   if (rowClick) Array.from(tbody.querySelectorAll('tr')).forEach((tr,i)=> tr.addEventListener('click', ()=> rowClick(rows[i])));
+}
+
+async function callApi(actionType, payload={}){
+  const resp = await fetch(API_URL, {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    credentials:'include',
+    body: JSON.stringify({ actionType, ...payload })
+  });
+  const text = await resp.text();
+  let data;
+  try { data = JSON.parse(text); }
+  catch { throw new Error(`Non-JSON response: ${text.slice(0,200)}`); }
+  if(!resp.ok || data.ok === false){
+    const err = new Error(data?.error || `Action ${actionType} failed`);
+    err.data = data;
+    throw err;
+  }
+  return data;
 }
 
 async function boot(){
@@ -248,16 +266,26 @@ document.getElementById('btnUpsertItem').addEventListener('click', async ()=>{
   const msg = document.getElementById('catMsg');
   if (!item.ItemID || !item.ItemName){ msg.textContent='ItemID and ItemName are required'; return; }
   msg.textContent='Saving…';
-  await fetch(WEBAPP_URL, { method:'POST', mode:'no-cors', body: JSON.stringify({ token:TOKEN, actionType:'upsertCatalog', item }) });
-  msg.innerHTML='<span class="ok">Saved</span>';
+  try {
+    await callApi('upsertCatalog', { item });
+    msg.innerHTML='<span class="ok">Saved</span>';
+  } catch(err){
+    console.error(err);
+    msg.innerHTML='<span class="err">Save failed</span>';
+  }
 });
 document.getElementById('btnDeleteItem').addEventListener('click', async ()=>{
   const id = document.getElementById('cItemID').value.trim();
   if (!id) return;
   const msg = document.getElementById('catMsg');
   msg.textContent='Deleting…';
-  await fetch(WEBAPP_URL, { method:'POST', mode:'no-cors', body: JSON.stringify({ token:TOKEN, actionType:'deleteCatalog', itemId:id }) });
-  msg.innerHTML='<span class="ok">Deleted</span>';
+  try {
+    await callApi('deleteCatalog', { itemId:id });
+    msg.innerHTML='<span class="ok">Deleted</span>';
+  } catch(err){
+    console.error(err);
+    msg.innerHTML='<span class="err">Delete failed</span>';
+  }
 });
 
 /*** Pricing actions ***/
@@ -279,8 +307,13 @@ document.getElementById('btnUpsertPrice').addEventListener('click', async ()=>{
   const msg = document.getElementById('pMsg');
   if (!row.ItemID || !row.VendorID){ msg.textContent='Item and Vendor required'; return; }
   msg.textContent='Saving…';
-  await fetch(WEBAPP_URL, { method:'POST', mode:'no-cors', body: JSON.stringify({ token:TOKEN, actionType:'upsertVendorPrice', row }) });
-  msg.innerHTML='<span class="ok">Saved</span>';
+  try {
+    await callApi('upsertVendorPrice', { row });
+    msg.innerHTML='<span class="ok">Saved</span>';
+  } catch(err){
+    console.error(err);
+    msg.innerHTML='<span class="err">Save failed</span>';
+  }
 });
 document.getElementById('btnDeletePrice').addEventListener('click', async ()=>{
   const ItemID = document.getElementById('pItemID').value.trim();
@@ -289,8 +322,13 @@ document.getElementById('btnDeletePrice').addEventListener('click', async ()=>{
   const msg = document.getElementById('pMsg');
   if (!ItemID || !VendorID){ msg.textContent='Item and Vendor required'; return; }
   msg.textContent='Deleting…';
-  await fetch(WEBAPP_URL, { method:'POST', mode:'no-cors', body: JSON.stringify({ token:TOKEN, actionType:'deleteVendorPrice', ItemID, VendorID, VendorItemNumber }) });
-  msg.innerHTML='<span class="ok">Deleted</span>';
+  try {
+    await callApi('deleteVendorPrice', { ItemID, VendorID, VendorItemNumber });
+    msg.innerHTML='<span class="ok">Deleted</span>';
+  } catch(err){
+    console.error(err);
+    msg.innerHTML='<span class="err">Delete failed</span>';
+  }
 });
 document.getElementById('btnSetPreferred').addEventListener('click', async ()=>{
   const itemId = document.getElementById('pItemID').value.trim();
@@ -298,8 +336,13 @@ document.getElementById('btnSetPreferred').addEventListener('click', async ()=>{
   const msg = document.getElementById('pMsg');
   if (!itemId || !vendorId){ msg.textContent='Pick item & vendor'; return; }
   msg.textContent='Setting…';
-  await fetch(WEBAPP_URL, { method:'POST', mode:'no-cors', body: JSON.stringify({ token:TOKEN, actionType:'setPreferred', itemId, vendorId }) });
-  msg.innerHTML='<span class="ok">Preferred set</span>';
+  try {
+    await callApi('setPreferred', { itemId, vendorId });
+    msg.innerHTML='<span class="ok">Preferred set</span>';
+  } catch(err){
+    console.error(err);
+    msg.innerHTML='<span class="err">Set failed</span>';
+  }
 });
 
 document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click', ()=>{
