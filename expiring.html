@@ -82,7 +82,7 @@ th{font-weight:600;background:#fafafa}
   width: min(640px, 95%);
   height: 360px;
   background: #000;
-  border: 1px solid #ccc;
+  border: 1 and 1px solid #ccc;
   display: none;
 }
 #interactive-search-modal video {
@@ -143,6 +143,22 @@ th{font-weight:600;background:#fafafa}
 .item-row #scanBarcodeBtn {
   flex-shrink: 0;
 }
+/* Loading spinner styles */
+.spinner {
+  border: 2px solid rgba(0,0,0,0.1);
+  border-left-color: #3498db;
+  border-radius: 50%;
+  width: 16px;
+  height: 16px;
+  animation: spin 1s linear infinite;
+  display: none;
+  vertical-align: middle;
+  margin-left: 8px;
+}
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
 </style>
 </head>
 <body>
@@ -168,7 +184,7 @@ th{font-weight:600;background:#fafafa}
         <input id="searchBox" placeholder="Search item, compartment…" style="flex:1;"/>
       </div>
       <div class="toolbar-actions">
-        <button class="btn" id="refreshBtn">Refresh</button>
+        <button class="btn" id="refreshBtn">Refresh<span class="spinner" id="refreshSpinner"></span></button>
         <button class="btn" id="showAddItemModal">+ Add Item</button>
       </div>
       <span id="count" class="muted"></span>
@@ -213,6 +229,11 @@ th{font-weight:600;background:#fafafa}
           <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z'/%3E%3C/svg%3E" alt="Barcode Scanner" class="scan-icon">
         </button>
       </div>
+      
+      <label style="margin-top: 10px;">Unit</label>
+      <select id="addUnitSelect">
+        <option value="">Select...</option>
+      </select>
 
       <div id="customNameWrap" style="display:none; margin-top:8px;">
         <label>Custom Name</label>
@@ -284,26 +305,32 @@ function readWithin(){
 async function loadAll() {
   const within = readWithin();
   const unit   = $('#unitSel')?.value || 'ALL';
+ 
+  const refreshBtn = $('#refreshBtn');
+  const refreshSpinner = $('#refreshSpinner');
+  refreshBtn.disabled = true;
+  refreshSpinner.style.display = 'inline-block';
+  
+  try {
+    const [inv, un, cat] = await Promise.all([
+      fetch(`${PROXY_URL}?action=expiring&within=${within}&unit=${unit}&showResolved=false`).then(r=>r.json()),
+      fetch(`${PROXY_URL}?action=listunits`).then(r=>r.json()),
+      fetch(`${PROXY_URL}?action=listcatalog`).then(r=>r.json())
+    ]);
+    if (!inv.ok) throw new Error(inv.error || 'expiring failed');
+    if (!un.ok)  throw new Error(un.error  || 'units failed');
+    if (!cat.ok) throw new Error(cat.error || 'catalog failed');
 
-  // Build expiring URL
-  const url = new URL(PROXY_URL);
-  url.searchParams.set('action','expiring');
-  url.searchParams.set('within', within === 'ALL' ? 'ALL' : String(within));
-  url.searchParams.set('unit', unit);
-  url.searchParams.set('showResolved','false');
-
-  const [inv, un, cat] = await Promise.all([
-    fetch(url.toString()).then(r=>r.json()),
-    fetch(`${PROXY_URL}?action=listunits`).then(r=>r.json()),
-    fetch(`${PROXY_URL}?action=listcatalog`).then(r=>r.json())
-  ]);
-  if (!inv.ok) throw new Error(inv.error || 'expiring failed');
-  if (!un.ok)  throw new Error(un.error  || 'units failed');
-  if (!cat.ok) throw new Error(cat.error || 'catalog failed');
-
-  rows    = inv.rows || [];
-  units   = un.rows  || [];
-  catalog = cat.rows || [];
+    rows    = inv.rows || [];
+    units   = un.rows  || [];
+    catalog = cat.rows || [];
+  } catch(e) {
+    console.error(e);
+    $('#content').innerHTML = `<p style="color:#a00;font-weight:700;">Error loading data. Check Worker URL & GAS deployment.</p>`;
+  } finally {
+    refreshBtn.disabled = false;
+    refreshSpinner.style.display = 'none';
+  }
 }
 
 // ===== RENDER =====
@@ -351,82 +378,147 @@ function render() {
     <th>Actions</th>
   </tr></thead><tbody>
     ${list.map(r=>{
-      const cls = rowClass(r.DaysToExpire, r.Status);
-      const ref = r.ItemRef ? `<span class="muted">${escapeHtml(r.ItemRef)}</span>` : '';
-      const unitDisp = r.UnitDisplay || r.Unit || '';
-      const note = r.CrewStatus || '';
-      const displayName = r.ItemName || r.Notes || '';
-      return `
-        <tr class="${cls}" data-id="${encodeURIComponent(r.InventoryID)}">
-          <td><strong>${escapeHtml(r.ItemName||'')}</strong><br>${ref}</td>
-          ${showUnitCol?`<td>${escapeHtml(unitDisp)}</td>`:''}
-          <td>${escapeHtml(r.Compartment||'')}</td>
-          <td>${(r.Qty??'')!==''?escapeHtml(String(r.Qty)):'—'}</td>
-          <td>${escapeHtml(r.Expiry||'')}</td>
-          <td class="right">${r.DaysToExpire??''}</td>
-          <td>
-            <div class="actions" style="gap:8px;align-items:center;">
-              <button type="button" class="note-trigger" title="Click to edit note">
-                ${escapeHtml(note || 'note…')}
-              </button>
-              <button class="btn pending ${r.Status==='Pending'?'is-active':''}">Pending</button>
-              <button class="btn green ok">OK</button>
-              <button class="btn red replaced">Replaced</button>
-            </div>
-          </td>
-        </tr>`;
-        }).join('')}
-  </tbody></table>`;
-  $('#content').innerHTML = html;
+      const cls = rowClass(r.DaysToExpire, r.Status);
+      const ref = r.ItemRef ? `<span class="muted">${escapeHtml(r.ItemRef)}</span>` : '';
+      const unitDisp = r.UnitDisplay || r.Unit || '';
+      const note = r.CrewStatus || '';
+      const displayName = r.ItemName || r.Notes || '';
 
-  // Wire row actions + note modal per row
-  $('#content').querySelectorAll('tr[data-id]').forEach(tr=>{
-    const id = decodeURIComponent(tr.dataset.id);
-    const noteBtn = tr.querySelector('.note-trigger');
-    let cachedNote = (noteBtn.textContent.trim() === 'note…') ? '' : noteBtn.textContent.trim();
+      const unitOptions = units.map(u => `<option value="${u.Unit}" ${u.Unit === r.Unit ? 'selected' : ''}>${u.Display}</option>`).join('');
+      const compartmentOptions = ['Wall', 'Bag', 'Supply RM', 'Clear Container', 'BLS Bag', 'ALS Bag', 'Other'].map(c => `<option value="${c}" ${c === r.Compartment ? 'selected' : ''}>${c}</option>`).join('');
+      
+      return `
+        <tr class="${cls}" data-id="${encodeURIComponent(r.InventoryID)}">
+          <td><strong>${escapeHtml(r.ItemName||'')}</strong><br>${ref}</td>
+          ${showUnitCol ? `
+            <td>
+              <span class="unit-display">${escapeHtml(unitDisp)}</span>
+              <select class="unit-edit" style="display:none;">${unitOptions}</select>
+            </td>` : ''}
+          <td>
+            <span class="compartment-display">${escapeHtml(r.Compartment||'')}</span>
+            <select class="compartment-edit" style="display:none;">
+              <option value="">Select...</option>
+              ${compartmentOptions}
+            </select>
+          </td>
+          <td>${(r.Qty??'')!==''?escapeHtml(String(r.Qty)):'—'}</td>
+          <td>${escapeHtml(r.Expiry||'')}</td>
+          <td class="right">${r.DaysToExpire??''}</td>
+          <td>
+            <div class="actions" style="gap:8px;align-items:center;">
+              <button type="button" class="note-trigger" title="Click to edit note">
+                ${escapeHtml(note || 'note…')}
+              </button>
+              <button class="btn pending ${r.Status==='Pending'?'is-active':''}">Pending</button>
+              <button class="btn green ok">OK</button>
+              <button class="btn red replaced">Replaced</button>
+              <button class="btn edit-btn">Edit</button>
+              <button class="btn save-btn" style="display:none;">Save</button>
+              <button class="btn cancel-btn" style="display:none;">Cancel</button>
+            </div>
+          </td>
+        </tr>`;
+    }).join('')}
+  </tbody></table>`;
+  $('#content').innerHTML = html;
 
-    const markPendingActive = () => {
-      tr.classList.add('warn');
-      tr.querySelector('.pending').classList.add('is-active');
-    };
-    const clearPendingActive = () => {
-      tr.classList.remove('warn');
-      tr.querySelector('.pending').classList.remove('is-active');
-    };
+  // Wire row actions + note modal per row
+  $('#content').querySelectorAll('tr[data-id]').forEach(tr=>{
+    const id = decodeURIComponent(tr.dataset.id);
+    const noteBtn = tr.querySelector('.note-trigger');
+    let cachedNote = (noteBtn.textContent.trim() === 'note…') ? '' : noteBtn.textContent.trim();
 
-    // open note editor
-    noteBtn.addEventListener('click', ()=>{
-      openNoteEditor(id, cachedNote, async (newNote)=>{
-        // save handler
-        await postUpdate({ inventoryId:id, crewStatus:newNote });
-        cachedNote = newNote;
-        noteBtn.textContent = newNote || 'note…';
-      });
-    });
+    const markPendingActive = () => {
+      tr.classList.add('warn');
+      tr.querySelector('.pending').classList.add('is-active');
+    };
+    
+    // open note editor
+    noteBtn.addEventListener('click', ()=>{
+      openNoteEditor(id, cachedNote, async (newNote)=>{
+        await postUpdate({ inventoryId:id, crewStatus:newNote });
+        cachedNote = newNote;
+        noteBtn.textContent = newNote || 'note…';
+      });
+    });
 
-    tr.querySelector('button.pending').addEventListener('click', async ()=>{
-      try{
-        await postUpdate({ inventoryId:id, status:'Pending', crewStatus: cachedNote });
-        markPendingActive();
-      }catch(e){ console.error(e); alert('Update failed'); }
-    });
+    tr.querySelector('button.pending').addEventListener('click', async ()=>{
+      try{
+        await postUpdate({ inventoryId:id, status:'Pending', crewStatus: cachedNote });
+        markPendingActive();
+      }catch(e){ console.error(e); alert('Update failed'); }
+    });
 
-    tr.querySelector('button.ok').addEventListener('click', async ()=>{
-      try{
-        await postUpdate({ inventoryId:id, status:'OK', crewStatus: cachedNote });
-        tr.remove();
-        $('#count').textContent = `${$('#content tbody').children.length} item(s)`;
-      }catch(e){ console.error(e); alert('Update failed'); }
-    });
+    tr.querySelector('button.ok').addEventListener('click', async ()=>{
+      try{
+        await postUpdate({ inventoryId:id, status:'OK', crewStatus: cachedNote });
+        tr.remove();
+        $('#count').textContent = `${$('#content tbody').children.length} item(s)`;
+      }catch(e){ console.error(e); alert('Update failed'); }
+    });
 
-    tr.querySelector('button.replaced').addEventListener('click', async ()=>{
-      try{
-        await postUpdate({ inventoryId:id, status:'Replaced', crewStatus: cachedNote });
-        tr.remove();
-        $('#count').textContent = `${$('#content tbody').children.length} item(s)`;
-      }catch(e){ console.error(e); alert('Update failed'); }
-    });
-  });
+    tr.querySelector('button.replaced').addEventListener('click', async ()=>{
+      try{
+        await postUpdate({ inventoryId:id, status:'Replaced', crewStatus: cachedNote });
+        tr.remove();
+        $('#count').textContent = `${$('#content tbody').children.length} item(s)`;
+      }catch(e){ console.error(e); alert('Update failed'); }
+    });
+    
+    // Inline Edit Logic
+    const editBtn = tr.querySelector('.edit-btn');
+    const saveBtn = tr.querySelector('.save-btn');
+    const cancelBtn = tr.querySelector('.cancel-btn');
+    
+    editBtn.addEventListener('click', () => {
+      const displayElements = tr.querySelectorAll('.unit-display, .compartment-display');
+      const editElements = tr.querySelectorAll('.unit-edit, .compartment-edit');
+      
+      displayElements.forEach(el => el.style.display = 'none');
+      editElements.forEach(el => el.style.display = 'inline-block');
+      
+      editBtn.style.display = 'none';
+      saveBtn.style.display = 'inline-block';
+      cancelBtn.style.display = 'inline-block';
+    });
+    
+    cancelBtn.addEventListener('click', () => {
+      const displayElements = tr.querySelectorAll('.unit-display, .compartment-display');
+      const editElements = tr.querySelectorAll('.unit-edit, .compartment-edit');
+      
+      displayElements.forEach(el => el.style.display = 'inline-block');
+      editElements.forEach(el => el.style.display = 'none');
+      
+      editBtn.style.display = 'inline-block';
+      saveBtn.style.display = 'none';
+      cancelBtn.style.display = 'none';
+    });
+    
+    saveBtn.addEventListener('click', async () => {
+      const newUnit = tr.querySelector('.unit-edit').value;
+      const newCompartment = tr.querySelector('.compartment-edit').value;
+      
+      const payload = {
+        inventoryId: id,
+        unit: newUnit,
+        compartment: newCompartment,
+        crewStatus: cachedNote
+      };
+      
+      try {
+        await postUpdate(payload);
+        // Update the display text after successful save
+        tr.querySelector('.unit-display').textContent = units.find(u => u.Unit === newUnit)?.Display || newUnit;
+        tr.querySelector('.compartment-display').textContent = newCompartment;
+        
+        cancelBtn.click(); // Exit edit mode
+      } catch(e) {
+        console.error(e);
+        alert('Update failed');
+      }
+    });
+  });
 }
 
 // Note modal helper (max 40 chars)
@@ -525,6 +617,7 @@ function wireUI(){
   const closeBtn = modal.querySelector('.close-btn');
   const chipBar = $('#addExpiryChips');
   const compSel = $('#addCompartmentSelect');
+  const addUnitSelect = $('#addUnitSelect');
   const qtyInp  = $('#addQty');
   const itemSel = $('#addItemSelect');
   let selectedExp = '';
@@ -537,6 +630,12 @@ itemSel.addEventListener('change', ()=>{
     $('#customNameInput').value = '';
   }
 });
+
+  function fillAddUnitSelect() {
+    const options = units.map(u => `<option value="${u.Unit}">${u.Display}</option>`).join('');
+    addUnitSelect.innerHTML = `<option value="">Select...</option>${options}`;
+  }
+
   function endOfMonthISO(year, monthIndexZeroBased){
     const last = new Date(year, monthIndexZeroBased + 1, 0);
     const y = last.getFullYear();
@@ -627,6 +726,10 @@ itemSel.addEventListener('change', ()=>{
 
   buildChips();
   modal.style.display = 'block';
+  fillAddUnitSelect();
+  if ($('#unitSel').value !== 'ALL') {
+    addUnitSelect.value = $('#unitSel').value;
+  }
 });
 
   closeBtn.addEventListener('click', ()=> modal.style.display='none');
@@ -634,6 +737,11 @@ itemSel.addEventListener('change', ()=>{
 
 // Save (create)
 $('#saveNewItemBtn').addEventListener('click', async ()=> {
+  const saveBtn = $('#saveNewItemBtn');
+  const originalText = saveBtn.textContent;
+  saveBtn.textContent = 'Saving...';
+  saveBtn.disabled = true;
+  
   const selectedVal = $('#addItemSelect').value;
   let itemId = '';
   let itemName = '';
@@ -651,11 +759,8 @@ $('#saveNewItemBtn').addEventListener('click', async ()=> {
     itemName = row.ItemName;
   }
 
-  let unit = $('#unitSel').value;
-  if (unit === 'ALL') {
-    unit = prompt('Which unit is this for (e.g., 31, 33, 36)?')?.trim() || '';
-    if (!unit) return;
-  }
+  const unit = $('#addUnitSelect').value;
+  if (!unit) { alert('Please select a unit.'); return; }
 
   if (!selectedExp) { alert('Pick an expiry (chip or custom).'); return; }
 
@@ -677,7 +782,10 @@ $('#saveNewItemBtn').addEventListener('click', async ()=> {
   }catch(e){
     console.error(e);
     alert('Add failed');
-  }
+  } finally {
+    saveBtn.textContent = originalText;
+    saveBtn.disabled = false;
+  }
 });
 }
 
@@ -813,4 +921,3 @@ init();
 </script>
 </body>
 </html>
-}
