@@ -48,7 +48,8 @@ table{width:100%;border-collapse:collapse}
 th,td{padding:8px 10px;border-bottom:1px solid #eee;text-align:left;vertical-align:top}
 th{font-weight:600;background:#fafafa}
 .ok{background:var(--ok)} .warn{background:var(--warn)} .bad{background:var(--bad)}
-.actions{display:flex;gap:6px;flex-wrap:wrap}
+.actions {display: flex; flex-direction: column; gap: 6px; }
+.actions .btn {width: 100%;}
 .btn{padding:6px 10px;border:1px solid var(--b);border-radius:10px;background:#fafafa}
 .btn.red{border-color:#c00} .btn.green{border-color:#090}
 .right{text-align:right}
@@ -159,6 +160,10 @@ th{font-weight:600;background:#fafafa}
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
 }
+.table-container {
+  overflow-x: auto; /* Adds a horizontal scrollbar if content overflows */
+  width: 100%;      /* Ensures the container takes up all available space */
+}
 </style>
 </head>
 <body>
@@ -190,8 +195,11 @@ th{font-weight:600;background:#fafafa}
       <span id="count" class="muted"></span>
     </div>
   </div>
-
-  <div id="content" class="card"></div>
+    <div class="card">
+      <div class="table-container">
+        <div id="content" class="card"></div>
+       </div>
+    </div>
 </div>
 
 <div id="noteModal">
