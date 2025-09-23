@@ -252,28 +252,82 @@ function vendorOf(vendorId){
 }
 function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 5200); }
 
-/************* API *************/
-async function POST(actionType, payload={}){
-  const body = { actionType, ...payload, token: AUTH_TOKEN };
-  const resp = await fetch(BASE, {
-    method:'POST',
-    headers:{ 'Content-Type':'application/json' },
-    body: JSON.stringify(body)
-  });
+async function fetchJson(url, options={}){
+  const resp = await fetch(url, options);
   const text = await resp.text();
-  let data; try{ data = JSON.parse(text); }catch{ data = { ok:false, error:'Non-JSON response', raw:text }; }
+  let data;
+  try{ data = JSON.parse(text); }
+  catch{
+    const err = new Error(`Non-JSON response: ${text.slice(0,200)}`);
+    err.status = resp.status;
+    err.code = resp.status;
+    err.raw = text;
+    err.response = resp;
+    throw err;
+  }
   if(!resp.ok || data.ok===false){
-    const err = new Error(data.error || `POST ${actionType} failed`); err.code = resp.status; err.data = data; throw err;
+    const err = new Error(data?.error || `Request failed (${resp.status})`);
+    err.status = resp.status;
+    err.code = resp.status;
+    err.data = data;
+    err.raw = text;
+    err.response = resp;
+    throw err;
   }
   return data;
 }
+
+function shouldRetryPost(err){
+  if(!err) return false;
+  const status = err.status || err.code;
+  if(status === 502 || status === 503 || status === 504) return true;
+  const msg = String(err.message || '').toLowerCase();
+  const raw = String(err.raw || '').toLowerCase();
+  return msg.includes('bad gateway')
+    || raw.includes('bad gateway')
+    || msg.includes('fetch failed')
+    || msg.includes('failed to fetch')
+    || msg.includes('networkerror')
+    || msg.includes('non-json response');
+}
+
+function encodeFormBody(data){
+  const params = new URLSearchParams();
+  Object.entries(data || {}).forEach(([k,v])=>{
+    if(v === undefined || v === null) return;
+    if(typeof v === 'object') params.append(k, JSON.stringify(v));
+    else params.append(k, String(v));
+  });
+  return params.toString();
+}
+
+/************* API *************/
+async function POST(actionType, payload={}){
+  const body = { actionType, action: actionType, ...payload, token: AUTH_TOKEN };
+  try{
+    return await fetchJson(BASE, {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json' },
+      body: JSON.stringify(body)
+    });
+  }catch(err){
+    if(!shouldRetryPost(err)) throw err;
+    console.warn(`POST ${actionType} JSON failed; retrying form-encoded`, err);
+    try{
+      return await fetchJson(BASE, {
+        method:'POST',
+        headers:{ 'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8' },
+        body: encodeFormBody(body)
+      });
+    }catch(err2){
+      if(!('previous' in err2)) err2.previous = err;
+      throw err2;
+    }
+  }
+}
 async function GET(action, params={}){
   const q = new URLSearchParams({ action, ...params, _ts: Date.now() }).toString();
-  const resp = await fetch(`${BASE}?${q}`);
-  const text = await resp.text();
-  let data; try{ data = JSON.parse(text); }catch{ data = { ok:false, error:'Non-JSON response', raw:text }; }
-  if(!resp.ok || data.ok===false){ const err = new Error(data.error || `GET ${action} failed`); err.code = resp.status; err.data = data; throw err; }
-  return data;
+  return fetchJson(`${BASE}?${q}`);
 }
 
 // Try POST first (no CORS), then fallback to GET if server lacks POST mirror
