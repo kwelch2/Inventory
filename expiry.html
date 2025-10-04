@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Expiring Supplies – GC EMS</title>
+  <style>
+    body{font-family:Arial,sans-serif;margin:20px;background:#f8f9fa}
+    h1{font-size:1.4rem;color:#222}
+    table{width:100%;border-collapse:collapse;background:#fff}
+    th,td{border:1px solid #ddd;padding:8px;text-align:left}
+    th{background:#eee}
+    tr:nth-child(even){background:#f9f9f9}
+  </style>
+</head>
+<body>
+  <h1>Expiring Inventory (Next 90 Days)</h1>
+  <table id="expiringTable">
+    <thead>
+      <tr><th>Item</th><th>Unit</th><th>Qty</th><th>Expires</th><th>Days Left</th><th>Status</th></tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <script type="module">
+    import { db } from "./firebase.js";
+    import { collection, query, where, getDocs, orderBy } 
+      from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+
+    const tbody = document.querySelector("#expiringTable tbody");
+
+    async function loadExpiring() {
+      const q = query(
+        collection(db, "inventory"),
+        where("daysToExpire", "<=", 90),
+        orderBy("daysToExpire", "asc")
+      );
+
+      const snap = await getDocs(q);
+      tbody.innerHTML = "";
+      snap.forEach(doc => {
+        const d = doc.data();
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${d.catalogId || ""}</td>
+          <td>${d.unitId || ""}</td>
+          <td>${d.qty || ""}</td>
+          <td>${d.expiryDate ? new Date(d.expiryDate).toLocaleDateString() : ""}</td>
+          <td>${d.daysToExpire ?? ""}</td>
+          <td>${d.status || ""}</td>`;
+        tbody.appendChild(tr);
+      });
+      console.log(`Loaded ${snap.size} expiring records`);
+    }
+
+    loadExpiring();
+  </script>
+</body>
+</html>
