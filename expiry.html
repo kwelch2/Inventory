@@ -13,32 +13,7 @@
 <script src="https://kwelch2.github.io/Inventory/quagga.min.js"></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css"/>
 <script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
-
-<!-- 🔥 FIREBASE SDK (added) -->
-<script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-  import { 
-    getFirestore, collection, getDocs, addDoc, updateDoc, doc, query, where, orderBy 
-  } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
-
-  // ✅ Replace these values with your real Firebase project config
-  const firebaseConfig = {
-  apiKey: "AIzaSyD7pMc-AHXb1cApzSfImkWvIjM9iwCoym4",
-  authDomain: "supplies-ems.firebaseapp.com",
-  projectId: "supplies-ems",
-  storageBucket: "supplies-ems.firebasestorage.app",
-  messagingSenderId: "649560661195",
-  appId: "1:649560661195:web:f389f3e620c0c36559cf4e",
-  measurementId: "G-EN8MDYD571"
-};
-
-  const app = initializeApp(firebaseConfig);
-  const db = getFirestore(app);
-  window._db = db; // make available to non-module scripts
-</script>
-
 <style>
-/* (your entire CSS left untouched) */
 :root{--bg:#f7f7f7;--card:#fff;--b:#ddd;--muted:#666;--ok:#e7f7ee;--warn:#fff7e6;--bad:#fdecea}
 *{box-sizing:border-box}
 body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:var(--bg)}
@@ -50,29 +25,26 @@ h1{margin:0 0 6px}
 .toolbar-actions{display:flex;gap:10px;margin-left:auto;}
 select,button,input{padding:8px 10px;border:1px solid var(--b);border-radius:10px;background:#fff}
 button{cursor:pointer}
-#showAddItemModal{background-color:#007bff;color:#fff;border-color:#007bff;font-weight:600}
+#showAddItemModal{background-color:#007bff;color:#fff;border-color:#007bff;font-weight:600;}
 table{width:100%;border-collapse:collapse}
 th,td{padding:8px 10px;border-bottom:1px solid #eee;text-align:left;vertical-align:top}
 th{font-weight:600;background:#fafafa}
 .ok{background:var(--ok)}.warn{background:var(--warn)}.bad{background:var(--bad)}
 .actions{display:grid;grid-template-columns:1fr 1fr;gap:6px;}
-.actions .btn{width:100%;}
 .btn{padding:6px 10px;border:1px solid var(--b);border-radius:10px;background:#fafafa}
 .btn.red{border-color:#c00}.btn.green{border-color:#090}
-.right{text-align:right}
-.spacer{flex:1}
+.btn.pending.is-active{background:#ffeb3b!important;color:#000;font-weight:600;border-color:#fdd835;}
 .modal{display:none;position:fixed;z-index:99;left:0;top:0;width:100%;height:100%;overflow:auto;background:rgba(0,0,0,.35)}
 .modal-content{background:#fff;margin:10% auto;padding:16px;border:1px solid var(--b);width:min(540px,92%);border-radius:12px}
 .close-btn{float:right;font-size:24px;cursor:pointer}
 .table-container{overflow-x:auto;width:100%}
 </style>
 </head>
-
 <body>
 <div class="wrap">
   <div class="card">
     <h1>Expiring Supplies</h1>
-    <div class="muted">Now backed by Firebase Firestore – no proxy required.</div>
+    <div class="muted">Live from Firestore – filtered by expiry window</div>
     <div class="toolbar">
       <label>Window
         <select id="rangeSel">
@@ -84,7 +56,7 @@ th{font-weight:600;background:#fafafa}
       <label>Unit
         <select id="unitSel"><option value="ALL">ALL</option></select>
       </label>
-      <div style="display:flex;gap:8px;align-items:center;flex:1;">
+      <div style="flex:1;display:flex;gap:8px;align-items:center;">
         <input id="searchBox" placeholder="Search item, compartment…" style="flex:1;"/>
       </div>
       <div class="toolbar-actions">
@@ -93,7 +65,6 @@ th{font-weight:600;background:#fafafa}
       <span id="count" class="muted"></span>
     </div>
   </div>
-
   <div class="card">
     <div class="table-container">
       <div id="content" class="card"></div>
@@ -102,126 +73,103 @@ th{font-weight:600;background:#fafafa}
 </div>
 
 <script type="module">
-import { collection, getDocs, addDoc, updateDoc, doc } 
-  from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+// ==================== FIREBASE SDK SETUP ====================
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+import { getFirestore, collection, getDocs, query } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
-const db = window._db;
+// Your Firebase Config (no secret keys!)
+const firebaseConfig = {
+  apiKey: "YOUR_PUBLIC_KEY_HERE",
+  authDomain: "YOUR_PROJECT.firebaseapp.com",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_PROJECT.appspot.com",
+  messagingSenderId: "SENDER_ID",
+  appId: "APP_ID"
+};
 
-// ======= FIRESTORE REPLACEMENT FOR OLD PROXY =======
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
 
-async function apiGet(actionType, params = {}) {
-  switch (actionType) {
-    case "listunits": {
-      const snap = await getDocs(collection(db, "units"));
-      return { rows: snap.docs.map(d => d.data()) };
-    }
+// ==================== LOAD DATA ====================
+let rows = [];
 
-    case "listcatalog": {
-      const snap = await getDocs(collection(db, "catalog"));
-      return { rows: snap.docs.map(d => d.data()) };
-    }
-
-    case "expiring": {
-      const within = Number(params.within) || 90;
-      const snap = await getDocs(collection(db, "inventory"));
-      const all = snap.docs.map(d => ({
-        InventoryID: d.id,
-        ...d.data()
-      }));
-      const filtered = all.filter(i => {
-        if (!i.daysToExpire && !i.Expiry) return false;
-        const days = i.daysToExpire ?? daysLeft(i.Expiry);
-        return days <= within && i.Status !== "OK" && i.Status !== "Replaced";
-      }).map(i => ({
-        ...i,
-        DaysToExpire: i.daysToExpire ?? daysLeft(i.Expiry)
-      }));
-      return { rows: filtered };
-    }
-
-    default:
-      console.warn(`Unknown apiGet: ${actionType}`);
-      return { rows: [] };
-  }
-}
-
-async function apiPost(actionType, data = {}) {
-  switch (actionType) {
-    case "updateInventory": {
-      if (!data.inventoryId) throw new Error("Missing inventoryId");
-      const ref = doc(db, "inventory", data.inventoryId);
-      await updateDoc(ref, {
-        Status: data.status || null,
-        CrewStatus: data.crewStatus || "",
-        Unit: data.unit || "",
-        Compartment: data.compartment || ""
-      });
-      return { ok: true };
-    }
-
-    case "createInventory": {
-      await addDoc(collection(db, "inventory"), {
-        ItemID: data.itemId || "",
-        ItemName: data.itemName || data.notes || "Custom",
-        Unit: data.unit,
-        Compartment: data.compartment,
-        Expiry: data.expiry,
-        Qty: data.qty || 1,
-        CrewStatus: "",
-        Status: "Pending"
-      });
-      return { ok: true };
-    }
-
-    default:
-      console.warn(`Unknown apiPost: ${actionType}`);
-      return { ok: false };
-  }
-}
-
-// === Utility: calculate days to expiry
-function daysLeft(iso) {
-  const today = new Date();
-  const exp = new Date(iso);
-  const diff = (exp - today) / 86400000;
-  return Math.floor(diff);
-}
-
-// === Your original load/render/init logic stays the same ===
-// (kept fully intact)
 async function loadAll() {
-  const within = 90;
-  const unit = 'ALL';
-  const [inv, un, cat] = await Promise.all([
-    apiGet('expiring', { within, unit }),
-    apiGet('listunits'),
-    apiGet('listcatalog')
-  ]);
-  rows = inv.rows;
-  units = un.rows;
-  catalog = cat.rows;
+  rows = [];
+  const snap = await getDocs(query(collection(db, "inventory")));
+  snap.forEach(doc => {
+    const r = doc.data();
+    rows.push(r);
+  });
+
+  // 🔧 Normalize Firestore fields to legacy names
+  rows = rows.map(r => ({
+    InventoryID: r.inventoryId || '',
+    ItemName: r.itemName || r.notes || '(unknown)',
+    Unit: r.unitId || '',
+    Compartment: r.compartment || '',
+    Qty: r.qty ?? '',
+    Expiry: r.expiryDate ? r.expiryDate.substring(0,10) : '',
+    Status: r.status || '',
+    CrewStatus: r.crewStatus || '',
+    DaysToExpire: r.daysToExpire ?? '',
+    Notes: r.notes || ''
+  }));
+
   render();
 }
-function render() {
-  let html = `<table><thead><tr>
-    <th>Item</th><th>Unit</th><th>Qty</th><th>Expiry</th><th>Days</th><th>Status</th></tr></thead><tbody>`;
-  rows.forEach(r=>{
-    html += `<tr>
-      <td>${r.ItemName||''}</td>
-      <td>${r.Unit||''}</td>
-      <td>${r.Qty||''}</td>
-      <td>${r.Expiry||''}</td>
-      <td>${r.DaysToExpire||''}</td>
-      <td>${r.Status||''}</td></tr>`;
-  });
-  html += `</tbody></table>`;
-  document.getElementById('content').innerHTML = html;
-  document.getElementById('count').textContent = `${rows.length} item(s)`;
+
+// ==================== RENDER ====================
+function rowClass(days, status){
+  if ((status||'').toLowerCase() === 'pending') return 'warn';
+  if (days != null){
+    if (days < 0) return 'bad';
+    if (days <= 30) return 'warn';
+  }
+  return 'ok';
 }
 
-// === Boot ===
-let rows=[],units=[],catalog=[];
-document.getElementById('refreshBtn').addEventListener('click', loadAll);
+function render(){
+  const q = ($('#searchBox').value||'').toLowerCase();
+  let list = rows.filter(r=>{
+    const hay = `${r.ItemName} ${r.Compartment}`.toLowerCase();
+    return !q || hay.includes(q);
+  });
+
+  list = list.sort((a,b)=> (a.DaysToExpire??1e9)-(b.DaysToExpire??1e9));
+
+  $('#count').textContent = `${list.length} item(s)`;
+
+  const html = `<table><thead><tr>
+    <th>Item</th>
+    <th>Unit</th>
+    <th>Compartment</th>
+    <th>Qty</th>
+    <th>Expiry</th>
+    <th>Days</th>
+    <th>Status</th>
+  </tr></thead><tbody>
+  ${list.map(r=>{
+    const cls = rowClass(r.DaysToExpire, r.Status);
+    return `<tr class="${cls}">
+      <td>${r.ItemName}</td>
+      <td>${r.Unit}</td>
+      <td>${r.Compartment}</td>
+      <td>${r.Qty}</td>
+      <td>${r.Expiry}</td>
+      <td>${r.DaysToExpire}</td>
+      <td>${r.Status}</td>
+    </tr>`;
+  }).join('')}
+  </tbody></table>`;
+
+  $('#content').innerHTML = html;
+}
+
+const $ = s => document.querySelector(s);
+$('#refreshBtn').addEventListener('click', loadAll);
+$('#searchBox').addEventListener('input', () => render());
+
+// Load on startup
 loadAll();
 </script>
 </body>
