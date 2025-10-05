@@ -11,82 +11,89 @@
     *{box-sizing:border-box}
     body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:var(--bg);color:var(--ink)}
     .wrap{max-width:1200px;margin:0 auto;padding:16px}
-    #auth-container { display: flex; flex-direction: column; gap: 10px; padding: 20px; border: 1px solid #ccc; border-radius: 8px; margin-bottom: 20px; max-width: 400px; }
+    #login-container { max-width: 400px; margin: 2rem auto; }
     #app-container { display: none; }
-    .tabs{display:flex;gap:8px;border-bottom:1px solid var(--b);position:sticky;top:0;background:var(--bg);padding-bottom:8px;z-index:5}
+    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+    .auth-info { display: flex; align-items: center; gap: 1rem; }
+    .tabs{display:flex;gap:8px;border-bottom:1px solid var(--b);position:sticky;top:0;background:var(--bg);padding:8px 0;z-index:5}
     .tab{padding:10px 14px;border:1px solid var(--b);border-bottom:none;border-top-left-radius:10px;border-top-right-radius:10px;background:#eee;color:#333;cursor:pointer}
     .tab.active{background:var(--card);color:#000;border-bottom:1px solid var(--card)}
     .panel{display:none;background:var(--card);border:1px solid var(--b);border-radius:12px;padding:16px;margin-top:-1px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
     .panel.active{display:block}
     h1,h2{margin:0 0 10px}
-    .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap; margin-bottom: 1rem;}
     .btn{padding:8px 10px;border:1px solid var(--b);border-radius:10px;background:#fff;cursor:pointer}
     .btn.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
     table{width:100%;border-collapse:collapse;font-size:14px}
     th,td{padding:8px;border-top:1px solid var(--b);text-align:left;vertical-align:top}
     th{background:#fafafa}
-    input,select{padding:8px;border:1px solid var(--b);border-radius:8px}
+    input,select{padding:8px;border:1px solid var(--b);border-radius:8px; font-size: 1rem;}
+    .kvd{font-size:12px;color:#555}
   </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>EMS Supplies — Admin Dashboard</h1>
-
-  <div id="auth-container">
-    <h2>Login</h2>
-    <button id="googleLoginBtn" class="btn primary">Sign in with Google</button>
-    <button id="logoutBtn" class="btn" style="display: none;">Logout</button>
-    <p id="auth-status" class="muted">Please sign in to continue.</p>
+  
+  <div id="login-container">
+    <div class="card">
+        <h2>Admin Login</h2>
+        <button id="googleLoginBtn" class="btn primary" style="width: 100%;">Sign in with Google</button>
+        <p id="auth-status-login" class="muted" style="text-align: center; margin-top: 1rem;">Please sign in to continue.</p>
+    </div>
   </div>
 
   <div id="app-container">
+    <div class="header">
+        <h1>EMS Supplies — Admin Dashboard</h1>
+        <div class="auth-info">
+            <span id="auth-status-main" class="muted"></span>
+            <button id="logoutBtn" class="btn">Logout</button>
+        </div>
+    </div>
     <div class="tabs" id="tabs"></div>
       <section id="panel-catalog" class="panel">
-      <h2>Catalog Manager <span class="kvd" id="kvCatalog"></span></h2>
-      <div class="row">
-        <input id="catName" placeholder="Item name"/>
-        <input id="catCategory" placeholder="Category"/>
-        <button class="btn primary" id="catAddBtn">Add / Upsert</button>
-        <div style="display:flex; gap: 8px; align-items:center;">
-          <input id="catSearch" placeholder="Search items…" style="min-width:240px"/>
+        <h2>Catalog Manager <span class="kvd" id="kvCatalog"></span></h2>
+        <div class="row">
+          <input id="catName" placeholder="Item name"/>
+          <input id="catCategory" placeholder="Category"/>
+          <button class="btn primary" id="catAddBtn">Add Item</button>
+          <span style="flex: 1;"></span>
+          <input id="catSearch" placeholder="Search items…"/>
         </div>
-      </div>
-      <div id="catalogTable" style="margin-top:10px"></div>
-    </section>
+        <div id="catalogTable" style="margin-top:10px"></div>
+      </section>
 
-    <section id="panel-pricing" class="panel">
-      <h2>Vendor Pricing <span class="kvd" id="kvPricing"></span></h2>
-      <div id="pricingTable"></div>
-    </section>
+      <section id="panel-pricing" class="panel">
+        <h2>Vendor Pricing <span class="kvd" id="kvPricing"></span></h2>
+        <div class="row">
+          <select id="vpItem"></select>
+          <select id="vpVendor"></select>
+          <input id="vpSku" placeholder="Vendor SKU / order #"/>
+          <input id="vpPrice" type="number" step="0.01" placeholder="Unit price"/>
+          <button class="btn primary" id="vpAddBtn">Add/Update Price</button>
+        </div>
+        <div id="pricingTable" style="margin-top:10px"></div>
+      </section>
 
-    <section id="panel-planner" class="panel">
-      <h2>Order Planner <span class="kvd" id="kvPlan"></span></h2>
-      <div id="planTable"></div>
-    </section>
+      <section id="panel-orders" class="panel">
+        <h2>Orders <span class="kvd" id="kvOrders"></span></h2>
+        <div class="row">
+          <label><input type="checkbox" id="toggleHistory"/> Show history (Received)</label>
+        </div>
+        <div id="ordersTable"></div>
+      </section>
 
-    <section id="panel-orders" class="panel">
-      <h2>Orders <span class="kvd" id="kvOrders"></span></h2>
-      <div id="ordersTable"></div>
-    </section>
-
-    <section id="panel-log" class="panel">
-      <h2>Activity Log <span class="kvd" id="kvLog"></span></h2>
-      <div id="logTable"></div>
-    </section>
+      <section id="panel-log" class="panel">
+        <h2>Activity Log <span class="kvd" id="kvLog"></span></h2>
+        <div id="logTable"></div>
+      </section>
   </div>
 </div>
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-    import {
-        getAuth,
-        onAuthStateChanged,
-        signOut,
-        GoogleAuthProvider,
-        signInWithRedirect,
-        getRedirectResult
-    } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
-    import { getFirestore, collection, getDocs, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+    import { getAuth, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithRedirect, getRedirectResult } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
+    import { getFirestore, collection, getDocs, doc, setDoc, getDoc, addDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
     const firebaseConfig = {
         apiKey: "AIzaSyD7pMc-AHXb1cApzSfImkWvIjM9iwCoym4",
@@ -104,12 +111,11 @@
 
     const state = { user: null, userRole: null, catalog: [], vendors: [], pricingAll: [], orders: [] };
     const $ = id => document.getElementById(id);
-    let appInitialized = false; // Flag to prevent multiple initializations
+    let appInitialized = false;
 
-    // --- AUTHENTICATION & ROLE CHECKING ---
+    // --- AUTHENTICATION & UI CONTROL ---
     async function handleAuthState(user) {
         if (user) {
-            $("auth-status").textContent = "Verifying role...";
             try {
                 const userDocRef = doc(db, "users", user.uid);
                 const userDocSnap = await getDoc(userDocRef);
@@ -120,50 +126,32 @@
                     state.userRole = "User";
                 }
 
-                $("auth-status").textContent = `Logged in as ${user.email} (${state.userRole})`;
+                $("auth-status-main").textContent = `${user.email} (${state.userRole})`;
                 $("app-container").style.display = "block";
-                $("logoutBtn").style.display = "block";
-                $("googleLoginBtn").style.display = "none";
+                $("login-container").style.display = "none";
                 
-                // Only boot the app once
                 if (!appInitialized) {
                     boot();
                     appInitialized = true;
                 }
             } catch (error) {
                 console.error("Error checking user role:", error);
-                $("auth-status").textContent = "Error: Could not verify user role.";
             }
         } else {
             state.userRole = null;
-            $("auth-status").textContent = "Logged out.";
             $("app-container").style.display = "none";
-            $("logoutBtn").style.display = "none";
-            $("googleLoginBtn").style.display = "block";
-            appInitialized = false; // Reset for next login
+            $("login-container").style.display = "block";
+            appInitialized = false;
         }
     }
 
-    // This is now the SINGLE source of truth for auth changes.
     onAuthStateChanged(auth, handleAuthState);
-
-    // Handle the redirect result, but don't update UI here. 
-    // onAuthStateChanged will do that.
-    getRedirectResult(auth).catch((error) => {
-        console.error("Redirect Error:", error);
-        $("auth-status").textContent = `Sign-in Error: ${error.message}`;
-    });
-
-    $("googleLoginBtn").addEventListener("click", () => {
-        const provider = new GoogleAuthProvider();
-        signInWithRedirect(auth, provider);
-    });
-
+    getRedirectResult(auth).catch((error) => console.error("Redirect Error:", error));
+    $("googleLoginBtn").addEventListener("click", () => signInWithRedirect(auth, new GoogleAuthProvider()));
     $("logoutBtn").addEventListener("click", () => signOut(auth));
 
 
-    // --- APPLICATION LOGIC (Full version) ---
-
+    // --- DATA LOADING ---
     async function loadAllData() {
         const [catalogSnap, vendorsSnap, pricingSnap, ordersSnap] = await Promise.all([
             getDocs(collection(db, "catalog")),
@@ -177,6 +165,7 @@
         state.orders = ordersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
     }
 
+    // --- RENDER FUNCTIONS ---
     function renderCatalog() {
         const list = state.catalog;
         $('kvCatalog').textContent = `(${list.length})`;
@@ -185,24 +174,107 @@
                 <td>${i.name || ''}</td>
                 <td>${(i.altNames || []).join(', ')}</td>
                 <td>${i.category || ''}</td>
-                <td><button class="btn" data-edit="${i.id}">Edit</button></td>
+                <td><button class="btn" data-edit-id="${i.id}">Edit</button></td>
             </tr>`).join('');
         $('catalogTable').innerHTML = `<table><thead><tr><th>Name</th><th>Alt Names</th><th>Category</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table>`;
     }
 
+    function renderPricing() {
+        $('kvPricing').textContent = `(${state.pricingAll.length})`;
+        const catalogMap = new Map(state.catalog.map(c => [c.id, c.name]));
+        const vendorMap = new Map(state.vendors.map(v => [v.id, v.name]));
+
+        const rows = state.pricingAll.map(p => `
+            <tr>
+                <td>${catalogMap.get(p.catalogId) || 'Unknown'}</td>
+                <td>${vendorMap.get(p.vendorId) || 'Unknown'}</td>
+                <td>${p.vendorItemNo || ''}</td>
+                <td>$${Number(p.unitPrice || 0).toFixed(2)}</td>
+            </tr>`).join('');
+        $('pricingTable').innerHTML = `<table><thead><tr><th>Item</th><th>Vendor</th><th>SKU</th><th>Price</th></tr></thead><tbody>${rows}</tbody></table>`;
+        
+        // Populate dropdowns
+        $('vpItem').innerHTML = state.catalog.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+        $('vpVendor').innerHTML = state.vendors.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
+    }
+
+    function renderOrders() {
+        const showHistory = $('toggleHistory').checked;
+        const catalogMap = new Map(state.catalog.map(c => [c.id, c.name]));
+        
+        const filteredOrders = state.orders.filter(o => showHistory || o.status !== 'Received');
+        $('kvOrders').textContent = `(${filteredOrders.length})`;
+
+        const rows = filteredOrders.map(o => {
+            const date = o.orderDate?.seconds ? new Date(o.orderDate.seconds * 1000).toLocaleDateString() : 'N/A';
+            return `
+                <tr>
+                    <td>${o.notes || 'N/A'}</td>
+                    <td>${o.status || 'pending'}</td>
+                    <td>${date}</td>
+                    <td>
+                        <button class="btn" data-order-id="${o.id}" data-status="Received">Mark Received</button>
+                    </td>
+                </tr>`;
+        }).join('');
+        $('ordersTable').innerHTML = `<table><thead><tr><th>Notes/Order</th><th>Status</th><th>Date</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table>`;
+        
+        // Add event listener for the new buttons
+        $('ordersTable').querySelectorAll('[data-order-id]').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const { orderId, status } = btn.dataset;
+                btn.textContent = "Updating...";
+                await updateDoc(doc(db, "Orders", orderId), { status });
+                await loadAllData();
+                renderAll();
+            });
+        });
+    }
+
     function renderAll() {
         renderCatalog();
-        // You can add your other render functions here
+        renderPricing();
+        renderOrders();
     }
     
+    // --- UI & BOOTSTRAP ---
+    function attachEventListeners() {
+        $('catAddBtn').addEventListener('click', async () => {
+            const name = $('catName').value.trim();
+            const category = $('catCategory').value.trim();
+            if (!name) return alert('Item name is required.');
+            
+            await addDoc(collection(db, "catalog"), { name, category, altNames: [], refNumbers: [] });
+            await loadAllData();
+            renderAll();
+            $('catName').value = '';
+            $('catCategory').value = '';
+        });
+
+        $('vpAddBtn').addEventListener('click', async () => {
+            const payload = {
+                catalogId: $('vpItem').value,
+                vendorId: $('vpVendor').value,
+                vendorItemNo: $('vpSku').value.trim(),
+                unitPrice: Number($('vpPrice').value || 0)
+            };
+            if (!payload.catalogId || !payload.vendorId) return alert('Item and Vendor are required.');
+
+            await addDoc(collection(db, "vendorPricing"), payload);
+            await loadAllData();
+            renderAll();
+        });
+        
+        $('toggleHistory').addEventListener('change', renderOrders);
+    }
+
     function mountTabs() {
       const tabs = [
-        { id:'catalog', label:'Catalog' }, { id:'pricing', label:'Pricing' },
-        { id:'planner', label:'Planner' }, { id:'orders',  label:'Orders' },
-        { id:'log', label:'Log' }
+        { id:'catalog', label:'Catalog' }, { id:'pricing', label:'Vendor Pricing' },
+        { id:'orders',  label:'Orders' }, { id:'log', label:'Log' }
       ];
       const el = $('tabs');
-      el.innerHTML = tabs.map((t,i) => `<button class="tab ${i===0?'active':''}" data-tab="${t.id}">${t.label}</button>`).join('');
+      el.innerHTML = tabs.map(t => `<button class="tab" data-tab="${t.id}">${t.label}</button>`).join('');
       el.addEventListener('click', (ev) => {
         const btn = ev.target.closest('.tab');
         if(!btn) return;
@@ -211,19 +283,16 @@
         document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
         $(`panel-${btn.dataset.tab}`).classList.add('active');
       });
-      // Set initial active tab
-      if(el.firstChild) {
-        el.firstChild.classList.add('active');
-        $(`panel-${el.firstChild.dataset.tab}`).classList.add('active');
-      }
+      el.querySelector('[data-tab="catalog"]').classList.add('active');
+      $('panel-catalog').classList.add('active');
     }
 
     async function boot() {
         mountTabs();
+        attachEventListeners();
         await loadAllData();
         renderAll();
     }
-
 </script>
 </body>
 </html>

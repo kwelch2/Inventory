@@ -202,11 +202,20 @@
                         const unit = units.find(u => u.id === item.unitId);
                         const expiryDate = new Date(item.expiryDate.seconds ? item.expiryDate.seconds * 1000 : item.expiryDate).toLocaleDateString();
 
+                        const unitOptions = units.map(u => `<option value="${u.id}" ${u.id === item.unitId ? 'selected' : ''}>${u.name}</option>`).join('');
+                        const compartmentOptions = ['Wall', 'Bag', 'Supply RM', 'Clear Container', 'BLS Bag', 'ALS Bag', 'Other'].map(c => `<option value="${c}" ${c === item.compartment ? 'selected' : ''}>${c}</option>`).join('');
+
                         return `
                             <tr class="${rowClass(item.daysToExpire, item.status)}" data-id="${item.inventoryId}">
                                 <td><strong>${escapeHtml(itemName)}</strong></td>
-                                <td>${escapeHtml(unit ? unit.name : item.unitId)}</td>
-                                <td>${escapeHtml(item.compartment)}</td>
+                                <td>
+                                    <span class="unit-display">${escapeHtml(unit ? unit.name : item.unitId)}</span>
+                                    <select class="unit-edit" style="display:none;">${unitOptions}</select>
+                                </td>
+                                <td>
+                                    <span class="compartment-display">${escapeHtml(item.compartment)}</span>
+                                    <select class="compartment-edit" style="display:none;">${compartmentOptions}</select>
+                                </td>
                                 <td>${escapeHtml(item.qty)}</td>
                                 <td>${expiryDate}</td>
                                 <td class="right">${item.daysToExpire}</td>
@@ -216,6 +225,9 @@
                                         <button class="btn pending ${item.status==='Pending'?'is-active':''}">Pending</button>
                                         <button class="btn green ok-btn">OK</button>
                                         <button class="btn red replaced-btn">Replaced</button>
+                                        <button class="btn edit-btn">Edit</button>
+                                        <button class="btn save-btn" style="display:none;">Save</button>
+                                        <button class="btn cancel-btn" style="display:none;">Cancel</button>
                                     </div>
                                 </td>
                             </tr>`;
@@ -232,30 +244,58 @@
             const id = tr.dataset.id;
             const item = allInventory.find(i => i.inventoryId === id);
 
-            const updateStatus = async (newStatus) => {
-                const button = tr.querySelector(`.${newStatus.toLowerCase()}-btn, .${newStatus.toLowerCase()}`);
-                if (button) button.disabled = true;
+            const toggleEditMode = (isEditing) => {
+                tr.querySelector('.unit-display').style.display = isEditing ? 'none' : 'inline';
+                tr.querySelector('.unit-edit').style.display = isEditing ? 'inline' : 'none';
+                tr.querySelector('.compartment-display').style.display = isEditing ? 'none' : 'inline';
+                tr.querySelector('.compartment-edit').style.display = isEditing ? 'inline' : 'none';
                 
+                tr.querySelector('.edit-btn').style.display = isEditing ? 'none' : 'inline';
+                tr.querySelector('.save-btn').style.display = isEditing ? 'inline' : 'none';
+                tr.querySelector('.cancel-btn').style.display = isEditing ? 'inline' : 'none';
+            };
+
+            tr.querySelector('.edit-btn').addEventListener('click', () => toggleEditMode(true));
+            tr.querySelector('.cancel-btn').addEventListener('click', () => toggleEditMode(false));
+            
+            tr.querySelector('.save-btn').addEventListener('click', async () => {
+                const newUnitId = tr.querySelector('.unit-edit').value;
+                const newCompartment = tr.querySelector('.compartment-edit').value;
                 try {
-                    const itemRef = doc(db, "inventory", id);
-                    await updateDoc(itemRef, { status: newStatus, updatedAt: serverTimestamp() });
+                    await updateDoc(doc(db, "inventory", id), {
+                        unitId: newUnitId,
+                        compartment: newCompartment,
+                        updatedAt: serverTimestamp()
+                    });
+                    // Update local data and re-render the row
+                    item.unitId = newUnitId;
+                    item.compartment = newCompartment;
+                    render();
+                } catch (e) {
+                    console.error("Save failed:", e);
+                    alert("Save failed");
+                }
+                toggleEditMode(false);
+            });
+
+            // Status update logic from previous version...
+            const updateStatus = async (newStatus) => {
+                 try {
+                    await updateDoc(doc(db, "inventory", id), { status: newStatus, updatedAt: serverTimestamp() });
+                    item.status = newStatus; // Update local state
                     if (newStatus === 'OK' || newStatus === 'Replaced') {
                         tr.remove();
-                    } else if (newStatus === 'Pending') {
-                        tr.querySelector('.pending').classList.add('is-active');
+                    } else {
+                        render(); // Re-render to update class
                     }
-                } catch (err) {
-                    console.error("Update failed:", err);
-                    alert("Update failed");
-                    if (button) button.disabled = false;
-                }
+                } catch (err) { console.error("Update failed:", err); alert("Update failed"); }
             };
             
             tr.querySelector('.note-trigger')?.addEventListener('click', () => {
                  openNoteEditor(id, item.crewStatus || '', async (newNote) => {
                     await updateDoc(doc(db, "inventory", id), { crewStatus: newNote, updatedAt: serverTimestamp() });
-                    item.crewStatus = newNote; // Update local state
-                    tr.querySelector('.note-trigger').textContent = newNote || 'note…';
+                    item.crewStatus = newNote;
+                    render();
                 });
             });
             tr.querySelector('.pending')?.addEventListener('click', () => updateStatus('Pending'));
@@ -278,6 +318,7 @@
         };
     }
 
+    // Modal and other setup functions remain the same...
     function setupAddItemModal() {
         const modal = $('#addItemModal');
         $('#showAddItemModal').addEventListener('click', () => {
@@ -378,7 +419,6 @@
         $('#refreshBtn').addEventListener('click', loadAll);
     }
     
-    // Polyfill for forEach on NodeList for older browsers if needed
     if (window.NodeList && !NodeList.prototype.forEach) {
         NodeList.prototype.forEach = Array.prototype.forEach;
     }
