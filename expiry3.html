@@ -168,10 +168,8 @@
         const catalogMap = new Map(catalog.map(item => [item.id, item]));
 
         let filtered = allInventory.filter(item => {
-            // ✅ CORRECTED: Safer status check
             const status = (item.status || '').toLowerCase();
             if (status === 'ok' || status === 'replaced') return false;
-
             if (!item.expiryDate) return false;
             
             const expiry = new Date(item.expiryDate.seconds ? item.expiryDate.seconds * 1000 : item.expiryDate);
@@ -184,7 +182,8 @@
             if (unitFilter !== 'ALL' && item.unitId !== unitFilter) return false;
 
             const catalogItem = catalogMap.get(item.catalogId);
-            const itemName = (catalogItem ? catalogItem.name : 'Unknown').toLowerCase();
+            // ✅ CORRECTED: Use 'itemName' and provide a safe fallback for the search.
+            const itemName = (catalogItem ? catalogItem.itemName : 'Unknown').toLowerCase();
             const compartment = (item.compartment || '').toLowerCase();
             if (searchQuery && !itemName.includes(searchQuery) && !compartment.includes(searchQuery)) return false;
 
@@ -200,7 +199,8 @@
                 <tbody>
                     ${filtered.map(item => {
                         const catalogItem = catalogMap.get(item.catalogId);
-                        const itemName = catalogItem ? catalogItem.name : `Unknown (ID: ${item.catalogId})`;
+                        // ✅ CORRECTED: Use 'itemName' for display as well.
+                        const itemName = catalogItem ? catalogItem.itemName : `Unknown (ID: ${item.catalogId})`;
                         const unit = units.find(u => u.id === item.unitId);
                         const expiryDate = new Date(item.expiryDate.seconds ? item.expiryDate.seconds * 1000 : item.expiryDate).toLocaleDateString();
 
@@ -365,7 +365,8 @@
 
     function populateAddItemDropdowns() {
         $('#addUnitSelect').innerHTML = units.map(u => `<option value="${u.id}">${u.name}</option>`).join('');
-        const catalogOptions = catalog.map(c => ({ value: c.id, label: c.name }));
+        // ✅ CORRECTED: Use 'itemName' for the choices dropdown
+        const catalogOptions = catalog.map(c => ({ value: c.id, label: c.itemName }));
         if (itemSelectChoices) {
             itemSelectChoices.clearStore();
             itemSelectChoices.setChoices(catalogOptions, 'value', 'label', true);
@@ -413,7 +414,7 @@
     function init() {
         loadAll();
         setupAddItemModal();
-        // ✅ CORRECTED: Attach event listeners to individual elements
+        // ✅ CORRECTED: This was the source of the forEach error
         $('#rangeSel').addEventListener('change', render);
         $('#unitSel').addEventListener('change', render);
         $('#searchBox').addEventListener('input', render);
