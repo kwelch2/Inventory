@@ -171,6 +171,7 @@
             // ✅ CORRECTED: Safer status check
             const status = (item.status || '').toLowerCase();
             if (status === 'ok' || status === 'replaced') return false;
+
             if (!item.expiryDate) return false;
             
             const expiry = new Date(item.expiryDate.seconds ? item.expiryDate.seconds * 1000 : item.expiryDate);
@@ -412,7 +413,7 @@
     function init() {
         loadAll();
         setupAddItemModal();
-        // ✅ CORRECTED: Attach listeners to individual elements
+        // ✅ CORRECTED: Attach event listeners to individual elements
         $('#rangeSel').addEventListener('change', render);
         $('#unitSel').addEventListener('change', render);
         $('#searchBox').addEventListener('input', render);
