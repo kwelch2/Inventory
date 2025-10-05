@@ -141,7 +141,7 @@
             render();
         } catch (e) {
             console.error("Error loading data: ", e);
-            $('#content').innerHTML = `<p style="color:red;">Error loading data from Firestore.</p>`;
+            $('#content').innerHTML = `<p style="color:red;">Error loading data from Firestore. Check permissions and collection names.</p>`;
         } finally {
             $('#refreshBtn').disabled = false;
         }
@@ -168,6 +168,7 @@
         const catalogMap = new Map(catalog.map(item => [item.id, item]));
 
         let filtered = allInventory.filter(item => {
+            // ✅ CORRECTED: Safer status check
             const status = (item.status || '').toLowerCase();
             if (status === 'ok' || status === 'replaced') return false;
             if (!item.expiryDate) return false;
@@ -267,7 +268,6 @@
                         compartment: newCompartment,
                         updatedAt: serverTimestamp()
                     });
-                    // Update local data and re-render the row
                     item.unitId = newUnitId;
                     item.compartment = newCompartment;
                     render();
@@ -278,15 +278,14 @@
                 toggleEditMode(false);
             });
 
-            // Status update logic from previous version...
             const updateStatus = async (newStatus) => {
                  try {
                     await updateDoc(doc(db, "inventory", id), { status: newStatus, updatedAt: serverTimestamp() });
-                    item.status = newStatus; // Update local state
+                    item.status = newStatus;
                     if (newStatus === 'OK' || newStatus === 'Replaced') {
                         tr.remove();
                     } else {
-                        render(); // Re-render to update class
+                        render();
                     }
                 } catch (err) { console.error("Update failed:", err); alert("Update failed"); }
             };
@@ -318,7 +317,6 @@
         };
     }
 
-    // Modal and other setup functions remain the same...
     function setupAddItemModal() {
         const modal = $('#addItemModal');
         $('#showAddItemModal').addEventListener('click', () => {
@@ -414,13 +412,11 @@
     function init() {
         loadAll();
         setupAddItemModal();
-        $('#rangeSel, #unitSel').forEach(el => el.addEventListener('change', render));
+        // ✅ CORRECTED: Attach listeners to individual elements
+        $('#rangeSel').addEventListener('change', render);
+        $('#unitSel').addEventListener('change', render);
         $('#searchBox').addEventListener('input', render);
         $('#refreshBtn').addEventListener('click', loadAll);
-    }
-    
-    if (window.NodeList && !NodeList.prototype.forEach) {
-        NodeList.prototype.forEach = Array.prototype.forEach;
     }
     
     init();

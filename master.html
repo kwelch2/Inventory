@@ -4,8 +4,6 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>EMS Supplies — Admin Dashboard</title>
-  <script src="https://kwelch2.github.io/Inventory/quagga.min.js"></script>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='50' font-size='50'%3E🚑%3C/text%3E%3C/svg%3E">
   <style>
     :root{--bg:#f7f7f7;--card:#fff;--b:#ddd;--muted:#666;--ink:#111;--accent:#0a66ff;--bad:#b00020;--ok:#137333}
     *{box-sizing:border-box}
@@ -55,10 +53,9 @@
         <h2>Catalog Manager <span class="kvd" id="kvCatalog"></span></h2>
         <div class="row">
           <input id="catName" placeholder="Item name"/>
+          <input id="catAltName" placeholder="Alternate names (comma-separated)"/>
           <input id="catCategory" placeholder="Category"/>
           <button class="btn primary" id="catAddBtn">Add Item</button>
-          <span style="flex: 1;"></span>
-          <input id="catSearch" placeholder="Search items…"/>
         </div>
         <div id="catalogTable" style="margin-top:10px"></div>
       </section>
@@ -81,11 +78,6 @@
           <label><input type="checkbox" id="toggleHistory"/> Show history (Received)</label>
         </div>
         <div id="ordersTable"></div>
-      </section>
-
-      <section id="panel-log" class="panel">
-        <h2>Activity Log <span class="kvd" id="kvLog"></span></h2>
-        <div id="logTable"></div>
       </section>
   </div>
 </div>
@@ -113,7 +105,7 @@
     const $ = id => document.getElementById(id);
     let appInitialized = false;
 
-    // --- AUTHENTICATION & UI CONTROL ---
+    // --- AUTHENTICATION ---
     async function handleAuthState(user) {
         if (user) {
             try {
@@ -125,18 +117,14 @@
                     await setDoc(userDocRef, { email: user.email, role: "User" });
                     state.userRole = "User";
                 }
-
                 $("auth-status-main").textContent = `${user.email} (${state.userRole})`;
                 $("app-container").style.display = "block";
                 $("login-container").style.display = "none";
-                
                 if (!appInitialized) {
                     boot();
                     appInitialized = true;
                 }
-            } catch (error) {
-                console.error("Error checking user role:", error);
-            }
+            } catch (error) { console.error("Auth Error:", error); }
         } else {
             state.userRole = null;
             $("app-container").style.display = "none";
@@ -151,7 +139,7 @@
     $("logoutBtn").addEventListener("click", () => signOut(auth));
 
 
-    // --- DATA LOADING ---
+    // --- DATA LOADING & STATE MANAGEMENT ---
     async function loadAllData() {
         const [catalogSnap, vendorsSnap, pricingSnap, ordersSnap] = await Promise.all([
             getDocs(collection(db, "catalog")),
@@ -167,9 +155,8 @@
 
     // --- RENDER FUNCTIONS ---
     function renderCatalog() {
-        const list = state.catalog;
-        $('kvCatalog').textContent = `(${list.length})`;
-        const rows = list.map(i => `
+        $('kvCatalog').textContent = `(${state.catalog.length})`;
+        const rows = state.catalog.map(i => `
             <tr>
                 <td>${i.name || ''}</td>
                 <td>${(i.altNames || []).join(', ')}</td>
@@ -186,45 +173,35 @@
 
         const rows = state.pricingAll.map(p => `
             <tr>
-                <td>${catalogMap.get(p.catalogId) || 'Unknown'}</td>
-                <td>${vendorMap.get(p.vendorId) || 'Unknown'}</td>
+                <td>${catalogMap.get(p.catalogId) || `Unknown (ID: ${p.catalogId})`}</td>
+                <td>${vendorMap.get(p.vendorId) || `Unknown (ID: ${p.vendorId})`}</td>
                 <td>${p.vendorItemNo || ''}</td>
                 <td>$${Number(p.unitPrice || 0).toFixed(2)}</td>
+                <td><button class="btn" data-edit-price-id="${p.id}">Edit</button></td>
             </tr>`).join('');
-        $('pricingTable').innerHTML = `<table><thead><tr><th>Item</th><th>Vendor</th><th>SKU</th><th>Price</th></tr></thead><tbody>${rows}</tbody></table>`;
+        $('pricingTable').innerHTML = `<table><thead><tr><th>Item</th><th>Vendor</th><th>SKU</th><th>Price</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table>`;
         
-        // Populate dropdowns
         $('vpItem').innerHTML = state.catalog.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
         $('vpVendor').innerHTML = state.vendors.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
     }
 
     function renderOrders() {
         const showHistory = $('toggleHistory').checked;
-        const catalogMap = new Map(state.catalog.map(c => [c.id, c.name]));
-        
         const filteredOrders = state.orders.filter(o => showHistory || o.status !== 'Received');
         $('kvOrders').textContent = `(${filteredOrders.length})`;
-
-        const rows = filteredOrders.map(o => {
-            const date = o.orderDate?.seconds ? new Date(o.orderDate.seconds * 1000).toLocaleDateString() : 'N/A';
-            return `
-                <tr>
-                    <td>${o.notes || 'N/A'}</td>
-                    <td>${o.status || 'pending'}</td>
-                    <td>${date}</td>
-                    <td>
-                        <button class="btn" data-order-id="${o.id}" data-status="Received">Mark Received</button>
-                    </td>
-                </tr>`;
-        }).join('');
+        const rows = filteredOrders.map(o => `
+            <tr>
+                <td>${o.notes || 'N/A'}</td>
+                <td>${o.status || 'pending'}</td>
+                <td>${o.orderDate?.seconds ? new Date(o.orderDate.seconds * 1000).toLocaleDateString() : 'N/A'}</td>
+                <td><button class="btn" data-order-id="${o.id}" data-status="Received">Mark Received</button></td>
+            </tr>`).join('');
         $('ordersTable').innerHTML = `<table><thead><tr><th>Notes/Order</th><th>Status</th><th>Date</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table>`;
         
-        // Add event listener for the new buttons
         $('ordersTable').querySelectorAll('[data-order-id]').forEach(btn => {
             btn.addEventListener('click', async () => {
-                const { orderId, status } = btn.dataset;
                 btn.textContent = "Updating...";
-                await updateDoc(doc(db, "Orders", orderId), { status });
+                await updateDoc(doc(db, "Orders", btn.dataset.orderId), { status: btn.dataset.status });
                 await loadAllData();
                 renderAll();
             });
@@ -237,18 +214,20 @@
         renderOrders();
     }
     
-    // --- UI & BOOTSTRAP ---
+    // --- EVENT LISTENERS & BOOTSTRAP ---
     function attachEventListeners() {
         $('catAddBtn').addEventListener('click', async () => {
             const name = $('catName').value.trim();
-            const category = $('catCategory').value.trim();
             if (!name) return alert('Item name is required.');
             
-            await addDoc(collection(db, "catalog"), { name, category, altNames: [], refNumbers: [] });
+            await addDoc(collection(db, "catalog"), { 
+                name, 
+                category: $('catCategory').value.trim(), 
+                altNames: $('catAltName').value.split(',').map(s => s.trim()).filter(Boolean)
+            });
             await loadAllData();
             renderAll();
-            $('catName').value = '';
-            $('catCategory').value = '';
+            $('catName').value = ''; $('catAltName').value = ''; $('catCategory').value = '';
         });
 
         $('vpAddBtn').addEventListener('click', async () => {
@@ -270,8 +249,8 @@
 
     function mountTabs() {
       const tabs = [
-        { id:'catalog', label:'Catalog' }, { id:'pricing', label:'Vendor Pricing' },
-        { id:'orders',  label:'Orders' }, { id:'log', label:'Log' }
+        { id:'catalog', label:'Catalog' }, { id:'pricing', label:'Pricing' },
+        { id:'orders',  label:'Orders' },
       ];
       const el = $('tabs');
       el.innerHTML = tabs.map(t => `<button class="tab" data-tab="${t.id}">${t.label}</button>`).join('');
