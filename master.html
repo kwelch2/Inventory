@@ -86,7 +86,7 @@
         signInWithRedirect,
         getRedirectResult
     } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
-    import { getFirestore, collection, getDocs, doc, setDoc, getDoc, addDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+    import { getFirestore, collection, getDocs, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
     const firebaseConfig = {
         apiKey: "AIzaSyD7pMc-AHXb1cApzSfImkWvIjM9iwCoym4",
@@ -104,9 +104,10 @@
 
     const state = { user: null, userRole: null, catalog: [], vendors: [], pricingAll: [], orders: [] };
     const $ = id => document.getElementById(id);
+    let appInitialized = false; // Flag to prevent multiple initializations
 
     // --- AUTHENTICATION & ROLE CHECKING ---
-    async function checkUserRole(user) {
+    async function handleAuthState(user) {
         if (user) {
             $("auth-status").textContent = "Verifying role...";
             try {
@@ -124,7 +125,11 @@
                 $("logoutBtn").style.display = "block";
                 $("googleLoginBtn").style.display = "none";
                 
-                boot(); // Initialize the main application
+                // Only boot the app once
+                if (!appInitialized) {
+                    boot();
+                    appInitialized = true;
+                }
             } catch (error) {
                 console.error("Error checking user role:", error);
                 $("auth-status").textContent = "Error: Could not verify user role.";
@@ -135,27 +140,29 @@
             $("app-container").style.display = "none";
             $("logoutBtn").style.display = "none";
             $("googleLoginBtn").style.display = "block";
+            appInitialized = false; // Reset for next login
         }
     }
 
-    getRedirectResult(auth).then((result) => {
-        if (result) checkUserRole(result.user);
-    }).catch((error) => console.error("Redirect Error:", error));
+    // This is now the SINGLE source of truth for auth changes.
+    onAuthStateChanged(auth, handleAuthState);
 
-    onAuthStateChanged(auth, (user) => {
-        if (!auth.currentUser && !state.user) { // Prevent double-runs on redirect
-             checkUserRole(user);
-        }
+    // Handle the redirect result, but don't update UI here. 
+    // onAuthStateChanged will do that.
+    getRedirectResult(auth).catch((error) => {
+        console.error("Redirect Error:", error);
+        $("auth-status").textContent = `Sign-in Error: ${error.message}`;
     });
 
     $("googleLoginBtn").addEventListener("click", () => {
-        signInWithRedirect(auth, new GoogleAuthProvider());
+        const provider = new GoogleAuthProvider();
+        signInWithRedirect(auth, provider);
     });
 
     $("logoutBtn").addEventListener("click", () => signOut(auth));
 
 
-    // --- APPLICATION LOGIC ---
+    // --- APPLICATION LOGIC (Full version) ---
 
     async function loadAllData() {
         const [catalogSnap, vendorsSnap, pricingSnap, ordersSnap] = await Promise.all([
@@ -185,9 +192,7 @@
 
     function renderAll() {
         renderCatalog();
-        // Add other render functions here as you build them out
-        // renderPricing();
-        // renderOrders();
+        // You can add your other render functions here
     }
     
     function mountTabs() {
@@ -206,6 +211,11 @@
         document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
         $(`panel-${btn.dataset.tab}`).classList.add('active');
       });
+      // Set initial active tab
+      if(el.firstChild) {
+        el.firstChild.classList.add('active');
+        $(`panel-${el.firstChild.dataset.tab}`).classList.add('active');
+      }
     }
 
     async function boot() {

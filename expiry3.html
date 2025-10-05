@@ -107,9 +107,9 @@
     };
 
     const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app); // This is now correctly defined in the same scope
+    const db = getFirestore(app);
 
-    // 3. YOUR APPLICATION LOGIC (untouched from before)
+    // 3. YOUR APPLICATION LOGIC
 
     // ===== STATE =====
     let allInventory = [], units = [], catalog = [];
@@ -120,14 +120,14 @@
 
     // ===== DATA FETCHING =====
     async function loadAll() {
-        const withinDays = parseInt($('#rangeSel').value, 10);
-        const unitFilter = $('#unitSel').value;
-
         $('#refreshBtn').disabled = true;
+        $('#content').innerHTML = '<p class="muted">Loading expiring items...</p>';
 
         try {
+            // Fetch all data in parallel
             const [invSnapshot, unitsSnapshot, catalogSnapshot] = await Promise.all([
-                getDocs(collection(db, "Inventory")),
+                // ✅ CORRECTED: "Inventory" changed to "inventory" (lowercase "i")
+                getDocs(collection(db, "inventory")),
                 getDocs(collection(db, "units")),
                 getDocs(collection(db, "catalog"))
             ]);
@@ -174,9 +174,15 @@
             if (status === 'ok' || status === 'replaced') return false;
 
             if (!item.expiryDate) return false;
+            
+            // Handle both Firestore Timestamp objects and ISO date strings
             const expiry = new Date(item.expiryDate.seconds ? item.expiryDate.seconds * 1000 : item.expiryDate);
+            if (isNaN(expiry)) return false; // Invalid date format
+
             const today = new Date();
+            today.setHours(0, 0, 0, 0); // Normalize today to the start of the day
             const daysUntilExpiry = Math.ceil((expiry - today) / (1000 * 60 * 60 * 24));
+            
             item.daysToExpire = daysUntilExpiry;
             if (daysUntilExpiry > withinDays) return false;
 
@@ -248,7 +254,7 @@
                 e.target.textContent = 'Updating...';
 
                 try {
-                    const itemRef = doc(db, "Inventory", id);
+                    const itemRef = doc(db, "inventory", id); // Also corrected here
                     await updateDoc(itemRef, {
                         status: newStatus,
                         updatedAt: serverTimestamp(),
@@ -303,7 +309,7 @@
             $('#saveNewItemBtn').textContent = 'Saving...';
             
             try {
-                await addDoc(collection(db, "Inventory"), payload);
+                await addDoc(collection(db, "inventory"), payload); // And here
                 modal.style.display = 'none';
                 await loadAll();
             } catch (e) {
@@ -347,7 +353,6 @@
 
     // Start the application
     init();
-
 </script>
 </body>
 </html>
