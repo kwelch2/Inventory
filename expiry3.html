@@ -26,11 +26,18 @@
     th,td{padding:8px 10px;border-bottom:1px solid #eee;text-align:left;vertical-align:top}
     th{font-weight:600;background:#fafafa}
     .ok{background:var(--ok)} .warn{background:var(--warn)} .bad{background:var(--bad)}
-    .actions {display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
     .modal{display:none;position:fixed;z-index:99;left:0;top:0;width:100%;height:100%;overflow:auto;background:rgba(0,0,0,.35)}
     .modal-content{background:#fff;margin:10% auto;padding:16px;border:1px solid var(--b);width:min(540px,92%);border-radius:12px}
     .close-btn{float:right;font-size:24px;cursor:pointer}
     .table-container{overflow-x:auto;width:100%}
+    .actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center;}
+    .btn{padding:6px 10px;border-radius:10px;background:#fafafa; border: 1px solid var(--b);}
+    .btn.red{border-color:#c00} .btn.green{border-color:#090}
+    .btn.pending.is-active { background: #ffeb3b !important; color: #000; font-weight: 600; border-color: #fdd835; }
+    .note-trigger{ min-width:100px; text-align:left; }
+    #noteModal{display:none;position:fixed;z-index:120;inset:0;background:rgba(0,0,0,.35)}
+    #noteModal .box{background:#fff;margin:12% auto;max-width:420px;width:92%;border:1px solid var(--b);border-radius:12px;padding:14px}
+    .chipbar{display:flex;gap:6px;flex-wrap:wrap}
 </style>
 </head>
 
@@ -40,23 +47,10 @@
     <h1>Expiring Supplies</h1>
     <div class="muted">Now backed by Firebase Firestore – no proxy or login required.</div>
     <div class="toolbar">
-      <label>Window
-        <select id="rangeSel">
-          <option value="30">30 days</option>
-          <option value="60">60 days</option>
-          <option value="90" selected>90 days</option>
-        </select>
-      </label>
-      <label>Unit
-        <select id="unitSel"><option value="ALL">ALL</option></select>
-      </label>
-      <div style="display:flex;gap:8px;align-items:center;flex:1;">
-        <input id="searchBox" placeholder="Search item, compartment…" style="flex:1;"/>
-      </div>
-      <div class="toolbar-actions">
-        <button class="btn" id="refreshBtn">Refresh</button>
-        <button class="btn" id="showAddItemModal">+ Add Item</button>
-      </div>
+      <label>Window <select id="rangeSel"><option value="30">30 days</option><option value="60">60 days</option><option value="90" selected>90 days</option></select></label>
+      <label>Unit <select id="unitSel"><option value="ALL">ALL</option></select></label>
+      <div style="display:flex;gap:8px;align-items:center;flex:1;"><input id="searchBox" placeholder="Search item, compartment…" style="flex:1;"/></div>
+      <div class="toolbar-actions"><button class="btn" id="refreshBtn">Refresh</button><button class="btn" id="showAddItemModal">+ Add Item</button></div>
       <span id="count" class="muted"></span>
     </div>
   </div>
@@ -77,25 +71,41 @@
       <label style="margin-top: 10px;">Unit</label>
       <select id="addUnitSelect"><option value="">Select...</option></select>
       <label>Compartment</label>
-      <input id="addCompartment" placeholder="e.g., Wall, Bag, Supply RM">
-      <label>Expiry Date</label>
-      <input id="addExpiryDate" type="date">
+      <select id="addCompartmentSelect"><option value="">Select…</option><option>Wall</option><option>Bag</option><option>Supply RM</option><option>Clear Container</option><option>BLS Bag</option><option>ALS Bag</option><option>Other</option></select>
+      <div style="margin-top: 10px;">
+          <label>Expiry Month</label>
+          <div id="addExpiryChips" class="chipbar"></div>
+          <div id="customExpiryWrap" style="display:none; margin-top: 8px;">
+              <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                  <label>Month <input id="customMonth" type="month"></label>
+                  <label>Exact date <input id="customDate" type="date"></label>
+                  <button id="applyCustomExp" class="btn">Apply</button>
+              </div>
+          </div>
+      </div>
       <label>Quantity</label>
       <input id="addQty" type="number" min="1" step="1" value="1"/>
       <button id="saveNewItemBtn" class="btn" style="width:100%;margin-top:12px;">Save Item</button>
     </div>
 </div>
 
+<div id="noteModal">
+  <div class="box">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <strong>Edit note</strong>
+    </div>
+    <textarea id="noteText" rows="3" maxlength="40" placeholder="Short note..."></textarea>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
+      <button id="noteCancel" class="btn">Cancel</button>
+      <button id="noteSave" class="btn">Save</button>
+    </div>
+  </div>
+</div>
+
 <script type="module">
-    // --- Start of Combined Script ---
-
-    // 1. IMPORT FIREBASE MODULES
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-    import {
-        getFirestore, collection, getDocs, addDoc, updateDoc, doc, query, where, orderBy, serverTimestamp
-    } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+    import { getFirestore, collection, getDocs, addDoc, updateDoc, doc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
-    // 2. INITIALIZE FIREBASE
     const firebaseConfig = {
         apiKey: "AIzaSyD7pMc-AHXb1cApzSfImkWvIjM9iwCoym4",
         authDomain: "supplies-ems.firebaseapp.com",
@@ -108,37 +118,27 @@
 
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
-
-    // 3. YOUR APPLICATION LOGIC
-
-    // ===== STATE =====
+    
     let allInventory = [], units = [], catalog = [];
     let itemSelectChoices;
+    let selectedExp = '';
 
     const $ = s => document.querySelector(s);
     const escapeHtml = s => (s??'').toString().replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;' }[m]));
 
-    // ===== DATA FETCHING =====
     async function loadAll() {
         $('#refreshBtn').disabled = true;
-        $('#content').innerHTML = '<p class="muted">Loading expiring items...</p>';
-
         try {
-            // Fetch all data in parallel
-            const [invSnapshot, unitsSnapshot, catalogSnapshot] = await Promise.all([
-                // ✅ CORRECTED: "Inventory" changed to "inventory" (lowercase "i")
+            const [invSnap, unitsSnap, catalogSnap] = await Promise.all([
                 getDocs(collection(db, "inventory")),
                 getDocs(collection(db, "units")),
                 getDocs(collection(db, "catalog"))
             ]);
-
-            allInventory = invSnapshot.docs.map(d => ({ inventoryId: d.id, ...d.data() }));
-            units = unitsSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-            catalog = catalogSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-            
+            allInventory = invSnap.docs.map(d => ({ inventoryId: d.id, ...d.data() }));
+            units = unitsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+            catalog = catalogSnap.docs.map(d => ({ id: d.id, ...d.data() }));
             fillUnitSelect();
             render();
-
         } catch (e) {
             console.error("Error loading data: ", e);
             $('#content').innerHTML = `<p style="color:red;">Error loading data from Firestore.</p>`;
@@ -147,14 +147,12 @@
         }
     }
 
-    // ===== RENDERING LOGIC =====
     function fillUnitSelect() {
-        const unitSel = $('#unitSel');
-        const unitOptions = units.map(u => `<option value="${u.id}">${u.name}</option>`).join('');
-        unitSel.innerHTML = `<option value="ALL">ALL</option>${unitOptions}`;
+        $('#unitSel').innerHTML = `<option value="ALL">ALL</option>` + units.map(u => `<option value="${u.id}">${u.name}</option>`).join('');
     }
 
-    function rowClass(days) {
+    function rowClass(days, status) {
+        if ((status||'').toLowerCase() === 'pending') return 'warn';
         if (days === null || days === undefined) return '';
         if (days < 0) return 'bad';
         if (days <= 30) return 'bad';
@@ -169,139 +167,143 @@
         
         const catalogMap = new Map(catalog.map(item => [item.id, item]));
 
-        let filteredInventory = allInventory.filter(item => {
+        let filtered = allInventory.filter(item => {
             const status = (item.status || '').toLowerCase();
             if (status === 'ok' || status === 'replaced') return false;
-
             if (!item.expiryDate) return false;
             
-            // Handle both Firestore Timestamp objects and ISO date strings
             const expiry = new Date(item.expiryDate.seconds ? item.expiryDate.seconds * 1000 : item.expiryDate);
-            if (isNaN(expiry)) return false; // Invalid date format
+            if (isNaN(expiry)) return false;
 
-            const today = new Date();
-            today.setHours(0, 0, 0, 0); // Normalize today to the start of the day
-            const daysUntilExpiry = Math.ceil((expiry - today) / (1000 * 60 * 60 * 24));
+            const today = new Date(); today.setHours(0, 0, 0, 0);
+            item.daysToExpire = Math.ceil((expiry - today) / (1000 * 60 * 60 * 24));
             
-            item.daysToExpire = daysUntilExpiry;
-            if (daysUntilExpiry > withinDays) return false;
-
+            if (item.daysToExpire > withinDays) return false;
             if (unitFilter !== 'ALL' && item.unitId !== unitFilter) return false;
 
             const catalogItem = catalogMap.get(item.catalogId);
-            const itemName = (catalogItem ? catalogItem.name : 'Unknown Item').toLowerCase();
+            const itemName = (catalogItem ? catalogItem.name : 'Unknown').toLowerCase();
             const compartment = (item.compartment || '').toLowerCase();
             if (searchQuery && !itemName.includes(searchQuery) && !compartment.includes(searchQuery)) return false;
 
             return true;
         });
 
-        filteredInventory.sort((a, b) => (a.daysToExpire || 9999) - (b.daysToExpire || 9999));
-
-        $('#count').textContent = `${filteredInventory.length} item(s)`;
+        filtered.sort((a, b) => (a.daysToExpire || 9999) - (b.daysToExpire || 9999));
+        $('#count').textContent = `${filtered.length} item(s)`;
 
         const tableHTML = `
             <table>
-                <thead>
-                    <tr>
-                        <th>Item</th>
-                        <th>Unit</th>
-                        <th>Compartment</th>
-                        <th>Qty</th>
-                        <th>Expiry</th>
-                        <th class="right">Days Left</th>
-                        <th>Status</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
+                <thead><tr><th>Item</th><th>Unit</th><th>Compartment</th><th>Qty</th><th>Expiry</th><th class="right">Days Left</th><th>Actions</th></tr></thead>
                 <tbody>
-                    ${filteredInventory.map(item => {
+                    ${filtered.map(item => {
                         const catalogItem = catalogMap.get(item.catalogId);
+                        const itemName = catalogItem ? catalogItem.name : `Unknown (ID: ${item.catalogId})`;
                         const unit = units.find(u => u.id === item.unitId);
-                        const expiryDate = item.expiryDate.seconds ? new Date(item.expiryDate.seconds * 1000).toLocaleDateString() : new Date(item.expiryDate).toLocaleDateString();
+                        const expiryDate = new Date(item.expiryDate.seconds ? item.expiryDate.seconds * 1000 : item.expiryDate).toLocaleDateString();
 
                         return `
-                            <tr class="${rowClass(item.daysToExpire)}" data-id="${item.inventoryId}">
-                                <td><strong>${escapeHtml(catalogItem ? catalogItem.name : 'Unknown')}</strong></td>
+                            <tr class="${rowClass(item.daysToExpire, item.status)}" data-id="${item.inventoryId}">
+                                <td><strong>${escapeHtml(itemName)}</strong></td>
                                 <td>${escapeHtml(unit ? unit.name : item.unitId)}</td>
                                 <td>${escapeHtml(item.compartment)}</td>
                                 <td>${escapeHtml(item.qty)}</td>
                                 <td>${expiryDate}</td>
                                 <td class="right">${item.daysToExpire}</td>
-                                <td>${escapeHtml(item.status)}</td>
                                 <td>
-                                    <button class="btn ok-btn" data-id="${item.inventoryId}">OK</button>
-                                    <button class="btn replaced-btn" data-id="${item.inventoryId}">Replaced</button>
+                                    <div class="actions">
+                                        <button class="btn note-trigger" title="Click to edit note">${escapeHtml(item.crewStatus || 'note…')}</button>
+                                        <button class="btn pending ${item.status==='Pending'?'is-active':''}">Pending</button>
+                                        <button class="btn green ok-btn">OK</button>
+                                        <button class="btn red replaced-btn">Replaced</button>
+                                    </div>
                                 </td>
-                            </tr>
-                        `;
+                            </tr>`;
                     }).join('')}
                 </tbody>
-            </table>
-        `;
+            </table>`;
         
-        $('#content').innerHTML = filteredInventory.length > 0 ? tableHTML : '<p class="muted">No expiring items match your criteria.</p>';
+        $('#content').innerHTML = filtered.length > 0 ? tableHTML : '<p class="muted">No expiring items match your criteria.</p>';
         attachActionListeners();
     }
 
     function attachActionListeners() {
-        document.querySelectorAll('.ok-btn, .replaced-btn').forEach(button => {
-            button.addEventListener('click', async (e) => {
-                const id = e.target.dataset.id;
-                const newStatus = e.target.classList.contains('ok-btn') ? 'OK' : 'Replaced';
-                
-                e.target.disabled = true;
-                e.target.textContent = 'Updating...';
+        document.querySelectorAll('#content tr[data-id]').forEach(tr => {
+            const id = tr.dataset.id;
+            const item = allInventory.find(i => i.inventoryId === id);
 
+            const updateStatus = async (newStatus) => {
+                const button = tr.querySelector(`.${newStatus.toLowerCase()}-btn, .${newStatus.toLowerCase()}`);
+                if (button) button.disabled = true;
+                
                 try {
-                    const itemRef = doc(db, "inventory", id); // Also corrected here
-                    await updateDoc(itemRef, {
-                        status: newStatus,
-                        updatedAt: serverTimestamp(),
-                        updatedBy: "WebApp (Expiring Page)"
-                    });
-                    const row = e.target.closest('tr');
-                    row.style.opacity = '0';
-                    setTimeout(() => row.remove(), 300);
+                    const itemRef = doc(db, "inventory", id);
+                    await updateDoc(itemRef, { status: newStatus, updatedAt: serverTimestamp() });
+                    if (newStatus === 'OK' || newStatus === 'Replaced') {
+                        tr.remove();
+                    } else if (newStatus === 'Pending') {
+                        tr.querySelector('.pending').classList.add('is-active');
+                    }
                 } catch (err) {
-                    console.error("Error updating status:", err);
-                    alert("Failed to update status.");
-                    e.target.disabled = false;
-                    e.target.textContent = newStatus === 'OK' ? 'OK' : 'Replaced';
+                    console.error("Update failed:", err);
+                    alert("Update failed");
+                    if (button) button.disabled = false;
                 }
+            };
+            
+            tr.querySelector('.note-trigger')?.addEventListener('click', () => {
+                 openNoteEditor(id, item.crewStatus || '', async (newNote) => {
+                    await updateDoc(doc(db, "inventory", id), { crewStatus: newNote, updatedAt: serverTimestamp() });
+                    item.crewStatus = newNote; // Update local state
+                    tr.querySelector('.note-trigger').textContent = newNote || 'note…';
+                });
             });
+            tr.querySelector('.pending')?.addEventListener('click', () => updateStatus('Pending'));
+            tr.querySelector('.ok-btn')?.addEventListener('click', () => updateStatus('OK'));
+            tr.querySelector('.replaced-btn')?.addEventListener('click', () => updateStatus('Replaced'));
         });
     }
 
-    // ===== ADD ITEM MODAL LOGIC =====
+    function openNoteEditor(id, initialText, onSave) {
+        const modal = $('#noteModal'), ta = $('#noteText');
+        ta.value = initialText;
+        modal.style.display = 'block';
+        ta.focus();
+        const close = () => modal.style.display = 'none';
+        $('#noteCancel').onclick = close;
+        modal.onclick = e => { if (e.target===modal) close(); };
+        $('#noteSave').onclick = async () => {
+            await onSave(ta.value.trim());
+            close();
+        };
+    }
+
     function setupAddItemModal() {
         const modal = $('#addItemModal');
-        const showBtn = $('#showAddItemModal');
-        const closeBtn = modal.querySelector('.close-btn');
-
-        showBtn.addEventListener('click', () => {
+        $('#showAddItemModal').addEventListener('click', () => {
             populateAddItemDropdowns();
+            buildExpiryChips();
             modal.style.display = 'block';
         });
-
-        closeBtn.addEventListener('click', () => modal.style.display = 'none');
+        modal.querySelector('.close-btn').addEventListener('click', () => modal.style.display = 'none');
         window.addEventListener('click', e => { if (e.target === modal) modal.style.display = 'none'; });
 
         $('#saveNewItemBtn').addEventListener('click', async () => {
             const payload = {
-                catalogId: $('#addItemSelect').value,
+                catalogId: itemSelectChoices.getValue(true),
                 unitId: $('#addUnitSelect').value,
-                compartment: $('#addCompartment').value.trim(),
-                expiryDate: new Date($('#addExpiryDate').value),
+                compartment: $('#addCompartmentSelect').value.trim(),
+                expiryDate: new Date(selectedExp),
                 qty: parseInt($('#addQty').value, 10) || 1,
                 status: "Pending",
+                crewStatus: "",
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp(),
                 updatedBy: "WebApp (Expiring Page)"
             };
 
-            if (!payload.catalogId || !payload.unitId || !$('#addExpiryDate').value) {
-                alert("Please fill out all required fields.");
+            if (!payload.catalogId || !payload.unitId || !selectedExp) {
+                alert("Please select an item, unit, and expiry date.");
                 return;
             }
 
@@ -309,12 +311,11 @@
             $('#saveNewItemBtn').textContent = 'Saving...';
             
             try {
-                await addDoc(collection(db, "inventory"), payload); // And here
+                await addDoc(collection(db, "inventory"), payload);
                 modal.style.display = 'none';
                 await loadAll();
             } catch (e) {
                 console.error("Error adding document: ", e);
-                alert("Failed to save the new item.");
             } finally {
                 $('#saveNewItemBtn').disabled = false;
                 $('#saveNewItemBtn').textContent = 'Save Item';
@@ -323,35 +324,65 @@
     }
 
     function populateAddItemDropdowns() {
-        const unitSelect = $('#addUnitSelect');
-        unitSelect.innerHTML = units.map(u => `<option value="${u.id}">${u.name}</option>`).join('');
-
+        $('#addUnitSelect').innerHTML = units.map(u => `<option value="${u.id}">${u.name}</option>`).join('');
         const catalogOptions = catalog.map(c => ({ value: c.id, label: c.name }));
-
         if (itemSelectChoices) {
             itemSelectChoices.clearStore();
             itemSelectChoices.setChoices(catalogOptions, 'value', 'label', true);
         } else {
-            itemSelectChoices = new Choices('#addItemSelect', {
-                searchEnabled: true,
-                placeholderValue: 'Select an item...',
-                choices: catalogOptions
-            });
+            itemSelectChoices = new Choices('#addItemSelect', { searchEnabled: true, placeholderValue: 'Select an item...', choices: catalogOptions });
         }
     }
 
-    // ===== INITIALIZATION =====
+    function buildExpiryChips(){
+        const chipBar = $('#addExpiryChips');
+        const now = new Date();
+        const chips = [];
+        for (let i=0; i<3; i++) {
+            const d = new Date(now.getFullYear(), now.getMonth()+i, 1);
+            chips.push({
+                label: d.toLocaleString('default', {month:'short', year:'2-digit'}),
+                iso: new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split('T')[0]
+            });
+        }
+        chipBar.innerHTML = chips.map(c=>`<button class="btn exp-chip" data-exp="${c.iso}">${c.label}</button>`).join('') +
+                            `<button class="btn exp-chip custom" data-exp="">Custom…</button>`;
+        
+        chipBar.querySelectorAll('.exp-chip').forEach(b => b.addEventListener('click', (e) => {
+            e.preventDefault();
+            chipBar.querySelectorAll('.exp-chip').forEach(x => x.style.borderColor = '');
+            b.style.borderColor = 'blue';
+            selectedExp = b.dataset.exp;
+            $('#customExpiryWrap').style.display = b.classList.contains('custom') ? 'block' : 'none';
+        }));
+
+        $('#applyCustomExp').onclick = (e) => {
+            e.preventDefault();
+            const dateVal = $('#customDate').value;
+            const monthVal = $('#customMonth').value;
+            if (dateVal) {
+                selectedExp = dateVal;
+            } else if (monthVal) {
+                const [y, m] = monthVal.split('-');
+                selectedExp = new Date(y, m, 0).toISOString().split('T')[0];
+            } else { return; }
+            $('#customExpiryWrap').style.display = 'none';
+        };
+    }
+
     function init() {
         loadAll();
         setupAddItemModal();
-
-        $('#rangeSel').addEventListener('change', render);
-        $('#unitSel').addEventListener('change', render);
+        $('#rangeSel, #unitSel').forEach(el => el.addEventListener('change', render));
         $('#searchBox').addEventListener('input', render);
         $('#refreshBtn').addEventListener('click', loadAll);
     }
-
-    // Start the application
+    
+    // Polyfill for forEach on NodeList for older browsers if needed
+    if (window.NodeList && !NodeList.prototype.forEach) {
+        NodeList.prototype.forEach = Array.prototype.forEach;
+    }
+    
     init();
 </script>
 </body>
