@@ -156,19 +156,21 @@
     // --- RENDER FUNCTIONS ---
     function renderCatalog() {
         $('kvCatalog').textContent = `(${state.catalog.length})`;
+        // Corrected to use 'itemName' and 'itemNameAlt'
         const rows = state.catalog.map(i => `
             <tr>
-                <td>${i.name || ''}</td>
-                <td>${(i.altNames || []).join(', ')}</td>
+                <td>${i.itemName || ''}</td>
+                <td>${i.itemNameAlt || ''}</td>
                 <td>${i.category || ''}</td>
                 <td><button class="btn" data-edit-id="${i.id}">Edit</button></td>
             </tr>`).join('');
-        $('catalogTable').innerHTML = `<table><thead><tr><th>Name</th><th>Alt Names</th><th>Category</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table>`;
+        $('catalogTable').innerHTML = `<table><thead><tr><th>Name</th><th>Alt Name</th><th>Category</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table>`;
     }
 
     function renderPricing() {
         $('kvPricing').textContent = `(${state.pricingAll.length})`;
-        const catalogMap = new Map(state.catalog.map(c => [c.id, c.name]));
+        // Corrected to use 'itemName' from catalog and 'name' from vendors
+        const catalogMap = new Map(state.catalog.map(c => [c.id, c.itemName]));
         const vendorMap = new Map(state.vendors.map(v => [v.id, v.name]));
 
         const rows = state.pricingAll.map(p => `
@@ -181,7 +183,8 @@
             </tr>`).join('');
         $('pricingTable').innerHTML = `<table><thead><tr><th>Item</th><th>Vendor</th><th>SKU</th><th>Price</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table>`;
         
-        $('vpItem').innerHTML = state.catalog.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+        // Corrected to populate dropdowns with 'itemName'
+        $('vpItem').innerHTML = state.catalog.map(c => `<option value="${c.id}">${c.itemName}</option>`).join('');
         $('vpVendor').innerHTML = state.vendors.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
     }
 
