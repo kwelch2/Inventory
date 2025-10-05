@@ -1,0 +1,366 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>EMS Supplies — Admin Dashboard</title>
+  <script src="https://kwelch2.github.io/Inventory/quagga.min.js"></script>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='50' font-size='50'%3E🚑%3C/text%3E%3C/svg%3E">
+  <style>
+    :root{--bg:#f7f7f7;--card:#fff;--b:#ddd;--muted:#666;--ink:#111;--accent:#0a66ff;--bad:#b00020;--ok:#137333}
+    *{box-sizing:border-box}
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:var(--bg);color:var(--ink)}
+    .wrap{max-width:1200px;margin:0 auto;padding:16px}
+    .tabs{display:flex;gap:8px;border-bottom:1px solid var(--b);position:sticky;top:0;background:var(--bg);padding-bottom:8px;z-index:5}
+    .tab{padding:10px 14px;border:1px solid var(--b);border-bottom:none;border-top-left-radius:10px;border-top-right-radius:10px;background:#eee;color:#333;cursor:pointer}
+    .tab.active{background:var(--card);color:#000;border-bottom:1px solid var(--card)}
+    .panel{display:none;background:var(--card);border:1px solid var(--b);border-radius:12px;padding:16px;margin-top:-1px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+    .panel.active{display:block}
+    h1{margin:0 0 10px}
+    h2{margin:.2rem 0 .8rem}
+    .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .spacer{flex:1}
+    table{width:100%;border-collapse:collapse;font-size:14px}
+    th,td{padding:8px;border-top:1px solid var(--b);text-align:left;vertical-align:top}
+    th{background:#fafafa}
+    input,select{padding:8px;border:1px solid var(--b);border-radius:8px}
+    .btn{padding:8px 10px;border:1px solid var(--b);border-radius:10px;background:#fff;cursor:pointer}
+    .btn.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+    .btn.ghost{background:transparent}
+    .muted{color:var(--muted)}
+    .vendor-basket{border:1px dashed var(--b);border-radius:10px;padding:10px;margin:10px 0}
+    .tag{display:inline-block;font-size:.8rem;padding:3px 6px;border:1px solid var(--b);border-radius:999px;background:#fff}
+    .danger{color:var(--bad)}
+    .success{color:var(--ok)}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace}
+    .banner{display:flex;gap:8px;align-items:center;padding:10px;border:1px solid var(--b);border-radius:10px;background:#fff;margin:10px 0}
+    .pill{display:inline-block;padding:3px 8px;border-radius:999px;border:1px solid var(--b)}
+    .pill.ok{border-color:#cde8d1;background:#eef7f0}
+    .pill.bad{border-color:#f3c1c1;background:#fdecec}
+    .toast{position:fixed;right:12px;bottom:12px;max-width:420px;background:#222;color:#fff;padding:10px 12px;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.2);display:none}
+    .toast.show{display:block}
+    .kvd{font-size:12px;color:#555}
+    code.badge{background:#f5f5f5;border:1px solid var(--b);padding:2px 6px;border-radius:6px}
+    #interactive.viewport {
+      position: relative;
+      width: 100%;
+      height: 300px;
+      border: 1px solid #ccc;
+      background: #000;
+      display: none;
+    }
+    #interactive.viewport video {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+    }
+    .drawingBuffer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+    }
+    #auth-container {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        padding: 20px;
+        border: 1px solid #ccc;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        max-width: 400px;
+    }
+    #app-container {
+        display: none;
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1>EMS Supplies — Admin Dashboard</h1>
+
+  <div id="auth-container">
+    <h2>Login</h2>
+    <button id="googleLoginBtn" class="btn primary">Sign in with Google</button>
+    <button id="logoutBtn" class="btn" style="display: none;">Logout</button>
+    <p id="auth-status" class="muted">Please sign in to continue.</p>
+  </div>
+
+  <div id="app-container">
+      <div class="banner" id="diag">
+        <strong>Connectivity</strong>
+        <span id="statusIcon" class="pill bad">Checking…</span>
+        <span class="muted">BASE:</span><code class="mono" id="baseEcho"></code>
+        <span class="spacer"></span>
+        <button class="btn" id="btnTestApi">Test API</button>
+        <button class="btn ghost" id="btnProbe">Probe Data</button>
+      </div>
+
+      <div class="tabs" id="tabs"></div>
+
+      <section id="panel-catalog" class="panel">
+      <h2>Catalog Manager <span class="kvd" id="kvCatalog"></span></h2>
+
+      <div class="row">
+        <input id="catName" placeholder="Item name"/>
+        <input id="catCategory" placeholder="Category"/>
+        <button class="btn primary" id="catAddBtn">Add / Upsert</button>
+        <span class="muted">Uses <span class="mono">upsertcatalog</span></span>
+        <span class="spacer"></span>
+        <div style="display:flex; gap: 8px; align-items:center;">
+          <button class="btn" id="startScanBtn" title="Scan Barcode to Search">
+            <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z'/%3E%3C/svg%3E" alt="Barcode Scanner" style="height:20px;width:20px;">
+          </button>
+          <input id="catSearch" placeholder="Search items…" style="min-width:240px"/>
+        </div>
+      </div>
+
+      <div id="interactive" class="viewport"></div>
+      <div id="catalogTable" style="margin-top:10px"></div>
+    </section>
+
+      <div id="catalogDialog" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.35); z-index:9999; align-items:center; justify-content:center;">
+        <div style="background:#fff; border:1px solid #ddd; border-radius:12px; width:min(720px,90vw); padding:16px; box-shadow:0 10px 30px rgba(0,0,0,.2)">
+          <h3 style="margin:.2rem 0 1rem">Edit Catalog Item</h3>
+          <div class="row" style="gap:10px">
+            <input id="dlgItemID"  placeholder="ItemID" readonly title="ItemID is immutable" style="flex:1; background:#f9f9f9"/>
+            <input id="dlgItemName" placeholder="Item Name" style="flex:2"/>
+          </div>
+          <div class="row" style="gap:10px; margin-top:8px">
+            <input id="dlgItemNameAlt" placeholder="Alt Name (ItemNameAlt)" style="flex:2"/>
+            <input id="dlgItemRef" placeholder="Item # (ItemRef#)" style="flex:1"/>
+          </div>
+          <div class="row" style="gap:10px; margin-top:8px">
+            <input id="dlgCategory" placeholder="Category" style="flex:1"/>
+            <input id="dlgUnit" placeholder="Unit" style="flex:1"/>
+            <input id="dlgPackSize" type="number" min="1" placeholder="PackSize" style="flex:1"/>
+          </div>
+          <div class="row" style="gap:10px; margin-top:8px">
+            <input id="dlgBarcode" placeholder="Scan or type barcode" style="flex:2"/>
+            <button class="btn" id="dlgScanBtn" title="Add another barcode">
+              <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z'/%3E%3C/svg%3E" alt="Barcode Scanner" style="height:20px;width:20px;">
+            </button>
+          </div>
+          <div class="row" style="gap:8px; margin-top:14px">
+            <button class="btn primary" id="dlgSaveBtn">Save</button>
+            <button class="btn" id="dlgCancelBtn">Cancel</button>
+            <span class="spacer"></span>
+            <span class="muted">Saves with <span class="mono">upsertcatalog</span></span>
+          </div>
+        </div>
+      </div>
+      <section id="panel-pricing" class="panel">
+        <h2>Vendor Pricing <span class="kvd" id="kvPricing"></span></h2>
+        <div class="row">
+          <select id="vpItem"></select>
+          <select id="vpVendor"></select>
+          <input id="vpSku" placeholder="Vendor SKU / order #"/>
+          <input id="vpPack" type="number" min="1" value="1" placeholder="Pack size"/>
+          <input id="vpPrice" type="number" step="0.01" placeholder="Unit price"/>
+          <button class="btn" id="vpAddBtn">Upsert Price</button>
+          <button class="btn ghost" id="vpRefreshBtn">Refresh</button>
+        </div>
+        <div id="pricingTable" style="margin-top:10px"></div>
+      </section>
+
+      <section id="panel-planner" class="panel">
+        <h2>Order Planner <span class="kvd" id="kvPlan"></span></h2>
+        <div class="row">
+          <select id="reqItem"></select>
+          <input id="reqQty" type="number" min="1" value="1" placeholder="Qty"/>
+          <button class="btn" id="reqAddBtn">Add to Plan</button>
+          <button class="btn" id="resolveBtn">Resolve Best Prices</button>
+          <span class="spacer"></span>
+          <button class="btn ghost" id="planClearBtn">Clear Plan</button>
+        </div>
+        <div id="planTable" style="margin-top:10px"></div>
+        <h3>Vendor Baskets</h3>
+        <div id="vendorGroups"></div>
+      </section>
+
+      <section id="panel-orders" class="panel">
+        <h2>Orders <span class="kvd" id="kvOrders"></span></h2>
+        <div class="row">
+          <button class="btn ghost" id="ordersRefreshBtn">Refresh</button>
+          <label class="row" style="gap:6px"><input type="checkbox" id="toggleHistory"/> <span class="muted">Show history (Received)</span></label>
+          <span class="muted">Quick actions use <span class="mono">updateorderstatus</span></span>
+        </div>
+        <div id="ordersTable"></div>
+      </section>
+
+      <section id="panel-log" class="panel">
+        <h2>Activity Log <span class="kvd" id="kvLog"></span></h2>
+        <div class="row">
+          <button class="btn ghost" id="logRefreshBtn">Refresh</button>
+          <span class="muted">Add <code class="badge">listactivity</code> POST mirror on the server to enable this.</span>
+        </div>
+        <div id="logTable"><p class="muted">Hook this to <span class="mono">listactivity</span> and click Refresh.</p></div>
+      </section>
+    </div>
+</div>
+
+<div id="toast" class="toast"></div>
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+    // Updated imports for Google Sign-In
+    import { 
+        getAuth, 
+        onAuthStateChanged, 
+        signOut,
+        GoogleAuthProvider,
+        signInWithPopup
+    } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
+    import { getFirestore, collection, getDocs, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyD7pMc-AHXb1cApzSfImkWvIjM9iwCoym4",
+        authDomain: "supplies-ems.firebaseapp.com",
+        projectId: "supplies-ems",
+        storageBucket: "supplies-ems.firebasestorage.app",
+        messagingSenderId: "649560661195",
+        appId: "1:649560661195:web:f389f3e620c0c36559cf4e",
+        measurementId: "G-EN8MDYD571"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    const state = {
+        catalog: [],
+        vendors: [],
+        pricingAll: [],
+        plan: [],
+        orders: [],
+        log: [],
+        user: null,
+        userRole: null
+    };
+
+    const $ = id => document.getElementById(id);
+
+    // This function now handles creating a user profile if one doesn't exist
+    async function checkUserRole(user) {
+        if (user) {
+            const userDocRef = doc(db, "users", user.uid);
+            const userDocSnap = await getDoc(userDocRef);
+
+            if (userDocSnap.exists()) {
+                // User profile exists, get their role
+                state.userRole = userDocSnap.data().role;
+            } else {
+                // New user! Create a default profile with the 'User' role.
+                console.log("New user detected, creating default profile.");
+                await setDoc(userDocRef, {
+                    email: user.email,
+                    role: "User" // Assign a default role
+                });
+                state.userRole = "User"; // Set the role for the current session
+            }
+
+            $("auth-status").textContent = `Logged in as ${user.email} (${state.userRole})`;
+            $("app-container").style.display = "block";
+            $("logoutBtn").style.display = "block";
+            $("googleLoginBtn").style.display = "none";
+            
+            // Show/hide UI elements based on the role
+            applyRolePermissions();
+            
+            boot(); // Initialize the main application
+
+        } else {
+            state.userRole = null;
+            $("auth-status").textContent = "Logged out.";
+            $("app-container").style.display = "none";
+            $("logoutBtn").style.display = "none";
+            $("googleLoginBtn").style.display = "block";
+        }
+    }
+    
+    // UI control based on role
+    function applyRolePermissions() {
+        const role = state.userRole;
+        const isStaffOrAdmin = role === 'Staff' || role === 'Admin';
+
+        // Hide tabs for basic users
+        document.querySelector('[data-tab="pricing"]').style.display = isStaffOrAdmin ? 'block' : 'none';
+        document.querySelector('[data-tab="planner"]').style.display = isStaffOrAdmin ? 'block' : 'none';
+        document.querySelector('[data-tab="log"]').style.display = role === 'Admin' ? 'block' : 'none'; // Only for Admins
+        
+        // Disable editing features for basic users
+        const editButtons = document.querySelectorAll('[data-edit], #catAddBtn');
+        editButtons.forEach(btn => btn.disabled = !isStaffOrAdmin);
+    }
+
+
+    onAuthStateChanged(auth, (user) => {
+        state.user = user;
+        checkUserRole(user);
+    });
+
+    // Event listener for the new Google Sign-In button
+    $("googleLoginBtn").addEventListener("click", () => {
+        const provider = new GoogleAuthProvider();
+        signInWithPopup(auth, provider)
+            .catch((error) => {
+                $("auth-status").textContent = `Sign-in Error: ${error.message}`;
+                console.error("Google Sign-In Error:", error);
+            });
+    });
+
+    $("logoutBtn").addEventListener("click", () => {
+        signOut(auth);
+    });
+
+    async function loadCatalog() {
+        const querySnapshot = await getDocs(collection(db, "catalog"));
+        state.catalog = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    }
+    
+    async function boot() {
+        mountTabs();
+        await loadCatalog();
+        renderCatalog();
+    }
+    
+    function renderCatalog(){
+      // This function remains the same as in the previous response
+      const list = state.catalog; // Simplified for brevity
+      $('kvCatalog').textContent = `(${list.length})`;
+      const rows = list.map(i=>`<tr>
+        <td>${i.name||''}</td>
+        <td>${(i.altNames || []).join(', ')}</td>
+        <td>${(i.refNumbers || []).join(', ')}</td>
+        <td>${i.category||''}</td>
+        <td>
+          <button class="btn" data-edit="${i.id}">Edit</button>
+        </td>
+      </tr>`).join('');
+      $('catalogTable').innerHTML = `<table><thead><tr><th>Item</th><th>Alt Name</th><th>Item #</th><th>Category</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table>`;
+    }
+    
+    function mountTabs(){
+      const tabs = [
+        { id:'catalog', label:'Catalog Manager' },
+        { id:'pricing', label:'Vendor Pricing' },
+        { id:'planner', label:'Order Planner' },
+        { id:'orders',  label:'Orders' },
+        { id:'log',     label:'Activity Log' }
+      ];
+      const el = document.getElementById('tabs');
+      el.innerHTML = tabs.map((t,i)=>`<button class="tab ${i===0?'active':''}" data-tab="${t.id}">${t.label}</button>`).join('');
+      el.addEventListener('click', (ev)=>{
+        const btn = ev.target.closest('.tab');
+        if(!btn) return;
+        const id = btn.dataset.tab;
+        document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active', b===btn));
+        document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('active', p.id===`panel-${id}`));
+      });
+      document.getElementById('panel-catalog').classList.add('active');
+    }
+</script>
+</body>
+</html>

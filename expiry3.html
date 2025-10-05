@@ -1,0 +1,388 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Expiring Supplies – GC EMS</title>
+<link rel="icon" type="image/x-icon" href="https://kwelch2.github.io/Inventory/favicon.ico">
+<script src="https://kwelch2.github.io/Inventory/quagga.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css"/>
+<script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+  import {
+    getFirestore, collection, getDocs, addDoc, updateDoc, doc, query, where, orderBy, serverTimestamp
+  } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+
+  // ✅ Your Firebase project config
+  const firebaseConfig = {
+    apiKey: "AIzaSyD7pMc-AHXb1cApzSfImkWvIjM9iwCoym4",
+    authDomain: "supplies-ems.firebaseapp.com",
+    projectId: "supplies-ems",
+    storageBucket: "supplies-ems.firebasestorage.app",
+    messagingSenderId: "649560661195",
+    appId: "1:649560661195:web:f389f3e620c0c36559cf4e",
+    measurementId: "G-EN8MDYD571"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  window._db = db; // make available to other scripts
+</script>
+
+<style>
+    :root{--bg:#f7f7f7;--card:#fff;--b:#ddd;--muted:#666;--ok:#e7f7ee;--warn:#fff7e6;--bad:#fdecea}
+    *{box-sizing:border-box}
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:var(--bg)}
+    .wrap{max-width:1100px;margin:0 auto;padding:16px}
+    .card{background:var(--card);border:1px solid var(--b);border-radius:12px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+    h1{margin:0 0 6px}
+    .muted{color:var(--muted);font-size:.9rem}
+    .toolbar{display: flex;flex-wrap: wrap;gap: 10px;align-items: center;margin-top: 10px;}
+    .toolbar-actions {display: flex;gap: 10px;margin-left: auto;}
+    select,button,input{padding:8px 10px;border:1px solid var(--b);border-radius:10px;background:#fff}
+    button{cursor:pointer}
+    #showAddItemModal {background-color: #007bff;color: #fff;border-color: #007bff;font-weight: 600;}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:8px 10px;border-bottom:1px solid #eee;text-align:left;vertical-align:top}
+    th{font-weight:600;background:#fafafa}
+    .ok{background:var(--ok)} .warn{background:var(--warn)} .bad{background:var(--bad)}
+    .actions {display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    .modal{display:none;position:fixed;z-index:99;left:0;top:0;width:100%;height:100%;overflow:auto;background:rgba(0,0,0,.35)}
+    .modal-content{background:#fff;margin:10% auto;padding:16px;border:1px solid var(--b);width:min(540px,92%);border-radius:12px}
+    .close-btn{float:right;font-size:24px;cursor:pointer}
+    .table-container{overflow-x:auto;width:100%}
+</style>
+</head>
+
+<body>
+<div class="wrap">
+  <div class="card">
+    <h1>Expiring Supplies</h1>
+    <div class="muted">Now backed by Firebase Firestore – no proxy or login required.</div>
+    <div class="toolbar">
+      <label>Window
+        <select id="rangeSel">
+          <option value="30">30 days</option>
+          <option value="60">60 days</option>
+          <option value="90" selected>90 days</option>
+        </select>
+      </label>
+      <label>Unit
+        <select id="unitSel"><option value="ALL">ALL</option></select>
+      </label>
+      <div style="display:flex;gap:8px;align-items:center;flex:1;">
+        <input id="searchBox" placeholder="Search item, compartment…" style="flex:1;"/>
+      </div>
+      <div class="toolbar-actions">
+        <button class="btn" id="refreshBtn">Refresh</button>
+        <button class="btn" id="showAddItemModal">+ Add Item</button>
+      </div>
+      <span id="count" class="muted"></span>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top: 1rem;">
+    <div class="table-container">
+      <div id="content"><p class="muted">Loading expiring items...</p></div>
+    </div>
+  </div>
+</div>
+
+<div id="addItemModal" class="modal">
+    <div class="modal-content">
+      <span class="close-btn">&times;</span>
+      <h3>Add Item to Inventory</h3>
+      <label>Item</label>
+      <select id="addItemSelect"></select>
+      <label style="margin-top: 10px;">Unit</label>
+      <select id="addUnitSelect"><option value="">Select...</option></select>
+      <label>Compartment</label>
+      <input id="addCompartment" placeholder="e.g., Wall, Bag, Supply RM">
+      <label>Expiry Date</label>
+      <input id="addExpiryDate" type="date">
+      <label>Quantity</label>
+      <input id="addQty" type="number" min="1" step="1" value="1"/>
+      <button id="saveNewItemBtn" class="btn" style="width:100%;margin-top:12px;">Save Item</button>
+    </div>
+</div>
+
+<script type="module">
+import {
+    getFirestore, collection, getDocs, addDoc, updateDoc, doc, query, where, orderBy, serverTimestamp
+} from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+
+// ===== STATE =====
+let allInventory = [], units = [], catalog = [];
+let itemSelectChoices;
+
+const $ = s => document.querySelector(s);
+const escapeHtml = s => (s??'').toString().replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;' }[m]));
+
+// ===== DATA FETCHING =====
+async function loadAll() {
+    const withinDays = parseInt($('#rangeSel').value, 10);
+    const unitFilter = $('#unitSel').value;
+
+    $('#refreshBtn').disabled = true;
+
+    try {
+        // Fetch all data in parallel
+        const [invSnapshot, unitsSnapshot, catalogSnapshot] = await Promise.all([
+            getDocs(collection(db, "Inventory")),
+            getDocs(collection(db, "units")),
+            getDocs(collection(db, "catalog"))
+        ]);
+
+        allInventory = invSnapshot.docs.map(d => ({ inventoryId: d.id, ...d.data() }));
+        units = unitsSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        catalog = catalogSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        
+        // Populate the unit dropdown filter
+        fillUnitSelect();
+        
+        render();
+
+    } catch (e) {
+        console.error("Error loading data: ", e);
+        $('#content').innerHTML = `<p style="color:red;">Error loading data from Firestore.</p>`;
+    } finally {
+        $('#refreshBtn').disabled = false;
+    }
+}
+
+// ===== RENDERING LOGIC =====
+
+// Populates the main unit filter dropdown
+function fillUnitSelect() {
+    const unitSel = $('#unitSel');
+    const unitOptions = units.map(u => `<option value="${u.id}">${u.name}</option>`).join('');
+    unitSel.innerHTML = `<option value="ALL">ALL</option>${unitOptions}`;
+}
+
+// Determines row color based on days to expiry
+function rowClass(days) {
+    if (days === null || days === undefined) return '';
+    if (days < 0) return 'bad';
+    if (days <= 30) return 'bad';
+    if (days <= 90) return 'warn';
+    return 'ok';
+}
+
+function render() {
+    const withinDays = parseInt($('#rangeSel').value, 10);
+    const unitFilter = $('#unitSel').value;
+    const searchQuery = ($('#searchBox').value || '').toLowerCase();
+    
+    // Create a map for quick catalog lookups
+    const catalogMap = new Map(catalog.map(item => [item.id, item]));
+
+    // Filter the inventory
+    let filteredInventory = allInventory.filter(item => {
+        // Status filter
+        const status = (item.status || '').toLowerCase();
+        if (status === 'ok' || status === 'replaced') {
+            return false;
+        }
+
+        // Expiry date filter
+        if (!item.expiryDate) return false;
+        const expiry = new Date(item.expiryDate.seconds ? item.expiryDate.seconds * 1000 : item.expiryDate);
+        const today = new Date();
+        const daysUntilExpiry = Math.ceil((expiry - today) / (1000 * 60 * 60 * 24));
+        item.daysToExpire = daysUntilExpiry; // Add for rendering
+        if (daysUntilExpiry > withinDays) {
+            return false;
+        }
+
+        // Unit filter
+        if (unitFilter !== 'ALL' && item.unitId !== unitFilter) {
+            return false;
+        }
+
+        // Search filter
+        const catalogItem = catalogMap.get(item.catalogId);
+        const itemName = (catalogItem ? catalogItem.name : 'Unknown Item').toLowerCase();
+        const compartment = (item.compartment || '').toLowerCase();
+        if (searchQuery && !itemName.includes(searchQuery) && !compartment.includes(searchQuery)) {
+            return false;
+        }
+
+        return true;
+    });
+
+    // Sort the results
+    filteredInventory.sort((a, b) => (a.daysToExpire || 9999) - (b.daysToExpire || 9999));
+
+    // Update count display
+    $('#count').textContent = `${filteredInventory.length} item(s)`;
+
+    // Generate and render table HTML
+    const tableHTML = `
+        <table>
+            <thead>
+                <tr>
+                    <th>Item</th>
+                    <th>Unit</th>
+                    <th>Compartment</th>
+                    <th>Qty</th>
+                    <th>Expiry</th>
+                    <th class="right">Days Left</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${filteredInventory.map(item => {
+                    const catalogItem = catalogMap.get(item.catalogId);
+                    const unit = units.find(u => u.id === item.unitId);
+                    const expiryDate = item.expiryDate.seconds ? new Date(item.expiryDate.seconds * 1000).toLocaleDateString() : new Date(item.expiryDate).toLocaleDateString();
+
+                    return `
+                        <tr class="${rowClass(item.daysToExpire)}" data-id="${item.inventoryId}">
+                            <td><strong>${escapeHtml(catalogItem ? catalogItem.name : 'Unknown')}</strong></td>
+                            <td>${escapeHtml(unit ? unit.name : item.unitId)}</td>
+                            <td>${escapeHtml(item.compartment)}</td>
+                            <td>${escapeHtml(item.qty)}</td>
+                            <td>${expiryDate}</td>
+                            <td class="right">${item.daysToExpire}</td>
+                            <td>${escapeHtml(item.status)}</td>
+                            <td>
+                                <button class="btn ok-btn" data-id="${item.inventoryId}">OK</button>
+                                <button class="btn replaced-btn" data-id="${item.inventoryId}">Replaced</button>
+                            </td>
+                        </tr>
+                    `;
+                }).join('')}
+            </tbody>
+        </table>
+    `;
+    
+    $('#content').innerHTML = filteredInventory.length > 0 ? tableHTML : '<p class="muted">No expiring items match your criteria.</p>';
+
+    // Re-attach event listeners for the new buttons
+    attachActionListeners();
+}
+
+function attachActionListeners() {
+    document.querySelectorAll('.ok-btn, .replaced-btn').forEach(button => {
+        button.addEventListener('click', async (e) => {
+            const id = e.target.dataset.id;
+            const newStatus = e.target.classList.contains('ok-btn') ? 'OK' : 'Replaced';
+            
+            e.target.disabled = true;
+            e.target.textContent = 'Updating...';
+
+            try {
+                const itemRef = doc(db, "Inventory", id);
+                await updateDoc(itemRef, {
+                    status: newStatus,
+                    updatedAt: serverTimestamp(),
+                    updatedBy: "WebApp (Expiring Page)"
+                });
+                // Find and remove the row from the UI
+                const row = e.target.closest('tr');
+                row.style.opacity = '0';
+                setTimeout(() => row.remove(), 300);
+            } catch (err) {
+                console.error("Error updating status:", err);
+                alert("Failed to update status.");
+                e.target.disabled = false;
+                e.target.textContent = newStatus === 'OK' ? 'OK' : 'Replaced';
+            }
+        });
+    });
+}
+
+
+// ===== ADD ITEM MODAL LOGIC =====
+
+function setupAddItemModal() {
+    const modal = $('#addItemModal');
+    const showBtn = $('#showAddItemModal');
+    const closeBtn = modal.querySelector('.close-btn');
+
+    showBtn.addEventListener('click', () => {
+        // Populate dropdowns every time the modal is opened to ensure fresh data
+        populateAddItemDropdowns();
+        modal.style.display = 'block';
+    });
+
+    closeBtn.addEventListener('click', () => modal.style.display = 'none');
+    window.addEventListener('click', e => { if (e.target === modal) modal.style.display = 'none'; });
+
+    $('#saveNewItemBtn').addEventListener('click', async () => {
+        const payload = {
+            catalogId: $('#addItemSelect').value,
+            unitId: $('#addUnitSelect').value,
+            compartment: $('#addCompartment').value.trim(),
+            expiryDate: new Date($('#addExpiryDate').value),
+            qty: parseInt($('#addQty').value, 10) || 1,
+            status: "Pending", // Default status for new items
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+            updatedBy: "WebApp (Expiring Page)"
+        };
+
+        if (!payload.catalogId || !payload.unitId || !$('#addExpiryDate').value) {
+            alert("Please fill out all required fields.");
+            return;
+        }
+
+        $('#saveNewItemBtn').disabled = true;
+        $('#saveNewItemBtn').textContent = 'Saving...';
+        
+        try {
+            await addDoc(collection(db, "Inventory"), payload);
+            modal.style.display = 'none';
+            await loadAll(); // Refresh the list
+        } catch (e) {
+            console.error("Error adding document: ", e);
+            alert("Failed to save the new item.");
+        } finally {
+            $('#saveNewItemBtn').disabled = false;
+            $('#saveNewItemBtn').textContent = 'Save Item';
+        }
+    });
+}
+
+function populateAddItemDropdowns() {
+    // Populate Units
+    const unitSelect = $('#addUnitSelect');
+    unitSelect.innerHTML = units.map(u => `<option value="${u.id}">${u.name}</option>`).join('');
+
+    // Populate Catalog items using Choices.js
+    const catalogOptions = catalog.map(c => ({ value: c.id, label: c.name }));
+
+    if (itemSelectChoices) {
+        itemSelectChoices.clearStore();
+        itemSelectChoices.setChoices(catalogOptions, 'value', 'label', true);
+    } else {
+        itemSelectChoices = new Choices('#addItemSelect', {
+            searchEnabled: true,
+            placeholderValue: 'Select an item...',
+            choices: catalogOptions
+        });
+    }
+}
+
+
+// ===== INITIALIZATION =====
+function init() {
+    loadAll();
+    setupAddItemModal();
+
+    // Attach event listeners for filters
+    $('#rangeSel').addEventListener('change', render);
+    $('#unitSel').addEventListener('change', render);
+    $('#searchBox').addEventListener('input', render);
+    $('#refreshBtn').addEventListener('click', loadAll);
+}
+
+// Start the application
+init();
+
+</script>
+</body>
+</html>
