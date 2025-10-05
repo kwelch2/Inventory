@@ -8,10 +8,10 @@
     :root{--bg:#f7f7f7;--card:#fff;--b:#ddd;--muted:#666;--ink:#111;--accent:#0a66ff;--bad:#b00020;--ok:#137333}
     *{box-sizing:border-box}
     body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:var(--bg);color:var(--ink)}
-    .wrap{max-width:1200px;margin:0 auto;padding:16px}
+    .wrap{max-width:1400px;margin:0 auto;padding:16px}
     #login-container { max-width: 400px; margin: 2rem auto; }
     #app-container { display: none; }
-    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap;}
     .auth-info { display: flex; align-items: center; gap: 1rem; }
     .tabs{display:flex;gap:8px;border-bottom:1px solid var(--b);position:sticky;top:0;background:var(--bg);padding:8px 0;z-index:5}
     .tab{padding:10px 14px;border:1px solid var(--b);border-bottom:none;border-top-left-radius:10px;border-top-right-radius:10px;background:#eee;color:#333;cursor:pointer}
@@ -20,13 +20,19 @@
     .panel.active{display:block}
     h1,h2{margin:0 0 10px}
     .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap; margin-bottom: 1rem;}
-    .btn{padding:8px 10px;border:1px solid var(--b);border-radius:10px;background:#fff;cursor:pointer}
+    .btn{padding:8px 10px;border:1px solid var(--b);border-radius:10px;background:#fff;cursor:pointer; font-size: 0.9rem;}
     .btn.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+    .btn.danger{background:var(--bad); color: white; border-color: var(--bad);}
     table{width:100%;border-collapse:collapse;font-size:14px}
     th,td{padding:8px;border-top:1px solid var(--b);text-align:left;vertical-align:top}
     th{background:#fafafa}
     input,select{padding:8px;border:1px solid var(--b);border-radius:8px; font-size: 1rem;}
     .kvd{font-size:12px;color:#555}
+    .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.4); }
+    .modal-content { background-color: #fefefe; margin: 10% auto; padding: 20px; border: 1px solid #888; width: 80%; max-width: 600px; border-radius: 12px; }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+    .modal-body { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .modal-footer { margin-top: 1.5rem; text-align: right; }
   </style>
 </head>
 <body>
@@ -49,44 +55,55 @@
         </div>
     </div>
     <div class="tabs" id="tabs"></div>
-      <section id="panel-catalog" class="panel">
-        <h2>Catalog Manager <span class="kvd" id="kvCatalog"></span></h2>
-        <div class="row">
-          <input id="catName" placeholder="Item name"/>
-          <input id="catAltName" placeholder="Alternate names (comma-separated)"/>
-          <input id="catCategory" placeholder="Category"/>
-          <button class="btn primary" id="catAddBtn">Add Item</button>
-        </div>
-        <div id="catalogTable" style="margin-top:10px"></div>
-      </section>
 
-      <section id="panel-pricing" class="panel">
-        <h2>Vendor Pricing <span class="kvd" id="kvPricing"></span></h2>
-        <div class="row">
-          <select id="vpItem"></select>
-          <select id="vpVendor"></select>
-          <input id="vpSku" placeholder="Vendor SKU / order #"/>
-          <input id="vpPrice" type="number" step="0.01" placeholder="Unit price"/>
-          <button class="btn primary" id="vpAddBtn">Add/Update Price</button>
-        </div>
-        <div id="pricingTable" style="margin-top:10px"></div>
+      <section id="panel-requests" class="panel">
+        <h2>Pending Supply Requests <span class="kvd" id="kvRequests"></span></h2>
+        <div class="row"><button class="btn" id="refreshRequests">Refresh</button><button class="btn primary" id="batchOrderBtn">Create Order from Selected</button></div>
+        <div id="requestsTable"></div>
       </section>
 
       <section id="panel-orders" class="panel">
         <h2>Orders <span class="kvd" id="kvOrders"></span></h2>
-        <div class="row">
-          <label><input type="checkbox" id="toggleHistory"/> Show history (Received)</label>
-        </div>
+        <div class="row"><button class="btn" id="refreshOrders">Refresh</button><label><input type="checkbox" id="toggleHistory"/> Show history (Received)</label></div>
         <div id="ordersTable"></div>
       </section>
+
+      <section id="panel-catalog" class="panel">
+        <h2>Catalog Manager <span class="kvd" id="kvCatalog"></span></h2>
+        <div class="row"><button class="btn" id="refreshCatalog">Refresh</button><button class="btn primary" id="showCatalogModal">Add New Item</button><span style="flex: 1;"></span><input id="catSearch" placeholder="Search..."/></div>
+        <div id="catalogTable"></div>
+      </section>
+      
+      <section id="panel-pricing" class="panel">
+        <h2>Vendor Pricing <span class="kvd" id="kvPricing"></span></h2>
+        <div class="row"><button class="btn" id="refreshPricing">Refresh</button><button class="btn primary" id="showPricingModal">Add New Price</button></div>
+        <div id="pricingTable"></div>
+      </section>
+  </div>
+</div>
+
+<div id="catalogModal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header"><h2>Edit Catalog Item</h2></div>
+    <div class="modal-body">
+      <label>Item Name <input id="editItemName"></label>
+      <label>Alt Names (comma-sep) <input id="editItemNameAlt"></label>
+      <label>Category <input id="editCategory"></label>
+      <label>Item Ref # <input id="editItemRef"></label>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" id="cancelCatalogEdit">Cancel</button>
+      <button class="btn primary" id="saveCatalogEdit">Save Changes</button>
+    </div>
   </div>
 </div>
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
     import { getAuth, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithRedirect, getRedirectResult } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
-    import { getFirestore, collection, getDocs, doc, setDoc, getDoc, addDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+    import { getFirestore, collection, getDocs, doc, setDoc, getDoc, addDoc, updateDoc, deleteDoc, writeBatch } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
+    // --- Firebase Initialization ---
     const firebaseConfig = {
         apiKey: "AIzaSyD7pMc-AHXb1cApzSfImkWvIjM9iwCoym4",
         authDomain: "supplies-ems.firebaseapp.com",
@@ -94,32 +111,28 @@
         storageBucket: "supplies-ems.firebasestorage.app",
         messagingSenderId: "649560661195",
         appId: "1:649560661195:web:f389f3e620c0c36559cf4e",
-        measurementId: "G-EN8MDYD571"
     };
-
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const db = getFirestore(app);
 
-    const state = { user: null, userRole: null, catalog: [], vendors: [], pricingAll: [], orders: [] };
+    // --- State & Helpers ---
+    let state = { user: null, userRole: null, catalog: [], vendors: [], pricingAll: [], orders: [], requests: [], catalogMap: new Map(), vendorMap: new Map() };
     const $ = id => document.getElementById(id);
     let appInitialized = false;
 
-    // --- AUTHENTICATION ---
+    // --- Authentication ---
     async function handleAuthState(user) {
         if (user) {
             try {
-                const userDocRef = doc(db, "users", user.uid);
-                const userDocSnap = await getDoc(userDocRef);
-                if (userDocSnap.exists()) {
-                    state.userRole = userDocSnap.data().role;
-                } else {
-                    await setDoc(userDocRef, { email: user.email, role: "User" });
-                    state.userRole = "User";
-                }
+                const userDocSnap = await getDoc(doc(db, "users", user.uid));
+                state.userRole = userDocSnap.exists() ? userDocSnap.data().role : "User";
+                if (!userDocSnap.exists()) await setDoc(doc(db, "users", user.uid), { email: user.email, role: "User" });
+                
                 $("auth-status-main").textContent = `${user.email} (${state.userRole})`;
                 $("app-container").style.display = "block";
                 $("login-container").style.display = "none";
+                
                 if (!appInitialized) {
                     boot();
                     appInitialized = true;
@@ -132,148 +145,195 @@
             appInitialized = false;
         }
     }
-
     onAuthStateChanged(auth, handleAuthState);
-    getRedirectResult(auth).catch((error) => console.error("Redirect Error:", error));
+    getRedirectResult(auth).catch(error => console.error("Redirect Error:", error));
     $("googleLoginBtn").addEventListener("click", () => signInWithRedirect(auth, new GoogleAuthProvider()));
     $("logoutBtn").addEventListener("click", () => signOut(auth));
 
-
-    // --- DATA LOADING & STATE MANAGEMENT ---
+    // --- Data Loading ---
     async function loadAllData() {
-        const [catalogSnap, vendorsSnap, pricingSnap, ordersSnap] = await Promise.all([
+        const [catSnap, venSnap, priceSnap, ordSnap, reqSnap] = await Promise.all([
             getDocs(collection(db, "catalog")),
             getDocs(collection(db, "vendors")),
             getDocs(collection(db, "vendorPricing")),
-            getDocs(collection(db, "Orders"))
+            getDocs(collection(db, "orders")),
+            getDocs(collection(db, "requests"))
         ]);
-        state.catalog = catalogSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-        state.vendors = vendorsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-        state.pricingAll = pricingSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-        state.orders = ordersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        state.catalog = catSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        state.vendors = venSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        state.pricingAll = priceSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        state.orders = ordSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        state.requests = reqSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        
+        state.catalogMap = new Map(state.catalog.map(c => [c.id, c.itemName]));
+        state.vendorMap = new Map(state.vendors.map(v => [v.id, v.name]));
+        renderAll();
     }
 
-    // --- RENDER FUNCTIONS ---
+    // --- Render Functions ---
+    function renderAll() {
+        renderCatalog();
+        renderPricing();
+        renderOrders();
+        renderRequests();
+    }
+
     function renderCatalog() {
-        $('kvCatalog').textContent = `(${state.catalog.length})`;
-        // Corrected to use 'itemName' and 'itemNameAlt'
-        const rows = state.catalog.map(i => `
+        const query = $('catSearch').value.toLowerCase();
+        const filtered = state.catalog.filter(i => (i.itemName || '').toLowerCase().includes(query));
+        $('kvCatalog').textContent = `(${filtered.length})`;
+        const rows = filtered.map(i => `
             <tr>
-                <td>${i.itemName || ''}</td>
-                <td>${i.itemNameAlt || ''}</td>
-                <td>${i.category || ''}</td>
+                <td>${i.itemName || ''}</td><td>${i.itemNameAlt || ''}</td><td>${i.category || ''}</td>
                 <td><button class="btn" data-edit-id="${i.id}">Edit</button></td>
             </tr>`).join('');
         $('catalogTable').innerHTML = `<table><thead><tr><th>Name</th><th>Alt Name</th><th>Category</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table>`;
     }
-
+    
     function renderPricing() {
         $('kvPricing').textContent = `(${state.pricingAll.length})`;
-        // Corrected to use 'itemName' from catalog and 'name' from vendors
-        const catalogMap = new Map(state.catalog.map(c => [c.id, c.itemName]));
-        const vendorMap = new Map(state.vendors.map(v => [v.id, v.name]));
-
         const rows = state.pricingAll.map(p => `
             <tr>
-                <td>${catalogMap.get(p.catalogId) || `Unknown (ID: ${p.catalogId})`}</td>
-                <td>${vendorMap.get(p.vendorId) || `Unknown (ID: ${p.vendorId})`}</td>
+                <td>${state.catalogMap.get(p.catalogId) || `ID: ${p.catalogId}`}</td>
+                <td>${state.vendorMap.get(p.vendorId) || `ID: ${p.vendorId}`}</td>
                 <td>${p.vendorItemNo || ''}</td>
                 <td>$${Number(p.unitPrice || 0).toFixed(2)}</td>
                 <td><button class="btn" data-edit-price-id="${p.id}">Edit</button></td>
             </tr>`).join('');
         $('pricingTable').innerHTML = `<table><thead><tr><th>Item</th><th>Vendor</th><th>SKU</th><th>Price</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table>`;
-        
-        // Corrected to populate dropdowns with 'itemName'
-        $('vpItem').innerHTML = state.catalog.map(c => `<option value="${c.id}">${c.itemName}</option>`).join('');
-        $('vpVendor').innerHTML = state.vendors.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
     }
 
     function renderOrders() {
-        const showHistory = $('toggleHistory').checked;
-        const filteredOrders = state.orders.filter(o => showHistory || o.status !== 'Received');
-        $('kvOrders').textContent = `(${filteredOrders.length})`;
-        const rows = filteredOrders.map(o => `
+        const filtered = state.orders.filter(o => $('toggleHistory').checked || o.status !== 'Received');
+        $('kvOrders').textContent = `(${filtered.length})`;
+        const rows = filtered.map(o => `
             <tr>
-                <td>${o.notes || 'N/A'}</td>
-                <td>${o.status || 'pending'}</td>
+                <td>${o.notes || 'N/A'}</td><td>${state.vendorMap.get(o.vendorId) || ''}</td><td>${o.status || 'pending'}</td>
                 <td>${o.orderDate?.seconds ? new Date(o.orderDate.seconds * 1000).toLocaleDateString() : 'N/A'}</td>
                 <td><button class="btn" data-order-id="${o.id}" data-status="Received">Mark Received</button></td>
             </tr>`).join('');
-        $('ordersTable').innerHTML = `<table><thead><tr><th>Notes/Order</th><th>Status</th><th>Date</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table>`;
-        
-        $('ordersTable').querySelectorAll('[data-order-id]').forEach(btn => {
-            btn.addEventListener('click', async () => {
-                btn.textContent = "Updating...";
-                await updateDoc(doc(db, "Orders", btn.dataset.orderId), { status: btn.dataset.status });
-                await loadAllData();
-                renderAll();
-            });
-        });
-    }
-
-    function renderAll() {
-        renderCatalog();
-        renderPricing();
-        renderOrders();
+        $('ordersTable').innerHTML = `<table><thead><tr><th>Notes</th><th>Vendor</th><th>Status</th><th>Date</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table>`;
     }
     
-    // --- EVENT LISTENERS & BOOTSTRAP ---
-    function attachEventListeners() {
-        $('catAddBtn').addEventListener('click', async () => {
-            const name = $('catName').value.trim();
-            if (!name) return alert('Item name is required.');
-            
-            await addDoc(collection(db, "catalog"), { 
-                name, 
-                category: $('catCategory').value.trim(), 
-                altNames: $('catAltName').value.split(',').map(s => s.trim()).filter(Boolean)
-            });
-            await loadAllData();
-            renderAll();
-            $('catName').value = ''; $('catAltName').value = ''; $('catCategory').value = '';
-        });
-
-        $('vpAddBtn').addEventListener('click', async () => {
-            const payload = {
-                catalogId: $('vpItem').value,
-                vendorId: $('vpVendor').value,
-                vendorItemNo: $('vpSku').value.trim(),
-                unitPrice: Number($('vpPrice').value || 0)
-            };
-            if (!payload.catalogId || !payload.vendorId) return alert('Item and Vendor are required.');
-
-            await addDoc(collection(db, "vendorPricing"), payload);
-            await loadAllData();
-            renderAll();
-        });
-        
-        $('toggleHistory').addEventListener('change', renderOrders);
+    function renderRequests() {
+        const openRequests = state.requests.filter(r => (r.status || '').toLowerCase() === 'open');
+        $('kvRequests').textContent = `(${openRequests.length})`;
+        const rows = openRequests.map(r => `
+            <tr>
+                <td><input type="checkbox" class="request-checkbox" data-request-id="${r.id}"></td>
+                <td>${state.catalogMap.get(r.catalogId) || `ID: ${r.catalogId}`}</td>
+                <td>${r.qty}</td><td>${r.reason || ''}</td><td>${r.createdBy || ''}</td>
+            </tr>`).join('');
+        $('requestsTable').innerHTML = `<table><thead><tr><th>Select</th><th>Item</th><th>Qty</th><th>Reason</th><th>Requested By</th></tr></thead><tbody>${rows}</tbody></table>`;
     }
 
+    // --- Modals & Actions ---
+    function setupCatalogModal() {
+        let currentItemId = null;
+        $('showCatalogModal').addEventListener('click', () => {
+            currentItemId = null; // Reset for new item
+            $('catalogModal').querySelector('h2').textContent = 'Add New Catalog Item';
+            $('editItemName').value = ''; $('editItemNameAlt').value = ''; 
+            $('editCategory').value = ''; $('editItemRef').value = '';
+            $('catalogModal').style.display = 'block';
+        });
+        $('catalogTable').addEventListener('click', e => {
+            const id = e.target.dataset.editId;
+            if (id) {
+                currentItemId = id;
+                const item = state.catalog.find(i => i.id === id);
+                $('catalogModal').querySelector('h2').textContent = 'Edit Catalog Item';
+                $('editItemName').value = item.itemName || '';
+                $('editItemNameAlt').value = item.itemNameAlt || '';
+                $('editCategory').value = item.category || '';
+                $('editItemRef').value = item.itemRef || '';
+                $('catalogModal').style.display = 'block';
+            }
+        });
+        $('cancelCatalogEdit').addEventListener('click', () => $('catalogModal').style.display = 'none');
+        $('saveCatalogEdit').addEventListener('click', async () => {
+            const data = {
+                itemName: $('editItemName').value,
+                itemNameAlt: $('editItemNameAlt').value,
+                category: $('editCategory').value,
+                itemRef: $('editItemRef').value,
+                updatedAt: new Date().toISOString()
+            };
+            if (currentItemId) { // Update
+                await updateDoc(doc(db, "catalog", currentItemId), data);
+            } else { // Create
+                await addDoc(collection(db, "catalog"), { ...data, isActive: true });
+            }
+            $('catalogModal').style.display = 'none';
+            loadAllData();
+        });
+    }
+
+    function setupRequestActions() {
+        $('batchOrderBtn').addEventListener('click', async () => {
+            const selectedIds = [...document.querySelectorAll('.request-checkbox:checked')].map(cb => cb.dataset.requestId);
+            if (selectedIds.length === 0) return alert('No requests selected.');
+
+            const vendorId = prompt("Enter the Vendor ID for this new order (e.g., 'henry', 'valor'):");
+            if (!vendorId || !state.vendorMap.has(vendorId)) return alert('Invalid Vendor ID.');
+
+            const notes = prompt("Enter any notes for this order:");
+
+            try {
+                // Create a new order document
+                const newOrderRef = await addDoc(collection(db, "orders"), {
+                    vendorId,
+                    notes,
+                    status: 'pending',
+                    orderDate: new Date()
+                });
+
+                // Use a batch write to update all selected requests
+                const batch = writeBatch(db);
+                selectedIds.forEach(id => {
+                    const reqRef = doc(db, "requests", id);
+                    batch.update(reqRef, { status: 'batched', batchedIntoOrderId: newOrderRef.id });
+                });
+                await batch.commit();
+                
+                alert('Order created successfully!');
+                loadAllData();
+            } catch (e) {
+                console.error("Error creating order:", e);
+                alert("Failed to create order.");
+            }
+        });
+    }
+
+    // --- Initial Bootstrapping ---
     function mountTabs() {
-      const tabs = [
-        { id:'catalog', label:'Catalog' }, { id:'pricing', label:'Pricing' },
-        { id:'orders',  label:'Orders' },
-      ];
-      const el = $('tabs');
-      el.innerHTML = tabs.map(t => `<button class="tab" data-tab="${t.id}">${t.label}</button>`).join('');
-      el.addEventListener('click', (ev) => {
-        const btn = ev.target.closest('.tab');
-        if(!btn) return;
-        document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-        $(`panel-${btn.dataset.tab}`).classList.add('active');
-      });
-      el.querySelector('[data-tab="catalog"]').classList.add('active');
-      $('panel-catalog').classList.add('active');
+        const tabs = ['Requests', 'Orders', 'Catalog', 'Pricing'];
+        $('tabs').innerHTML = tabs.map(t => `<button class="tab" data-tab="${t.toLowerCase()}">${t}</button>`).join('');
+        $('tabs').addEventListener('click', (ev) => {
+            const tabId = ev.target.dataset.tab;
+            if (!tabId) return;
+            document.querySelectorAll('.tab, .panel').forEach(el => el.classList.remove('active'));
+            ev.target.classList.add('active');
+            $(`panel-${tabId}`).classList.add('active');
+        });
+        $('tabs').querySelector('[data-tab="requests"]').click();
     }
 
     async function boot() {
         mountTabs();
-        attachEventListeners();
+        setupCatalogModal();
+        setupRequestActions();
+        
+        // Refresh buttons
+        $('refreshRequests').addEventListener('click', loadAllData);
+        $('refreshOrders').addEventListener('click', loadAllData);
+        $('refreshCatalog').addEventListener('click', loadAllData);
+        $('refreshPricing').addEventListener('click', loadAllData);
+
+        // Search
+        $('catSearch').addEventListener('input', renderCatalog);
+        
         await loadAllData();
-        renderAll();
     }
 </script>
 </body>
