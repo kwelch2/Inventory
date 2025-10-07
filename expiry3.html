@@ -38,6 +38,8 @@
     #noteModal{display:none;position:fixed;z-index:120;inset:0;background:rgba(0,0,0,.35)}
     #noteModal .box{background:#fff;margin:12% auto;max-width:420px;width:92%;border:1px solid var(--b);border-radius:12px;padding:14px}
     .chipbar{display:flex;gap:6px;flex-wrap:wrap}
+    .viewport { position: relative; }
+    .viewport video, .viewport .drawingBuffer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
 </style>
 </head>
 
@@ -49,7 +51,12 @@
     <div class="toolbar">
       <label>Window <select id="rangeSel"><option value="30">30 days</option><option value="60">60 days</option><option value="90" selected>90 days</option><option value="ALL">All</option></select></label>
       <label>Unit <select id="unitSel"><option value="ALL">ALL</option></select></label>
-      <div style="display:flex;gap:8px;align-items:center;flex:1;"><input id="searchBox" placeholder="Search item, compartment…" style="flex:1;"/></div>
+      <div style="display:flex;gap:8px;align-items:center;flex:1;">
+        <button class="btn" id="startScanBtn" title="Scan Barcode to Search">
+          <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z'/%3E%3C/svg%3E" alt="Barcode Scanner" style="height:20px;width:20px;">
+        </button>
+        <input id="searchBox" placeholder="Search item, compartment…" style="flex:1;"/>
+      </div>
       <div class="toolbar-actions"><button class="btn" id="refreshBtn">Refresh</button><button class="btn" id="showAddItemModal">+ Add Item</button></div>
       <span id="count" class="muted"></span>
     </div>
@@ -66,8 +73,14 @@
     <div class="modal-content">
       <span class="close-btn">&times;</span>
       <h3>Add Item to Inventory</h3>
+      <div id="interactive" class="viewport" style="display:none; width:100%; height:240px; border:1px solid #ccc; background:#000; margin-bottom:1rem;"></div>
       <label>Item</label>
-      <select id="addItemSelect"></select>
+      <div style="display:flex; gap:8px; align-items:center;">
+          <select id="addItemSelect"></select>
+          <button id="scanBarcodeBtn" class="btn" title="Scan Barcode to Select Item" style="flex-shrink:0;">
+              <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z'/%3E%3C/svg%3E" alt="Barcode Scanner" style="height:20px;width:20px;">
+          </button>
+      </div>
       <label style="margin-top: 10px;">Unit</label>
       <select id="addUnitSelect"><option value="">Select...</option></select>
       <label>Compartment</label>
@@ -89,6 +102,14 @@
     </div>
 </div>
 
+<div id="interactive-search-modal" class="modal">
+  <div class="modal-content" style="padding:0; background:#000; height: 360px; position:relative;">
+    <span class="close-btn" style="color:white; position:absolute; top:5px; right:15px; z-index:10;">&times;</span>
+    <div id="interactive-search-viewport" class="viewport" style="width:100%; height:100%;"></div>
+  </div>
+</div>
+
+
 <div id="noteModal">
   <div class="box">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
@@ -104,7 +125,7 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-    import { getFirestore, collection, getDocs, addDoc, updateDoc, doc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+    import { getFirestore, collection, getDocs, addDoc, updateDoc, doc, serverTimestamp, query, where } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
     const firebaseConfig = {
         apiKey: "AIzaSyD7pMc-AHXb1cApzSfImkWvIjM9iwCoym4",
@@ -122,6 +143,8 @@
     let allInventory = [], units = [], catalog = [];
     let itemSelectChoices;
     let selectedExp = '';
+    let isScannerActive = false;
+    let quaggaHandler = null;
 
     const $ = s => document.querySelector(s);
     const escapeHtml = s => (s??'').toString().replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;' }[m]));
@@ -152,16 +175,10 @@
     }
 
     function rowClass(days, status) {
-        // This function now ONLY colors based on expiry.
         if (days !== null && days !== undefined) {
-            if (days <= 0) {
-                return 'bad'; // Red for expired or expiring today
-            }
-            if (days <= 30) {
-                return 'warn'; // Yellow for 1-30 days left
-            }
+            if (days <= 0) return 'bad';
+            if (days <= 30) return 'warn';
         }
-        // Return nothing for items with > 30 days, so they have the default background
         return '';
     }
 
@@ -413,6 +430,86 @@
             $('#customExpiryWrap').style.display = 'none';
         };
     }
+    
+    function stopScanner(forSearch = false) {
+        if (isScannerActive) {
+            try {
+                Quagga.stop();
+            } catch (err) {
+                console.warn('Quagga.stop failed but proceeding.', err);
+            }
+            isScannerActive = false;
+            if (quaggaHandler && typeof Quagga.offDetected === 'function') {
+                Quagga.offDetected(quaggaHandler);
+                quaggaHandler = null;
+            }
+        }
+        const modal = forSearch ? $('#interactive-search-modal') : $('#addItemModal');
+        const viewport = forSearch ? $('#interactive-search-viewport') : $('#interactive');
+        modal.style.display = 'none';
+        viewport.style.display = 'none';
+    }
+
+    async function handleBarcode(code, forSearch) {
+        const q = query(collection(db, "catalog"), where("barcode", "==", code));
+        const querySnapshot = await getDocs(q);
+        
+        if (querySnapshot.empty) {
+            alert(`Barcode ${code} not found in catalog.`);
+            return;
+        }
+
+        const itemDoc = querySnapshot.docs[0];
+        const item = { id: itemDoc.id, ...itemDoc.data() };
+
+        if (forSearch) {
+            $('#searchBox').value = item.itemName;
+            render(); // Trigger a re-render with the search term
+        } else {
+            // For adding an item
+            if (itemSelectChoices) {
+                itemSelectChoices.setChoiceByValue(item.id);
+            }
+        }
+    }
+
+    function startScanner(forSearch = false) {
+        if (isScannerActive) {
+            stopScanner(forSearch);
+            return;
+        }
+
+        const modal = forSearch ? $('#interactive-search-modal') : $('#addItemModal');
+        const viewport = forSearch ? $('#interactive-search-viewport') : $('#interactive');
+
+        modal.style.display = 'block';
+        viewport.style.display = 'block';
+
+        Quagga.init({
+            inputStream: { name: "Live", type: "LiveStream", target: viewport },
+            decoder: { readers: ["code_128_reader", "ean_reader", "upc_reader"] }
+        }, (err) => {
+            if (err) {
+                console.error(err);
+                alert("Error initializing scanner: " + err);
+                stopScanner(forSearch);
+                return;
+            }
+            Quagga.start();
+            isScannerActive = true;
+
+            quaggaHandler = (result) => {
+                stopScanner(forSearch);
+                handleBarcode(result.codeResult.code, forSearch);
+            };
+            Quagga.onDetected(quaggaHandler);
+        });
+
+        if (forSearch) {
+            modal.querySelector('.close-btn').onclick = () => stopScanner(true);
+        }
+    }
+
 
     function init() {
         loadAll();
@@ -421,6 +518,10 @@
         $('#unitSel').addEventListener('change', render);
         $('#searchBox').addEventListener('input', render);
         $('#refreshBtn').addEventListener('click', loadAll);
+
+        // Wire up scanner buttons
+        $('#startScanBtn').addEventListener('click', () => startScanner(true));
+        $('#scanBarcodeBtn').addEventListener('click', () => startScanner(false));
     }
     
     init();
