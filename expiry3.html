@@ -152,19 +152,16 @@
     }
 
     function rowClass(days, status) {
-        // Priority 1: Expired (most critical)
-        if (days !== null && days !== undefined && days <= 0) {
-            return 'bad'; // Red
+        // This function now ONLY colors based on expiry.
+        if (days !== null && days !== undefined) {
+            if (days <= 0) {
+                return 'bad'; // Red for expired or expiring today
+            }
+            if (days <= 30) {
+                return 'warn'; // Yellow for 1-30 days left
+            }
         }
-        // Priority 2: Nearing expiry
-        if (days !== null && days !== undefined && days <= 30) {
-            return 'warn'; // Yellow
-        }
-        // If not expiring soon, "Pending" status can still be yellow as a visual reminder
-        if ((status||'').toLowerCase() === 'pending') {
-            return 'warn';
-        }
-        // Default: No special highlight
+        // Return nothing for items with > 30 days, so they have the default background
         return '';
     }
 

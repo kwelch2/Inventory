@@ -104,7 +104,7 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-    import { getAuth, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithRedirect, getRedirectResult } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
+    import { getAuth, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
     import { getFirestore, collection, getDocs, doc, setDoc, getDoc, addDoc, updateDoc, deleteDoc, writeBatch } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
     // --- Firebase Initialization ---
@@ -154,25 +154,26 @@
         }
     }
 
+    // This listener handles the initial page load and persists the session.
     onAuthStateChanged(auth, handleAuthState);
 
-    getRedirectResult(auth)
-      .then((result) => {
-        if (result) {
-          console.log("Redirect result received:", result);
-          // The signed-in user info.
-          const user = result.user;
-          handleAuthState(user);
-        }
-      })
-      .catch((error) => {
-        console.error("Redirect Error:", error);
-      });
-
+    // This listener handles the button click to initiate sign-in.
     $("googleLoginBtn").addEventListener("click", () => {
-        console.log("Sign-in button clicked.");
-        signInWithRedirect(auth, new GoogleAuthProvider());
+        console.log("Sign-in button clicked, using popup.");
+        const provider = new GoogleAuthProvider();
+        signInWithPopup(auth, provider)
+            .then((result) => {
+                const user = result.user;
+                console.log("Popup sign-in successful:", user);
+                // The onAuthStateChanged listener will handle showing the app.
+            }).catch((error) => {
+                const errorCode = error.code;
+                const errorMessage = error.message;
+                console.error("Popup Sign-in Error:", { errorCode, errorMessage });
+                alert(`Login failed: ${errorMessage}`);
+            });
     });
+
     $("logoutBtn").addEventListener("click", () => {
         console.log("Logout button clicked.");
         signOut(auth);
