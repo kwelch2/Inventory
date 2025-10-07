@@ -152,10 +152,19 @@
     }
 
     function rowClass(days, status) {
-        if ((status||'').toLowerCase() === 'pending') return 'warn';
-        if (days === null || days === undefined) return '';
-        if (days <= 0) return 'bad';
-        if (days <= 30) return 'warn';
+        // Priority 1: Expired (most critical)
+        if (days !== null && days !== undefined && days <= 0) {
+            return 'bad'; // Red
+        }
+        // Priority 2: Nearing expiry
+        if (days !== null && days !== undefined && days <= 30) {
+            return 'warn'; // Yellow
+        }
+        // If not expiring soon, "Pending" status can still be yellow as a visual reminder
+        if ((status||'').toLowerCase() === 'pending') {
+            return 'warn';
+        }
+        // Default: No special highlight
         return '';
     }
 
