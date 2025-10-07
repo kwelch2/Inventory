@@ -3,24 +3,25 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>EMS Supplies — Admin Dashboard</title>
+  <title>EMS Supplies — Master Admin Dashboard</title>
   <style>
     :root{--bg:#f7f7f7;--card:#fff;--b:#ddd;--muted:#666;--ink:#111;--accent:#0a66ff;--bad:#b00020;--ok:#137333}
     *{box-sizing:border-box}
     body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:var(--bg);color:var(--ink)}
     .wrap{max-width:1400px;margin:0 auto;padding:16px}
     #login-container { max-width: 400px; margin: 2rem auto; }
-    #app-container { display: none; }
+    #app-container, #loading-container { display: none; }
     .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap;}
     .auth-info { display: flex; align-items: center; gap: 1rem; }
-    .tabs{display:flex;gap:8px;border-bottom:1px solid var(--b);position:sticky;top:0;background:var(--bg);padding:8px 0;z-index:5}
-    .tab{padding:10px 14px;border:1px solid var(--b);border-bottom:none;border-top-left-radius:10px;border-top-right-radius:10px;background:#eee;color:#333;cursor:pointer}
+    .tabs{display:flex; flex-wrap: wrap; gap:8px;border-bottom:1px solid var(--b);position:sticky;top:0;background:var(--bg);padding:8px 0;z-index:5}
+    .tab{padding:10px 14px;border:1px solid var(--b);border-bottom:none;border-radius:8px 8px 0 0;background:#eee;color:#333;cursor:pointer}
     .tab.active{background:var(--card);color:#000;border-bottom:1px solid var(--card)}
-    .panel{display:none;background:var(--card);border:1px solid var(--b);border-radius:12px;padding:16px;margin-top:-1px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+    .panel{display:none;background:var(--card);border:1px solid var(--b);border-radius:0 12px 12px 12px;padding:16px;margin-top:-1px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
     .panel.active{display:block}
     h1,h2{margin:0 0 10px}
     .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap; margin-bottom: 1rem;}
     .btn{padding:8px 10px;border:1px solid var(--b);border-radius:10px;background:#fff;cursor:pointer; font-size: 0.9rem;}
+    .btn:disabled { background: #eee; cursor: not-allowed; }
     .btn.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
     .btn.danger{background:var(--bad); color: white; border-color: var(--bad);}
     table{width:100%;border-collapse:collapse;font-size:14px}
@@ -28,21 +29,21 @@
     th{background:#fafafa}
     input,select{padding:8px;border:1px solid var(--b);border-radius:8px; font-size: 1rem;}
     .kvd{font-size:12px;color:#555}
-    .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.4); }
-    .modal-content { background-color: #fefefe; margin: 10% auto; padding: 20px; border: 1px solid #888; width: 80%; max-width: 600px; border-radius: 12px; }
+    .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.4); align-items: center; justify-content: center;}
+    .modal-content { background-color: #fefefe; padding: 20px; border: 1px solid #888; width: 80%; max-width: 600px; border-radius: 12px; }
     .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
-    .modal-body { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .modal-body { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; }
     .modal-footer { margin-top: 1.5rem; text-align: right; }
   </style>
 </head>
 <body>
 <div class="wrap">
   
-  <div id="loading-container">
-    <p>Loading...</p>
+  <div id="loading-container" style="text-align: center; margin-top: 3rem;">
+      <p class="muted">Initializing and checking authentication...</p>
   </div>
 
-  <div id="login-container" style="display: none;">
+  <div id="login-container">
     <div class="card">
         <h2>Admin Login</h2>
         <button id="googleLoginBtn" class="btn primary" style="width: 100%;">Sign in with Google</button>
@@ -50,9 +51,9 @@
     </div>
   </div>
 
-  <div id="app-container" style="display: none;">
+  <div id="app-container">
     <div class="header">
-        <h1>EMS Supplies — Admin Dashboard</h1>
+        <h1>EMS Supplies — Master Admin Dashboard</h1>
         <div class="auth-info">
             <span id="auth-status-main" class="muted"></span>
             <button id="logoutBtn" class="btn">Logout</button>
@@ -83,6 +84,18 @@
         <div class="row"><button class="btn" id="refreshPricing">Refresh</button><button class="btn primary" id="showPricingModal">Add New Price</button></div>
         <div id="pricingTable"></div>
       </section>
+
+      <section id="panel-units" class="panel">
+        <h2>Unit Management <span class="kvd" id="kvUnits"></span></h2>
+        <div class="row"><button class="btn" id="refreshUnits">Refresh</button></div>
+        <div id="unitsTable"></div>
+      </section>
+
+      <section id="panel-compartments" class="panel">
+        <h2>Compartment Management <span class="kvd" id="kvCompartments"></span></h2>
+        <div class="row"><button class="btn" id="refreshCompartments">Refresh</button></div>
+        <div id="compartmentsTable"></div>
+      </section>
   </div>
 </div>
 
@@ -91,20 +104,41 @@
     <div class="modal-header"><h2>Edit Catalog Item</h2></div>
     <div class="modal-body">
       <label>Item Name <input id="editItemName"></label>
-      <label>Alt Names (comma-sep) <input id="editItemNameAlt"></label>
+      <label>Alt Names <input id="editItemNameAlt"></label>
       <label>Category <input id="editCategory"></label>
       <label>Item Ref # <input id="editItemRef"></label>
+      <label>Unit <input id="editUnit"></label>
+      <label>Pack Size <input id="editPackSize" type="number" min="1"></label>
+      <label>Barcode <input id="editBarcode"></label>
+      <label style="display: flex; align-items: center; gap: 8px;"><input id="editIsActive" type="checkbox"> Is Active</label>
     </div>
     <div class="modal-footer">
       <button class="btn" id="cancelCatalogEdit">Cancel</button>
+      <button class="btn danger" id="deleteCatalogItem" style="float: left;">Delete</button>
       <button class="btn primary" id="saveCatalogEdit">Save Changes</button>
     </div>
   </div>
 </div>
 
+<div id="pricingModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header"><h2>Add/Edit Vendor Price</h2></div>
+      <div class="modal-body">
+        <label>Item <select id="priceItemSelect"></select></label>
+        <label>Vendor <select id="priceVendorSelect"></select></label>
+        <label>Vendor SKU <input id="priceSku"></label>
+        <label>Unit Price <input id="priceUnitPrice" type="number" step="0.01"></label>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" id="cancelPricingEdit">Cancel</button>
+        <button class="btn primary" id="savePricingEdit">Save Price</button>
+      </div>
+    </div>
+</div>
+
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-    import { getAuth, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
+    import { getAuth, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithRedirect, getRedirectResult } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
     import { getFirestore, collection, getDocs, doc, setDoc, getDoc, addDoc, updateDoc, deleteDoc, writeBatch } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
     // --- Firebase Initialization ---
@@ -121,81 +155,94 @@
     const db = getFirestore(app);
 
     // --- State & Helpers ---
-    let state = { user: null, userRole: null, catalog: [], vendors: [], pricingAll: [], orders: [], requests: [], catalogMap: new Map(), vendorMap: new Map() };
+    let state = { user: null, userRole: null, catalog: [], vendors: [], pricingAll: [], orders: [], requests: [], units: [], compartments: [], catalogMap: new Map(), vendorMap: new Map() };
     const $ = id => document.getElementById(id);
     let appInitialized = false;
 
     // --- Authentication ---
-    async function handleAuthState(user) {
+    $("loading-container").style.display = "block"; // Show loading message initially
+
+    onAuthStateChanged(auth, async (user) => {
         if (user) {
-            console.log("User is signed in:", user);
-            try {
-                const userDocSnap = await getDoc(doc(db, "users", user.uid));
-                state.userRole = userDocSnap.exists() ? userDocSnap.data().role : "User";
-                if (!userDocSnap.exists()) await setDoc(doc(db, "users", user.uid), { email: user.email, role: "User" });
-                
-                $("auth-status-main").textContent = `${user.email} (${state.userRole})`;
-                $("app-container").style.display = "block";
-                $("login-container").style.display = "none";
-                $("loading-container").style.display = "none";
-                
-                if (!appInitialized) {
-                    boot();
-                    appInitialized = true;
-                }
-            } catch (error) { console.error("Auth Error:", error); }
+            console.log("Auth state changed: User is signed in.", user);
+            await handleUserSignedIn(user);
         } else {
-            console.log("User is signed out.");
-            state.userRole = null;
-            $("app-container").style.display = "none";
-            $("login-container").style.display = "block";
+            console.log("Auth state changed: User is signed out.");
+            handleUserSignedOut();
+        }
+    });
+
+    getRedirectResult(auth).catch((error) => {
+        console.error("Error from getRedirectResult:", error);
+        handleUserSignedOut(); // If redirect fails, ensure user is logged out
+    });
+
+    async function handleUserSignedIn(user) {
+        try {
+            const userDocSnap = await getDoc(doc(db, "users", user.uid));
+            state.userRole = userDocSnap.exists() ? userDocSnap.data().role : "User";
+            if (!userDocSnap.exists()) {
+                await setDoc(doc(db, "users", user.uid), { email: user.email, role: "User" });
+            }
+            
+            $("auth-status-main").textContent = `${user.email} (${state.userRole})`;
+            $("app-container").style.display = "block";
+            $("login-container").style.display = "none";
             $("loading-container").style.display = "none";
-            appInitialized = false;
+            
+            if (!appInitialized) {
+                appInitialized = true;
+                await boot();
+            }
+        } catch (error) {
+            console.error("Error handling signed-in user:", error);
+            handleUserSignedOut();
         }
     }
 
-    // This listener handles the initial page load and persists the session.
-    onAuthStateChanged(auth, handleAuthState);
+    function handleUserSignedOut() {
+        state.userRole = null;
+        $("app-container").style.display = "none";
+        $("login-container").style.display = "block";
+        $("loading-container").style.display = "none";
+        appInitialized = false;
+    }
 
-    // This listener handles the button click to initiate sign-in.
     $("googleLoginBtn").addEventListener("click", () => {
-        console.log("Sign-in button clicked, using popup.");
-        const provider = new GoogleAuthProvider();
-        signInWithPopup(auth, provider)
-            .then((result) => {
-                const user = result.user;
-                console.log("Popup sign-in successful:", user);
-                // The onAuthStateChanged listener will handle showing the app.
-            }).catch((error) => {
-                const errorCode = error.code;
-                const errorMessage = error.message;
-                console.error("Popup Sign-in Error:", { errorCode, errorMessage });
-                alert(`Login failed: ${errorMessage}`);
-            });
+        console.log("Sign-in with redirect initiated.");
+        signInWithRedirect(auth, new GoogleAuthProvider());
     });
 
-    $("logoutBtn").addEventListener("click", () => {
-        console.log("Logout button clicked.");
-        signOut(auth);
-    });
+    $("logoutBtn").addEventListener("click", () => signOut(auth));
+
 
     // --- Data Loading ---
     async function loadAllData() {
-        const [catSnap, venSnap, priceSnap, ordSnap, reqSnap] = await Promise.all([
+        // Parallel fetching of all data
+        const [catSnap, venSnap, priceSnap, ordSnap, reqSnap, unitSnap, compSnap] = await Promise.all([
             getDocs(collection(db, "catalog")),
             getDocs(collection(db, "vendors")),
             getDocs(collection(db, "vendorPricing")),
             getDocs(collection(db, "orders")),
-            getDocs(collection(db, "requests"))
+            getDocs(collection(db, "requests")),
+            getDocs(collection(db, "units")),
+            getDocs(collection(db, "compartments")),
         ]);
+        
+        // Process and store data in state
         state.catalog = catSnap.docs.map(d => ({ id: d.id, ...d.data() }));
         state.vendors = venSnap.docs.map(d => ({ id: d.id, ...d.data() }));
         state.pricingAll = priceSnap.docs.map(d => ({ id: d.id, ...d.data() }));
         state.orders = ordSnap.docs.map(d => ({ id: d.id, ...d.data() }));
         state.requests = reqSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        state.units = unitSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        state.compartments = compSnap.docs.map(d => ({ id: d.id, ...d.data() }));
         
+        // Create lookup maps for performance
         state.catalogMap = new Map(state.catalog.map(c => [c.id, c.itemName]));
         state.vendorMap = new Map(state.vendors.map(v => [v.id, v.name]));
+        
+        // Render all sections of the UI
         renderAll();
     }
 
@@ -205,18 +252,20 @@
         renderPricing();
         renderOrders();
         renderRequests();
+        renderUnits();
+        renderCompartments();
     }
 
     function renderCatalog() {
         const query = $('catSearch').value.toLowerCase();
-        const filtered = state.catalog.filter(i => (i.itemName || '').toLowerCase().includes(query));
+        const filtered = state.catalog.filter(i => (i.itemName || '').toLowerCase().includes(query) || (i.itemNameAlt || '').toLowerCase().includes(query));
         $('kvCatalog').textContent = `(${filtered.length})`;
         const rows = filtered.map(i => `
-            <tr>
-                <td>${i.itemName || ''}</td><td>${i.itemNameAlt || ''}</td><td>${i.category || ''}</td>
+            <tr style="${i.isActive === false ? 'opacity: 0.5; text-decoration: line-through;' : ''}">
+                <td>${i.itemName || ''}</td><td>${i.itemNameAlt || ''}</td><td>${i.category || ''}</td><td>${i.itemRef || ''}</td>
                 <td><button class="btn" data-edit-id="${i.id}">Edit</button></td>
             </tr>`).join('');
-        $('catalogTable').innerHTML = `<table><thead><tr><th>Name</th><th>Alt Name</th><th>Category</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table>`;
+        $('catalogTable').innerHTML = `<table><thead><tr><th>Name</th><th>Alt Name</th><th>Category</th><th>Ref #</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table>`;
     }
     
     function renderPricing() {
@@ -255,46 +304,175 @@
             </tr>`).join('');
         $('requestsTable').innerHTML = `<table><thead><tr><th>Select</th><th>Item</th><th>Qty</th><th>Reason</th><th>Requested By</th></tr></thead><tbody>${rows}</tbody></table>`;
     }
+    
+    function renderUnits() {
+        $('kvUnits').textContent = `(${state.units.length})`;
+        const rows = state.units.map(u => `<tr><td>${u.name}</td><td>${u.id}</td><td><button class="btn" data-delete-unit-id="${u.id}">Delete</button></td></tr>`).join('');
+        $('unitsTable').innerHTML = `<div class="row"><input id="newUnitName" placeholder="New Unit Name"><button id="addUnitBtn" class="btn primary">Add Unit</button></div><table><thead><tr><th>Name</th><th>ID</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table>`;
+    }
+
+    function renderCompartments() {
+        $('kvCompartments').textContent = `(${state.compartments.length})`;
+        const rows = state.compartments.map(c => `<tr><td>${c.name}</td><td><button class="btn" data-delete-comp-id="${c.id}">Delete</button></td></tr>`).join('');
+        $('compartmentsTable').innerHTML = `<div class="row"><input id="newCompName" placeholder="New Compartment Name"><button id="addCompBtn" class="btn primary">Add Compartment</button></div><table><thead><tr><th>Name</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table>`;
+    }
 
     // --- Modals & Actions ---
-    function setupCatalogModal() {
-        let currentItemId = null;
-        $('showCatalogModal').addEventListener('click', () => {
-            currentItemId = null; // Reset for new item
-            $('catalogModal').querySelector('h2').textContent = 'Add New Catalog Item';
-            $('editItemName').value = ''; $('editItemNameAlt').value = ''; 
-            $('editCategory').value = ''; $('editItemRef').value = '';
-            $('catalogModal').style.display = 'block';
-        });
-        $('catalogTable').addEventListener('click', e => {
-            const id = e.target.dataset.editId;
-            if (id) {
-                currentItemId = id;
-                const item = state.catalog.find(i => i.id === id);
-                $('catalogModal').querySelector('h2').textContent = 'Edit Catalog Item';
-                $('editItemName').value = item.itemName || '';
-                $('editItemNameAlt').value = item.itemNameAlt || '';
-                $('editCategory').value = item.category || '';
-                $('editItemRef').value = item.itemRef || '';
-                $('catalogModal').style.display = 'block';
+    function setupAllModalsAndActions() {
+        setupCatalogModal();
+        setupPricingModal();
+        setupRequestActions();
+        setupUnitActions();
+        setupCompartmentActions();
+
+        // Generic table click handler for delete/edit buttons
+        $('app-container').addEventListener('click', async (e) => {
+            const target = e.target.closest('button');
+            if (!target) return;
+
+            const { editId, editPriceId, deleteUnitId, deleteCompId, orderId, status } = target.dataset;
+
+            if (editId) { /* handled in setupCatalogModal */ return; }
+            if (editPriceId) { /* handled in setupPricingModal */ return; }
+
+            if (deleteUnitId) {
+                if (confirm(`Are you sure you want to delete unit ${deleteUnitId}?`)) {
+                    await deleteDoc(doc(db, "units", deleteUnitId));
+                    await loadAllData();
+                }
+            }
+            if (deleteCompId) {
+                if (confirm(`Are you sure you want to delete compartment ${deleteCompId}?`)) {
+                    await deleteDoc(doc(db, "compartments", deleteCompId));
+                    await loadAllData();
+                }
+            }
+            if (orderId && status) {
+                await updateDoc(doc(db, "orders", orderId), { status });
+                await loadAllData();
             }
         });
+    }
+
+    function setupCatalogModal() {
+        let currentItemId = null;
+        
+        const openModal = (itemId = null) => {
+            currentItemId = itemId;
+            const item = itemId ? state.catalog.find(i => i.id === itemId) : {};
+            
+            $('catalogModal').querySelector('h2').textContent = itemId ? 'Edit Catalog Item' : 'Add New Catalog Item';
+            $('editItemName').value = item.itemName || '';
+            $('editItemNameAlt').value = item.itemNameAlt || '';
+            $('editCategory').value = item.category || '';
+            $('editItemRef').value = item.itemRef || '';
+            $('editUnit').value = item.unit || '';
+            $('editPackSize').value = item.packSize || 1;
+            $('editBarcode').value = item.barcode || '';
+            $('editIsActive').checked = item.isActive !== false; // Default to true
+            $('deleteCatalogItem').style.display = itemId ? 'inline-block' : 'none';
+            $('catalogModal').style.display = 'flex';
+        };
+
+        $('showCatalogModal').addEventListener('click', () => openModal());
+        $('catalogTable').addEventListener('click', e => {
+            const id = e.target.dataset.editId;
+            if (id) openModal(id);
+        });
         $('cancelCatalogEdit').addEventListener('click', () => $('catalogModal').style.display = 'none');
+        
         $('saveCatalogEdit').addEventListener('click', async () => {
             const data = {
                 itemName: $('editItemName').value,
                 itemNameAlt: $('editItemNameAlt').value,
                 category: $('editCategory').value,
                 itemRef: $('editItemRef').value,
+                unit: $('editUnit').value,
+                packSize: Number($('editPackSize').value) || 1,
+                barcode: $('editBarcode').value,
+                isActive: $('editIsActive').checked,
                 updatedAt: new Date().toISOString()
             };
+
             if (currentItemId) { // Update
                 await updateDoc(doc(db, "catalog", currentItemId), data);
             } else { // Create
-                await addDoc(collection(db, "catalog"), { ...data, isActive: true });
+                await addDoc(collection(db, "catalog"), data);
             }
             $('catalogModal').style.display = 'none';
-            loadAllData();
+            await loadAllData();
+        });
+
+        $('deleteCatalogItem').addEventListener('click', async () => {
+            if (currentItemId && confirm('Are you sure you want to delete this item? This cannot be undone.')) {
+                await deleteDoc(doc(db, "catalog", currentItemId));
+                $('catalogModal').style.display = 'none';
+                await loadAllData();
+            }
+        });
+    }
+
+    function setupPricingModal() {
+        let currentPriceId = null;
+
+        const openModal = (priceId = null) => {
+            currentPriceId = priceId;
+            const price = priceId ? state.pricingAll.find(p => p.id === priceId) : {};
+
+            $('priceItemSelect').innerHTML = state.catalog.map(i => `<option value="${i.id}" ${price.catalogId === i.id ? 'selected' : ''}>${i.itemName}</option>`).join('');
+            $('priceVendorSelect').innerHTML = state.vendors.map(v => `<option value="${v.id}" ${price.vendorId === v.id ? 'selected' : ''}>${v.name}</option>`).join('');
+            $('priceSku').value = price.vendorItemNo || '';
+            $('priceUnitPrice').value = price.unitPrice || '';
+            $('pricingModal').style.display = 'flex';
+        };
+
+        $('showPricingModal').addEventListener('click', () => openModal());
+        $('pricingTable').addEventListener('click', e => {
+            const id = e.target.dataset.editPriceId;
+            if (id) openModal(id);
+        });
+        $('cancelPricingEdit').addEventListener('click', () => $('pricingModal').style.display = 'none');
+
+        $('savePricingEdit').addEventListener('click', async () => {
+            const data = {
+                catalogId: $('priceItemSelect').value,
+                vendorId: $('priceVendorSelect').value,
+                vendorItemNo: $('priceSku').value,
+                unitPrice: Number($('priceUnitPrice').value) || 0,
+            };
+            if (currentPriceId) {
+                await updateDoc(doc(db, "vendorPricing", currentPriceId), data);
+            } else {
+                await addDoc(collection(db, "vendorPricing"), data);
+            }
+            $('pricingModal').style.display = 'none';
+            await loadAllData();
+        });
+    }
+
+    function setupUnitActions() {
+        $('unitsTable').addEventListener('click', async e => {
+            if (e.target.id === 'addUnitBtn') {
+                const name = $('newUnitName').value.trim();
+                if (name) {
+                    await addDoc(collection(db, "units"), { name });
+                    $('newUnitName').value = '';
+                    await loadAllData();
+                }
+            }
+        });
+    }
+
+    function setupCompartmentActions() {
+        $('compartmentsTable').addEventListener('click', async e => {
+            if (e.target.id === 'addCompBtn') {
+                const name = $('newCompName').value.trim();
+                if (name) {
+                    await addDoc(collection(db, "compartments"), { name });
+                    $('newCompName').value = '';
+                    await loadAllData();
+                }
+            }
         });
     }
 
@@ -303,30 +481,22 @@
             const selectedIds = [...document.querySelectorAll('.request-checkbox:checked')].map(cb => cb.dataset.requestId);
             if (selectedIds.length === 0) return alert('No requests selected.');
 
-            const vendorId = prompt("Enter the Vendor ID for this new order (e.g., 'henry', 'valor'):");
+            const vendorId = prompt("Enter the Vendor ID for this new order:");
             if (!vendorId || !state.vendorMap.has(vendorId)) return alert('Invalid Vendor ID.');
 
             const notes = prompt("Enter any notes for this order:");
 
             try {
-                // Create a new order document
                 const newOrderRef = await addDoc(collection(db, "orders"), {
-                    vendorId,
-                    notes,
-                    status: 'pending',
-                    orderDate: new Date()
+                    vendorId, notes, status: 'pending', orderDate: new Date()
                 });
-
-                // Use a batch write to update all selected requests
                 const batch = writeBatch(db);
                 selectedIds.forEach(id => {
-                    const reqRef = doc(db, "requests", id);
-                    batch.update(reqRef, { status: 'batched', batchedIntoOrderId: newOrderRef.id });
+                    batch.update(doc(db, "requests", id), { status: 'batched', batchedIntoOrderId: newOrderRef.id });
                 });
                 await batch.commit();
-                
                 alert('Order created successfully!');
-                loadAllData();
+                await loadAllData();
             } catch (e) {
                 console.error("Error creating order:", e);
                 alert("Failed to create order.");
@@ -336,8 +506,8 @@
 
     // --- Initial Bootstrapping ---
     function mountTabs() {
-        const tabs = ['Requests', 'Orders', 'Catalog', 'Pricing'];
-        $('tabs').innerHTML = tabs.map(t => `<button class="tab" data-tab="${t.toLowerCase()}">${t}</button>`).join('');
+        const TABS = ['Requests', 'Orders', 'Catalog', 'Pricing', 'Units', 'Compartments'];
+        $('tabs').innerHTML = TABS.map(t => `<button class="tab" data-tab="${t.toLowerCase()}">${t}</button>`).join('');
         $('tabs').addEventListener('click', (ev) => {
             const tabId = ev.target.dataset.tab;
             if (!tabId) return;
@@ -349,20 +519,21 @@
     }
 
     async function boot() {
+        console.log("Booting application...");
         mountTabs();
-        setupCatalogModal();
-        setupRequestActions();
+        setupAllModalsAndActions();
         
         // Refresh buttons
-        $('refreshRequests').addEventListener('click', loadAllData);
-        $('refreshOrders').addEventListener('click', loadAllData);
-        $('refreshCatalog').addEventListener('click', loadAllData);
-        $('refreshPricing').addEventListener('click', loadAllData);
+        ['Requests', 'Orders', 'Catalog', 'Pricing', 'Units', 'Compartments'].forEach(name => {
+            const btn = $(`refresh${name}`);
+            if (btn) btn.addEventListener('click', loadAllData);
+        });
 
         // Search
         $('catSearch').addEventListener('input', renderCatalog);
         
         await loadAllData();
+        console.log("Initial data load complete.");
     }
 </script>
 </body>
