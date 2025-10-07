@@ -38,7 +38,11 @@
 <body>
 <div class="wrap">
   
-  <div id="login-container">
+  <div id="loading-container">
+    <p>Loading...</p>
+  </div>
+
+  <div id="login-container" style="display: none;">
     <div class="card">
         <h2>Admin Login</h2>
         <button id="googleLoginBtn" class="btn primary" style="width: 100%;">Sign in with Google</button>
@@ -46,7 +50,7 @@
     </div>
   </div>
 
-  <div id="app-container">
+  <div id="app-container" style="display: none;">
     <div class="header">
         <h1>EMS Supplies — Admin Dashboard</h1>
         <div class="auth-info">
@@ -124,6 +128,7 @@
     // --- Authentication ---
     async function handleAuthState(user) {
         if (user) {
+            console.log("User is signed in:", user);
             try {
                 const userDocSnap = await getDoc(doc(db, "users", user.uid));
                 state.userRole = userDocSnap.exists() ? userDocSnap.data().role : "User";
@@ -132,6 +137,7 @@
                 $("auth-status-main").textContent = `${user.email} (${state.userRole})`;
                 $("app-container").style.display = "block";
                 $("login-container").style.display = "none";
+                $("loading-container").style.display = "none";
                 
                 if (!appInitialized) {
                     boot();
@@ -139,16 +145,38 @@
                 }
             } catch (error) { console.error("Auth Error:", error); }
         } else {
+            console.log("User is signed out.");
             state.userRole = null;
             $("app-container").style.display = "none";
             $("login-container").style.display = "block";
+            $("loading-container").style.display = "none";
             appInitialized = false;
         }
     }
+
     onAuthStateChanged(auth, handleAuthState);
-    getRedirectResult(auth).catch(error => console.error("Redirect Error:", error));
-    $("googleLoginBtn").addEventListener("click", () => signInWithRedirect(auth, new GoogleAuthProvider()));
-    $("logoutBtn").addEventListener("click", () => signOut(auth));
+
+    getRedirectResult(auth)
+      .then((result) => {
+        if (result) {
+          console.log("Redirect result received:", result);
+          // The signed-in user info.
+          const user = result.user;
+          handleAuthState(user);
+        }
+      })
+      .catch((error) => {
+        console.error("Redirect Error:", error);
+      });
+
+    $("googleLoginBtn").addEventListener("click", () => {
+        console.log("Sign-in button clicked.");
+        signInWithRedirect(auth, new GoogleAuthProvider());
+    });
+    $("logoutBtn").addEventListener("click", () => {
+        console.log("Logout button clicked.");
+        signOut(auth);
+    });
 
     // --- Data Loading ---
     async function loadAllData() {
