@@ -47,7 +47,7 @@
     <h1>Expiring Supplies</h1>
     <div class="muted">Now backed by Firebase Firestore – no proxy or login required.</div>
     <div class="toolbar">
-      <label>Window <select id="rangeSel"><option value="30">30 days</option><option value="60">60 days</option><option value="90" selected>90 days</option></select></label>
+      <label>Window <select id="rangeSel"><option value="30">30 days</option><option value="60">60 days</option><option value="90" selected>90 days</option><option value="ALL">All</option></select></label>
       <label>Unit <select id="unitSel"><option value="ALL">ALL</option></select></label>
       <div style="display:flex;gap:8px;align-items:center;flex:1;"><input id="searchBox" placeholder="Search item, compartment…" style="flex:1;"/></div>
       <div class="toolbar-actions"><button class="btn" id="refreshBtn">Refresh</button><button class="btn" id="showAddItemModal">+ Add Item</button></div>
@@ -154,14 +154,14 @@
     function rowClass(days, status) {
         if ((status||'').toLowerCase() === 'pending') return 'warn';
         if (days === null || days === undefined) return '';
-        if (days < 0) return 'bad';
-        if (days <= 30) return 'bad';
-        if (days <= 90) return 'warn';
-        return 'ok';
+        if (days <= 0) return 'bad';
+        if (days <= 30) return 'warn';
+        return '';
     }
 
     function render() {
-        const withinDays = parseInt($('#rangeSel').value, 10);
+        const rangeValue = $('#rangeSel').value;
+        const withinDays = rangeValue === 'ALL' ? 9999 : parseInt(rangeValue, 10);
         const unitFilter = $('#unitSel').value;
         const searchQuery = ($('#searchBox').value || '').toLowerCase();
         
@@ -182,7 +182,6 @@
             if (unitFilter !== 'ALL' && item.unitId !== unitFilter) return false;
 
             const catalogItem = catalogMap.get(item.catalogId);
-            // ✅ CORRECTED: Use 'itemName' and provide a safe fallback for the search.
             const itemName = (catalogItem ? catalogItem.itemName : 'Unknown').toLowerCase();
             const compartment = (item.compartment || '').toLowerCase();
             if (searchQuery && !itemName.includes(searchQuery) && !compartment.includes(searchQuery)) return false;
@@ -199,7 +198,6 @@
                 <tbody>
                     ${filtered.map(item => {
                         const catalogItem = catalogMap.get(item.catalogId);
-                        // ✅ CORRECTED: Use 'itemName' for display as well.
                         const itemName = catalogItem ? catalogItem.itemName : `Unknown (ID: ${item.catalogId})`;
                         const unit = units.find(u => u.id === item.unitId);
                         const expiryDate = new Date(item.expiryDate.seconds ? item.expiryDate.seconds * 1000 : item.expiryDate).toLocaleDateString();
@@ -365,7 +363,6 @@
 
     function populateAddItemDropdowns() {
         $('#addUnitSelect').innerHTML = units.map(u => `<option value="${u.id}">${u.name}</option>`).join('');
-        // ✅ CORRECTED: Use 'itemName' for the choices dropdown
         const catalogOptions = catalog.map(c => ({ value: c.id, label: c.itemName }));
         if (itemSelectChoices) {
             itemSelectChoices.clearStore();
@@ -414,7 +411,6 @@
     function init() {
         loadAll();
         setupAddItemModal();
-        // ✅ CORRECTED: This was the source of the forEach error
         $('#rangeSel').addEventListener('change', render);
         $('#unitSel').addEventListener('change', render);
         $('#searchBox').addEventListener('input', render);
