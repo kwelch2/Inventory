@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>EMS Supplies — Master Admin Dashboard</title>
+  <title>EMS Supplies — Master Admin Dashboard (DIAGNOSTIC)</title>
   <script src="https://kwelch2.github.io/Inventory/quagga.min.js"></script>
   <style>
     :root{--bg:#f7f7f7;--card:#fff;--b:#ddd;--muted:#666;--ink:#111;--accent:#0a66ff;--bad:#b00020;--ok:#137333}
@@ -154,6 +154,8 @@
     import { getAuth, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithRedirect, getRedirectResult } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
     import { getFirestore, collection, getDocs, doc, setDoc, getDoc, addDoc, updateDoc, deleteDoc, writeBatch } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
+    console.log(`[DIAGNOSTIC] Script start @ ${new Date().toLocaleTimeString()}`);
+
     // --- Firebase Initialization ---
     const firebaseConfig = {
         apiKey: "AIzaSyD7pMc-AHXb1cApzSfImkWvIjM9iwCoym4",
@@ -178,8 +180,9 @@
     $("login-container").style.display = "none";
     $("app-container").style.display = "none";
 
-    // This listener is the single source of truth for the UI state
+    console.log(`[DIAGNOSTIC] Setting up onAuthStateChanged listener...`);
     onAuthStateChanged(auth, async (user) => {
+        console.log(`[DIAGNOSTIC] onAuthStateChanged fired. User object:`, user);
         if (user) {
             await handleUserSignedIn(user);
         } else {
@@ -187,17 +190,29 @@
         }
     });
 
-    // Process the redirect result from Google Sign-In.
-    // onAuthStateChanged will fire with the updated user state after this completes.
-    getRedirectResult(auth).catch((error) => {
-        console.error("Error processing redirect result:", error);
-    });
+    console.log(`[DIAGNOSTIC] Calling getRedirectResult...`);
+    getRedirectResult(auth)
+        .then((result) => {
+            console.log('[DIAGNOSTIC] getRedirectResult promise resolved. Result:', result);
+            if (!result) {
+                console.log('[DIAGNOSTIC] No redirect result found. Waiting for onAuthStateChanged to determine state.');
+            }
+        })
+        .catch((error) => {
+            console.error("[DIAGNOSTIC] Error from getRedirectResult:", error);
+        });
 
     async function handleUserSignedIn(user) {
+        console.log("[DIAGNOSTIC] handleUserSignedIn called.");
         try {
             const userDocSnap = await getDoc(doc(db, "users", user.uid));
+            console.log("[DIAGNOSTIC] User document snapshot fetched.");
             state.userRole = userDocSnap.exists() ? userDocSnap.data().role : "User";
-            if (!userDocSnap.exists()) await setDoc(doc(db, "users", user.uid), { email: user.email, role: "User" });
+            if (!userDocSnap.exists()) {
+                console.log("[DIAGNOSTIC] User document does not exist, creating it...");
+                await setDoc(doc(db, "users", user.uid), { email: user.email, role: "User" });
+                console.log("[DIAGNOSTIC] User document created.");
+            }
             
             $("auth-status-main").textContent = `${user.email} (${state.userRole})`;
             $("app-container").style.display = "block";
@@ -206,16 +221,18 @@
             
             if (!appInitialized) {
                 appInitialized = true;
+                console.log("[DIAGNOSTIC] App not initialized, calling boot()...");
                 await boot();
             }
         } catch (error) {
-            console.error("Error handling signed-in user:", error);
+            console.error("[DIAGNOSTIC] Error in handleUserSignedIn:", error);
             alert("Permission Error: Could not read user data. Please check Firestore security rules and ensure your account has the correct role.");
             signOut(auth);
         }
     }
 
     function handleUserSignedOut() {
+        console.log("[DIAGNOSTIC] handleUserSignedOut called.");
         state.userRole = null;
         $("app-container").style.display = "none";
         $("login-container").style.display = "block";
@@ -223,12 +240,16 @@
         appInitialized = false;
     }
 
-    $("googleLoginBtn").addEventListener("click", () => signInWithRedirect(auth, new GoogleAuthProvider()));
+    $("googleLoginBtn").addEventListener("click", () => {
+        console.log(`[DIAGNOSTIC] Sign-in button clicked @ ${new Date().toLocaleTimeString()}`);
+        signInWithRedirect(auth, new GoogleAuthProvider());
+    });
     $("logoutBtn").addEventListener("click", () => signOut(auth));
 
 
     // --- Data Loading ---
     async function loadAllData() {
+        // ... (rest of the code is unchanged) ...
         const [catSnap, venSnap, priceSnap, ordSnap, reqSnap, unitSnap, compSnap] = await Promise.all([
             getDocs(collection(db, "catalog")),
             getDocs(collection(db, "vendors")),
