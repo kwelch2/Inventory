@@ -40,6 +40,12 @@
     .chipbar{display:flex;gap:6px;flex-wrap:wrap}
     .viewport { position: relative; }
     .viewport video, .viewport .drawingBuffer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+    
+    /* FIX: Make Choices.js dropdown wider in the modal */
+    #addItemModal .choices {
+        flex: 1; /* Allows the dropdown to grow */
+        min-width: 0; /* Prevents overflow issues in flexbox */
+    }
 </style>
 </head>
 
@@ -356,7 +362,7 @@
                 compartment: $('#addCompartmentSelect').value.trim(),
                 expiryDate: new Date(selectedExp),
                 qty: parseInt($('#addQty').value, 10) || 1,
-                status: "Pending",
+                status: "", // FIX: Default status is now blank
                 crewStatus: "",
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp(),
