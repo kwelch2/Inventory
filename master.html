@@ -180,14 +180,18 @@
         if (user) {
             await handleUserSignedIn(user);
         } else {
+            // This will only run if there is no user session at all
             handleUserSignedOut();
         }
     });
 
+    // Handle the redirect result
     getRedirectResult(auth).catch((error) => {
         console.error("Error from getRedirectResult:", error);
+        // If there's an error with the redirect, ensure we show the login page
         handleUserSignedOut();
     });
+
 
     async function handleUserSignedIn(user) {
         try {
@@ -390,7 +394,6 @@
         
         const renderBarcodeList = (barcodes = []) => {
             barcodeList.innerHTML = '';
-            // Ensure barcodes is an array
             const barcodeArray = Array.isArray(barcodes) ? barcodes : (barcodes ? [barcodes] : []);
             barcodeArray.forEach(code => {
                 const item = document.createElement('div');
@@ -463,7 +466,7 @@
                 itemRef: $('editItemRef').value,
                 unit: $('editUnit').value,
                 packSize: Number($('editPackSize').value) || 1,
-                barcode: barcodes, // Save as an array
+                barcode: barcodes,
                 isActive: $('editIsActive').checked,
                 updatedAt: new Date().toISOString()
             };
