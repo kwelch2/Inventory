@@ -78,269 +78,264 @@
   </div>
 </div>
 
-<script>
-/*** CONFIG: use the Cloudflare Worker, not the raw Apps Script URL ***/
-const PROXY_URL = 'https://ems-inventory-proxy.kylewelch33.workers.dev';
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+  import {
+    getFirestore,
+    collection,
+    getDocs,
+    addDoc,
+    updateDoc,
+    doc,
+    serverTimestamp
+  } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
-/*** STATE ***/
-let catRows = [], orderRows = [], vpRows = [];
-
-/*** UTIL ***/
-const $ = s => document.querySelector(s);
-function money(v){ const n = Number(v); return Number.isFinite(n) ? `$${n.toFixed(2)}` : 'N/A'; }
-
-async function fetchJson(url, options={}){
-  const resp = await fetch(url, options);
-  const text = await resp.text();
-  let data;
-  try { data = JSON.parse(text); }
-  catch {
-    const err = new Error(`Non-JSON response: ${text.slice(0,200)}`);
-    err.status = resp.status;
-    err.code = resp.status;
-    err.raw = text;
-    err.response = resp;
-    throw err;
-  }
-  if(!resp.ok || data.ok === false){
-    const err = new Error(data?.error || `Request failed (${resp.status})`);
-    err.status = resp.status;
-    err.code = resp.status;
-    err.data = data;
-    err.raw = text;
-    err.response = resp;
-    throw err;
-  }
-  return data;
-}
-
-function shouldRetryPost(err){
-  if(!err) return false;
-  const status = err.status || err.code;
-  if(status === 502 || status === 503 || status === 504) return true;
-  const msg = String(err.message || '').toLowerCase();
-  const raw = String(err.raw || '').toLowerCase();
-  return msg.includes('bad gateway')
-    || raw.includes('bad gateway')
-    || msg.includes('fetch failed')
-    || msg.includes('failed to fetch')
-    || msg.includes('networkerror')
-    || msg.includes('non-json response');
-}
-
-function encodeFormBody(data){
-  const params = new URLSearchParams();
-  Object.entries(data || {}).forEach(([k,v])=>{
-    if(v === undefined || v === null) return;
-    if(typeof v === 'object') params.append(k, JSON.stringify(v));
-    else params.append(k, String(v));
-  });
-  return params.toString();
-}
-
-async function apiPost(actionType, payload={}){
-  const body = { actionType, action: actionType, ...payload };
-  try {
-    return await fetchJson(PROXY_URL, {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      credentials:'include',
-      body: JSON.stringify(body)
-    });
-  } catch(err) {
-    if(!shouldRetryPost(err)) throw err;
-    console.warn(`POST ${actionType} JSON failed; retrying form-encoded`, err);
-    try {
-      return await fetchJson(PROXY_URL, {
-        method:'POST',
-        headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},
-        credentials:'include',
-        body: encodeFormBody(body)
-      });
-    } catch(err2){
-      if(!('previous' in err2)) err2.previous = err;
-      throw err2;
-    }
-  }
-}
-
-async function apiGet(action, params={}){
-  const q = new URLSearchParams({ action, ...params, _ts: Date.now() }).toString();
-  return fetchJson(`${PROXY_URL}?${q}`, { credentials:'include' });
-}
-
-/*** RENDERERS ***/
-function renderPending(){
-  const nameMap = new Map(catRows.map(r => [r.ItemID, {name:r.ItemName, alt:r.ItemNameAlt||''}]));
-  const pending = orderRows.filter(r => r.Status === 'Requested' || r.Status === 'Ordered');
-
-  const tbody = $('#pendingTable tbody');
-  if (!pending.length){
-    tbody.innerHTML = '<tr><td colspan="4">No pending requests.</td></tr>';
-    return;
-  }
-
-  tbody.innerHTML = pending.map(r => {
-    const info = nameMap.get(r.ItemID);
-    let itemName = info?.name || '';
-    const alt    = info?.alt  || '';
-
-    // Handle "other item" requests
-    if (!itemName && typeof r.Notes === 'string' && r.Notes.startsWith('REQUESTED OTHER ITEM:')){
-      itemName = `<em>${r.Notes.replace('REQUESTED OTHER ITEM: ','').split(' -- ')[0]}</em>`;
-    }
-    if (!itemName) itemName = r.ItemID || 'Item';
-
-    const prices = vpRows
-      .filter(vp => String(vp.ItemID) === String(r.ItemID))
-      .sort((a,b) => (parseFloat(a.UnitPrice)||Infinity) - (parseFloat(b.UnitPrice)||Infinity));
-
-    const pricingHTML = prices.length
-      ? prices.map(vp => `
-          <tr>
-            <td>${vp.VendorID || ''}</td>
-            <td>${money(vp.UnitPrice)}</td>
-            <td>${vp.VendorItemNumber || ''}</td>
-          </tr>`).join('')
-      : '<tr><td colspan="3">No pricing info</td></tr>';
-
-    return `
-      <tr>
-        <td>
-          <details>
-            <summary>${itemName} ${alt?`<span class="muted">${alt}</span>`:''}</summary>
-            <table class="vendor-table">
-              <thead><tr><th>Vendor</th><th>Price</th><th>Item#</th></tr></thead>
-              <tbody>${pricingHTML}</tbody>
-            </table>
-          </details>
-        </td>
-        <td>${r.Qty || ''}</td>
-        <td class="status-btns">
-          <button class="btn ${r.Status==='Requested'?'active':''}" data-orderid="${r.OrderID}" data-status="Requested">Pending</button>
-          <button class="btn ${r.Status==='Ordered'  ?'active':''}" data-orderid="${r.OrderID}" data-status="Ordered">Ordered</button>
-          <button class="btn" data-orderid="${r.OrderID}" data-status="Received">Received</button>
-        </td>
-        <td>${r.Notes || ''}</td>
-      </tr>`;
-  }).join('');
-
-  // wire status buttons
-  tbody.querySelectorAll('.status-btns button').forEach(btn=>{
-    btn.addEventListener('click', async ()=>{
-      const orderId = btn.dataset.orderid;
-      const status  = btn.dataset.status;
-      try{
-        await apiPost('updateOrderStatus', { orderId, status });
-        const row = orderRows.find(r => r.OrderID === orderId);
-        if (row) row.Status = status;
-        renderPending();
-      }catch(e){
-        console.error(e);
-        alert('Failed to update status');
-      }
-    });
-  });
-}
-function renderHistory(days, query=''){
-  const nameById = new Map(catRows.map(r => [r.ItemID, r.ItemName]));
-  const rangeDays = Number.isFinite(+days) ? +days : 30;
-
-  // tolerate Date | serial | string
-  const toDate = (v) => {
-    if (v instanceof Date && !isNaN(v)) return v;
-    if (typeof v === 'number') return new Date(Math.round((v - 25569) * 86400e3)); // sheets serial
-    const d = new Date(String(v));
-    return isNaN(d) ? null : d;
+  const firebaseConfig = {
+    apiKey: "AIzaSyD7pMc-AHXb1cApzSfImkWvIjM9iwCoym4",
+    authDomain: "supplies-ems.firebaseapp.com",
+    projectId: "supplies-ems",
+    storageBucket: "supplies-ems.firebasestorage.app",
+    messagingSenderId: "649560661195",
+    appId: "1:649560661195:web:f389f3e620c0c36559cf4e",
+    measurementId: "G-EN8MDYD571"
   };
 
-  // pull timestamp from either "Timestamp" or "TimeStamp"
-  const getTsRaw = (row) => row.Timestamp ?? row.TimeStamp ?? row.timestamp ?? row.TIMESTAMP;
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
 
-  // show only Ordered/Received (and tolerate "recieved")
-  const receivedish = orderRows.filter(r => {
-    const s = String(r.Status||'').trim().toLowerCase();
-    return s === 'ordered' || s === 'received' || s === 'recieved';
-  });
+  const state = {
+    catalog: [],
+    requests: [],
+    vendorPricing: [],
+    vendors: [],
+    catalogMap: new Map(),
+    vendorMap: new Map()
+  };
 
-  const cutoff = new Date();
-  cutoff.setHours(0,0,0,0);
-  cutoff.setDate(cutoff.getDate() - rangeDays);
+  const $ = (sel) => document.querySelector(sel);
+  const escapeHtml = (s = "") => String(s).replace(/[&<>"']/g, (m) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;"
+  }[m]));
+  const money = (v) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? `$${n.toFixed(2)}` : "N/A";
+  };
+  const toDate = (maybeTs) => {
+    if (!maybeTs) return null;
+    if (maybeTs instanceof Date && !Number.isNaN(maybeTs)) return maybeTs;
+    if (maybeTs.seconds) return new Date(maybeTs.seconds * 1000);
+    if (typeof maybeTs === "number") return new Date(maybeTs);
+    const d = new Date(String(maybeTs));
+    return Number.isNaN(d) ? null : d;
+  };
 
-  const displayNameFor = (row) => {
-    if (row.ItemID && nameById.get(row.ItemID)) return nameById.get(row.ItemID);
-    if (typeof row.Notes === 'string' && row.Notes.startsWith('REQUESTED OTHER ITEM:')) {
-      return row.Notes.replace('REQUESTED OTHER ITEM: ','').split(' -- ')[0] || 'Other Item';
+  let currentHistoryDays = 30;
+  let currentHistoryQuery = "";
+
+  async function loadAllData() {
+    $('#pendingTable tbody').innerHTML = '<tr><td colspan="4">Loading…</td></tr>';
+
+    try {
+      const [catSnap, reqSnap, priceSnap, vendorSnap] = await Promise.all([
+        getDocs(collection(db, "catalog")),
+        getDocs(collection(db, "requests")),
+        getDocs(collection(db, "vendorPricing")),
+        getDocs(collection(db, "vendors"))
+      ]);
+
+      state.catalog = catSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      state.requests = reqSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      state.vendorPricing = priceSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      state.vendors = vendorSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+      state.catalogMap = new Map(state.catalog.map((c) => [c.id, c]));
+      state.vendorMap = new Map(state.vendors.map((v) => [v.id, v]));
+
+      populateCatalogDatalist();
+      renderPending();
+      renderHistory(currentHistoryDays, currentHistoryQuery);
+    } catch (err) {
+      console.error("Failed to load Firestore data", err);
+      $('#pendingTable tbody').innerHTML = '<tr><td colspan="4" style="color:#a00;font-weight:700;">Error loading data from Firestore.</td></tr>';
     }
-    return nameById.get(row.ItemID) || 'Other Item';
-    };
-
-  const filtered = receivedish.filter(r => {
-    const ts = toDate(getTsRaw(r));
-    if (!ts) return false;
-    const nm = displayNameFor(r);
-    const matchesQuery = !query || nm.toLowerCase().includes(query.toLowerCase());
-    return ts >= cutoff && matchesQuery;
-  });
-
-  const tbody = document.querySelector('#historyTable tbody');
-  if (!filtered.length){
-    tbody.innerHTML = `<tr><td colspan="3">No history in the last ${rangeDays} days.</td></tr>`;
-    return;
   }
 
-  tbody.innerHTML = filtered.map(r => {
-    const ts = toDate(getTsRaw(r));
-    return `
-      <tr>
-        <td>${displayNameFor(r)}</td>
-        <td>${ts ? ts.toLocaleDateString() : ''}</td>
-        <td>${r.Notes || ''}</td>
-      </tr>`;
-  }).join('');
-}
-
-
-/*** BOOT ***/
-async function boot(){
-  try{
-    // GET all page data via proxy
-    const data = await apiGet('getRequestPageData');
-
-    catRows = data.catalog || [];
-    orderRows = data.orders || [];
-    vpRows = data.vendorPricing || [];
-
-    // Datalist
-    $('#itemsDatalist').innerHTML = catRows
-      .map(r => `<option value="${r.ItemName}">${r.ItemNameAlt || ''}</option>`)
-      .join('');
-
-    // Pending section
-    renderPending();
-    renderHistory(30);
-
-    // History controls
-    document.querySelectorAll('button.hist').forEach(b=>{
-    b.addEventListener('click', ()=> renderHistory(b.dataset.days));
+  function populateCatalogDatalist() {
+    const sorted = [...state.catalog].sort((a, b) => (a.itemName || "").localeCompare(b.itemName || ""));
+    const options = [];
+    sorted.forEach((item) => {
+      const primary = item.itemName || "";
+      const alt = item.itemNameAlt || "";
+      if (primary) options.push(`<option value="${escapeHtml(primary)}">${escapeHtml(alt)}</option>`);
+      if (alt && alt.toLowerCase() !== primary.toLowerCase()) {
+        options.push(`<option value="${escapeHtml(alt)}">${escapeHtml(primary)}</option>`);
+      }
     });
-    document.getElementById('historySearch').addEventListener('input', e=>{
-    renderHistory(30, e.target.value);
+    $('#itemsDatalist').innerHTML = options.join("");
+  }
+
+  function formatRequestName(request) {
+    const catalogItem = request.catalogId ? state.catalogMap.get(request.catalogId) : null;
+    const primary = request.otherItemName || catalogItem?.itemName || catalogItem?.itemNameAlt || "Other Item";
+    const alt = catalogItem?.itemNameAlt && catalogItem?.itemNameAlt !== primary ? catalogItem.itemNameAlt : "";
+    return {
+      primary,
+      alt
+    };
+  }
+
+  function renderPending() {
+    const tbody = $('#pendingTable tbody');
+    const pending = state.requests.filter((r) => {
+      const status = String(r.status || 'open').toLowerCase();
+      return !['received', 'fulfilled', 'complete', 'completed', 'closed'].includes(status);
     });
 
-    $('#historySearch').addEventListener('input', e=>{
-      // default to 30 if user hasn’t clicked a range
-      renderHistory(30, e.target.value);
-    });
-    $('#historyPane').addEventListener('toggle', (e)=>{
-    if (e.target.open) renderHistory(30);
+    if (!pending.length) {
+      tbody.innerHTML = '<tr><td colspan="4">No pending requests.</td></tr>';
+      return;
+    }
+
+    const sorted = [...pending].sort((a, b) => {
+      const da = toDate(a.createdAt) || new Date(0);
+      const db = toDate(b.createdAt) || new Date(0);
+      return da - db;
     });
 
-    // “Other item” toggle
+    tbody.innerHTML = sorted.map((request) => {
+      const { primary, alt } = formatRequestName(request);
+      const pricing = request.catalogId
+        ? state.vendorPricing
+            .filter((vp) => vp.catalogId === request.catalogId)
+            .sort((a, b) => (parseFloat(a.unitPrice) || Infinity) - (parseFloat(b.unitPrice) || Infinity))
+        : [];
+
+      const pricingHTML = pricing.length
+        ? pricing
+            .map((vp) => {
+              const vendor = state.vendorMap.get(vp.vendorId);
+              return `
+                <tr>
+                  <td>${escapeHtml(vendor?.name || vp.vendorId || '')}</td>
+                  <td>${money(vp.unitPrice)}</td>
+                  <td>${escapeHtml(vp.vendorItemNo || '')}</td>
+                </tr>`;
+            })
+            .join("")
+        : '<tr><td colspan="3">No pricing info</td></tr>';
+
+      const status = String(request.status || 'open').toLowerCase();
+
+      return `
+        <tr>
+          <td>
+            <details>
+              <summary>${escapeHtml(primary)} ${alt ? `<span class="muted">${escapeHtml(alt)}</span>` : ''}</summary>
+              <table class="vendor-table">
+                <thead><tr><th>Vendor</th><th>Price</th><th>Item#</th></tr></thead>
+                <tbody>${pricingHTML}</tbody>
+              </table>
+            </details>
+          </td>
+          <td>${escapeHtml(request.qty || '')}</td>
+          <td class="status-btns">
+            <button class="btn ${status === 'open' ? 'active' : ''}" data-request-id="${request.id}" data-status="open">Pending</button>
+            <button class="btn ${status === 'ordered' ? 'active' : ''}" data-request-id="${request.id}" data-status="ordered">Ordered</button>
+            <button class="btn ${status === 'received' ? 'active' : ''}" data-request-id="${request.id}" data-status="received">Received</button>
+          </td>
+          <td>${escapeHtml(request.notes || '')}</td>
+        </tr>`;
+    }).join("");
+
+    tbody.querySelectorAll('.status-btns button').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const { requestId, status } = btn.dataset;
+        if (!requestId || !status) return;
+        try {
+          const update = { status };
+          if (status === 'received') {
+            update.receivedAt = serverTimestamp();
+          }
+          update.updatedAt = serverTimestamp();
+          await updateDoc(doc(db, 'requests', requestId), update);
+          await refreshRequests();
+        } catch (err) {
+          console.error('Failed to update request status', err);
+          alert('Failed to update status.');
+        }
+      });
+    });
+  }
+
+  function renderHistory(days = 30, queryText = "") {
+    currentHistoryDays = Number.isFinite(+days) ? +days : 30;
+    currentHistoryQuery = queryText;
+
+    const tbody = $('#historyTable tbody');
+    const now = new Date();
+    const cutoff = new Date(now.getTime() - currentHistoryDays * 24 * 60 * 60 * 1000);
+    cutoff.setHours(0, 0, 0, 0);
+
+    const received = state.requests.filter((r) => {
+      const status = String(r.status || '').toLowerCase();
+      if (!['received', 'fulfilled', 'complete', 'completed'].includes(status)) return false;
+      const ts = toDate(r.receivedAt || r.updatedAt || r.createdAt);
+      if (!ts) return false;
+      return ts >= cutoff;
+    });
+
+    const filtered = received.filter((req) => {
+      if (!queryText) return true;
+      const { primary, alt } = formatRequestName(req);
+      const haystack = `${primary} ${alt} ${req.notes || ''}`.toLowerCase();
+      return haystack.includes(queryText.toLowerCase());
+    });
+
+    if (!filtered.length) {
+      tbody.innerHTML = `<tr><td colspan="3">No history in the last ${currentHistoryDays} days.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = filtered
+      .sort((a, b) => {
+        const da = toDate(a.receivedAt || a.updatedAt || a.createdAt) || new Date(0);
+        const db = toDate(b.receivedAt || b.updatedAt || b.createdAt) || new Date(0);
+        return db - da;
+      })
+      .map((req) => {
+        const { primary } = formatRequestName(req);
+        const ts = toDate(req.receivedAt || req.updatedAt || req.createdAt);
+        return `
+          <tr>
+            <td>${escapeHtml(primary)}</td>
+            <td>${ts ? ts.toLocaleDateString() : ''}</td>
+            <td>${escapeHtml(req.notes || '')}</td>
+          </tr>`;
+      })
+      .join("");
+  }
+
+  async function refreshRequests() {
+    try {
+      const reqSnap = await getDocs(collection(db, 'requests'));
+      state.requests = reqSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      renderPending();
+      renderHistory(currentHistoryDays, currentHistoryQuery);
+    } catch (err) {
+      console.error('Failed to refresh requests', err);
+    }
+  }
+
+  function setupForm() {
     const isOther = $('#isOther');
     const itemSearch = $('#itemSearch');
     const otherItem = $('#otherItem');
-    isOther.addEventListener('change', ()=>{
+
+    isOther.addEventListener('change', () => {
       const on = isOther.checked;
       itemSearch.style.display = on ? 'none' : 'block';
       otherItem.style.display = on ? 'block' : 'none';
@@ -348,54 +343,84 @@ async function boot(){
       otherItem.value = '';
     });
 
-    // Submit
-    $('#submitBtn').addEventListener('click', async ()=>{
+    $('#submitBtn').addEventListener('click', async () => {
       const msg = $('#msg');
+      msg.textContent = '';
+
       const onOther = isOther.checked;
       const itemName = itemSearch.value.trim();
       const otherName = otherItem.value.trim();
       const qty = $('#qty').value.trim();
       const notes = $('#notes').value.trim();
 
-      const payload = { qty, notes };
+      const data = {
+        qty: qty || '',
+        notes: notes || '',
+        status: 'open',
+        createdBy: 'web-form',
+        source: 'requests.html',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      };
 
-      if (onOther){
-        if (!otherName){ msg.textContent='Please enter the item name.'; return; }
-        payload.otherItemName = otherName;
+      if (onOther) {
+        if (!otherName) {
+          msg.textContent = 'Please enter the item name.';
+          return;
+        }
+        data.otherItemName = otherName;
+        data.catalogId = null;
       } else {
-        const catItem = catRows.find(r => r.ItemName === itemName);
-        if (!catItem){ msg.textContent='Please select a valid item.'; return; }
-        payload.itemId = catItem.ItemID;
+        const catalogItem = state.catalog.find((item) => {
+          const nm = item.itemName || '';
+          const alt = item.itemNameAlt || '';
+          return nm.toLowerCase() === itemName.toLowerCase() || alt.toLowerCase() === itemName.toLowerCase();
+        });
+        if (!catalogItem) {
+          msg.textContent = 'Please select a valid item from the list or choose "other".';
+          return;
+        }
+        data.catalogId = catalogItem.id;
+        data.itemNameSnapshot = catalogItem.itemName || '';
       }
 
-      msg.textContent = 'Submitting...';
-      try{
-        await apiPost('createRequest', payload);
-
-        msg.textContent = 'Request submitted. Refreshing...';
-        // Refresh only the order list, not the whole page
-        const d2 = await apiGet('getRequestPageData');
-        orderRows = d2.orders || [];
-        renderPending();
-        // Clear form
+      msg.textContent = 'Submitting…';
+      try {
+        await addDoc(collection(db, 'requests'), data);
+        msg.textContent = 'Request submitted successfully!';
         itemSearch.value = '';
         otherItem.value = '';
         $('#qty').value = '';
         $('#notes').value = '';
-      }catch(e){
-        console.error(e);
+        await refreshRequests();
+      } catch (err) {
+        console.error('Failed to submit request', err);
         msg.textContent = 'An error occurred submitting the request.';
       }
     });
-
-  }catch(err){
-    console.error(err);
-    $('#pendingTable tbody').innerHTML =
-      `<tr><td colspan="4" style="color:#a00;font-weight:700;">Error loading data. Check your Cloudflare Worker URL & Apps Script.</td></tr>`;
   }
-}
 
-boot();
+  function setupHistoryControls() {
+    document.querySelectorAll('button.hist').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        renderHistory(Number(btn.dataset.days) || 30, currentHistoryQuery);
+      });
+    });
+
+    $('#historySearch').addEventListener('input', (e) => {
+      renderHistory(currentHistoryDays, e.target.value);
+    });
+
+    $('#historyPane').addEventListener('toggle', (e) => {
+      if (e.target.open) {
+        renderHistory(currentHistoryDays, currentHistoryQuery);
+      }
+    });
+  }
+
+  setupForm();
+  setupHistoryControls();
+  loadAllData();
 </script>
 </body>
 </html>
