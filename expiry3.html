@@ -40,12 +40,7 @@
     .chipbar{display:flex;gap:6px;flex-wrap:wrap}
     .viewport { position: relative; }
     .viewport video, .viewport .drawingBuffer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
-    
-    /* FIX: Make Choices.js dropdown wider in the modal */
-    #addItemModal .choices {
-        flex: 1; /* Allows the dropdown to grow */
-        min-width: 0; /* Prevents overflow issues in flexbox */
-    }
+    #addItemModal .choices { flex: 1; min-width: 0; }
 </style>
 </head>
 
@@ -350,6 +345,13 @@
         $('#showAddItemModal').addEventListener('click', () => {
             populateAddItemDropdowns();
             buildExpiryChips();
+
+            // FIX: Set the unit based on the main page's filter
+            const currentUnit = $('#unitSel').value;
+            if (currentUnit !== 'ALL') {
+                $('#addUnitSelect').value = currentUnit;
+            }
+
             modal.style.display = 'block';
         });
         modal.querySelector('.close-btn').addEventListener('click', () => modal.style.display = 'none');
@@ -362,7 +364,7 @@
                 compartment: $('#addCompartmentSelect').value.trim(),
                 expiryDate: new Date(selectedExp),
                 qty: parseInt($('#addQty').value, 10) || 1,
-                status: "", // FIX: Default status is now blank
+                status: "",
                 crewStatus: "",
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp(),
@@ -470,9 +472,8 @@
 
         if (forSearch) {
             $('#searchBox').value = item.itemName;
-            render(); // Trigger a re-render with the search term
+            render();
         } else {
-            // For adding an item
             if (itemSelectChoices) {
                 itemSelectChoices.setChoiceByValue(item.id);
             }
@@ -525,7 +526,6 @@
         $('#searchBox').addEventListener('input', render);
         $('#refreshBtn').addEventListener('click', loadAll);
 
-        // Wire up scanner buttons
         $('#startScanBtn').addEventListener('click', () => startScanner(true));
         $('#scanBarcodeBtn').addEventListener('click', () => startScanner(false));
     }

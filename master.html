@@ -175,23 +175,23 @@
 
     // --- Authentication ---
     $("loading-container").style.display = "block";
+    $("login-container").style.display = "none";
+    $("app-container").style.display = "none";
 
+    // This listener is the single source of truth for the UI state
     onAuthStateChanged(auth, async (user) => {
         if (user) {
             await handleUserSignedIn(user);
         } else {
-            // This will only run if there is no user session at all
             handleUserSignedOut();
         }
     });
 
-    // Handle the redirect result
+    // Process the redirect result from Google Sign-In.
+    // onAuthStateChanged will fire with the updated user state after this completes.
     getRedirectResult(auth).catch((error) => {
-        console.error("Error from getRedirectResult:", error);
-        // If there's an error with the redirect, ensure we show the login page
-        handleUserSignedOut();
+        console.error("Error processing redirect result:", error);
     });
-
 
     async function handleUserSignedIn(user) {
         try {
@@ -210,8 +210,8 @@
             }
         } catch (error) {
             console.error("Error handling signed-in user:", error);
-            $("login-container").innerHTML = `<p style="color:red">Permission Error: Could not read user data. Please check Firestore security rules.</p>`;
-            handleUserSignedOut();
+            alert("Permission Error: Could not read user data. Please check Firestore security rules and ensure your account has the correct role.");
+            signOut(auth);
         }
     }
 
@@ -225,6 +225,7 @@
 
     $("googleLoginBtn").addEventListener("click", () => signInWithRedirect(auth, new GoogleAuthProvider()));
     $("logoutBtn").addEventListener("click", () => signOut(auth));
+
 
     // --- Data Loading ---
     async function loadAllData() {
