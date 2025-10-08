@@ -5,12 +5,15 @@
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>EMS Supplies — Master Admin Dashboard (DIAGNOSTIC)</title>
   <script src="https://kwelch2.github.io/Inventory/quagga.min.js"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
   <style>
     :root{--bg:#f7f7f7;--card:#fff;--b:#ddd;--muted:#666;--ink:#111;--accent:#0a66ff;--bad:#b00020;--ok:#137333}
     *{box-sizing:border-box}
     body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:var(--bg);color:var(--ink)}
     .wrap{max-width:1400px;margin:0 auto;padding:16px}
     #login-container { max-width: 400px; margin: 2rem auto; }
+    #googleLoginBtn { width: 100%; display: flex; justify-content: center; }
+    #googleFallbackBtn { width: 100%; margin-top: 12px; }
     #app-container, #loading-container { display: none; }
     .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap;}
     .auth-info { display: flex; align-items: center; gap: 1rem; }
@@ -50,7 +53,8 @@
   <div id="login-container">
     <div class="card">
         <h2>Admin Login</h2>
-        <button id="googleLoginBtn" class="btn primary" style="width: 100%;">Sign in with Google</button>
+        <div id="googleLoginBtn"></div>
+        <button id="googleFallbackBtn" class="btn primary" style="display:none;">Sign in with Google</button>
         <p id="auth-status-login" class="muted" style="text-align: center; margin-top: 1rem;">Please sign in to continue.</p>
     </div>
   </div>
@@ -151,7 +155,7 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-    import { getAuth, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithRedirect, getRedirectResult } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
+    import { getAuth, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithRedirect, getRedirectResult, signInWithCredential } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
     import { getFirestore, collection, getDocs, doc, setDoc, getDoc, addDoc, updateDoc, deleteDoc, writeBatch } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
     console.log(`[DIAGNOSTIC] Script start @ ${new Date().toLocaleTimeString()}`);
@@ -167,6 +171,7 @@
     };
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
+    const googleProvider = new GoogleAuthProvider();
     const db = getFirestore(app);
 
     // --- State & Helpers ---
@@ -238,13 +243,98 @@
         $("login-container").style.display = "block";
         $("loading-container").style.display = "none";
         appInitialized = false;
+        if (googleIdentityReady && window.google?.accounts?.id) {
+            google.accounts.id.prompt();
+        } else if (!googleIdentityReady) {
+            enableRedirectFallback();
+        }
     }
 
-    $("googleLoginBtn").addEventListener("click", () => {
-        console.log(`[DIAGNOSTIC] Sign-in button clicked @ ${new Date().toLocaleTimeString()}`);
-        signInWithRedirect(auth, new GoogleAuthProvider());
-    });
     $("logoutBtn").addEventListener("click", () => signOut(auth));
+
+    const FALLBACK_MESSAGE = "If the Google One Tap flow does not appear, use the fallback button below.";
+    const GOOGLE_CLIENT_ID = window.GOOGLE_CLIENT_ID || "649560661195-REPLACE_WITH_CLIENT_ID.apps.googleusercontent.com";
+    let googleIdentityReady = false;
+
+    let fallbackHandlerAttached = false;
+
+    function fallbackSignIn() {
+        console.log(`[DIAGNOSTIC] Fallback sign-in button clicked @ ${new Date().toLocaleTimeString()}`);
+        signInWithRedirect(auth, googleProvider);
+    }
+
+    function enableRedirectFallback() {
+        console.warn("[DIAGNOSTIC] Falling back to signInWithRedirect due to missing Google Identity Services client ID or loader failure.");
+        const fallbackBtn = $("googleFallbackBtn");
+        fallbackBtn.style.display = "block";
+        if (!fallbackHandlerAttached) {
+            fallbackBtn.addEventListener("click", fallbackSignIn);
+            fallbackHandlerAttached = true;
+        }
+        if (GOOGLE_CLIENT_ID.includes("REPLACE_WITH_CLIENT_ID")) {
+            $("auth-status-login").textContent = "Google Sign-In is not fully configured. Please provide a Web Client ID in the code.";
+        } else {
+            $("auth-status-login").textContent = `${FALLBACK_MESSAGE}`;
+        }
+    }
+
+    async function handleGoogleCredentialResponse(response) {
+        try {
+            if (!response || !response.credential) {
+                throw new Error("No credential returned from Google Identity Services");
+            }
+            console.log("[DIAGNOSTIC] Received credential from Google Identity Services.");
+            const credential = GoogleAuthProvider.credential(response.credential);
+            await signInWithCredential(auth, credential);
+        } catch (error) {
+            console.error("[DIAGNOSTIC] Google credential handling failed:", error);
+            $("auth-status-login").textContent = "Google sign-in failed. Please try again or use the fallback button.";
+            if (window.google?.accounts?.id) {
+                window.google.accounts.id.prompt();
+            }
+        }
+    }
+
+    function setupGoogleIdentityServices() {
+        if (!GOOGLE_CLIENT_ID || GOOGLE_CLIENT_ID.includes("REPLACE_WITH_CLIENT_ID")) {
+            enableRedirectFallback();
+            return;
+        }
+
+        const init = () => {
+            if (!window.google || !google.accounts || !google.accounts.id) {
+                console.log("[DIAGNOSTIC] Google Identity Services library not yet available. Retrying...");
+                setTimeout(init, 200);
+                return;
+            }
+
+            try {
+                google.accounts.id.initialize({
+                    client_id: GOOGLE_CLIENT_ID,
+                    callback: handleGoogleCredentialResponse,
+                    auto_select: false,
+                    use_fedcm_for_prompt: true,
+                });
+                google.accounts.id.renderButton($("googleLoginBtn"), {
+                    type: "standard",
+                    theme: "filled_blue",
+                    size: "large",
+                    width: 330,
+                });
+                googleIdentityReady = true;
+                $("googleFallbackBtn").style.display = "none";
+                $("auth-status-login").textContent = "Select your Google account to continue.";
+                google.accounts.id.prompt();
+            } catch (error) {
+                console.error("[DIAGNOSTIC] Failed to initialize Google Identity Services:", error);
+                enableRedirectFallback();
+            }
+        };
+
+        init();
+    }
+
+    setupGoogleIdentityServices();
 
 
     // --- Data Loading ---
