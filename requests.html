@@ -4,6 +4,8 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Supply Request – GC EMS</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css"/>
+<script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
 <style>
   :root{--bg:#f7f7f7;--card:#fff;--b:#ddd;--muted:#666}
   body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:var(--bg)}
@@ -38,55 +40,54 @@
     </div>
 
     <div class="card" style="margin-top:16px;">
-        <h2>Pending Requests</h2>
-        <table id="pendingTable">
-          <thead><tr><th>Item / Vendor Pricing</th><th>Qty</th><th>Status</th><th>Notes</th></tr></thead>
-          <tbody><tr><td colspan="4">Loading...</td></tr></tbody>
-        </table>
-    </div>
+    <h2>Pending Requests</h2>
+    <table id="pendingTable">
+      <thead><tr><th>Item / Vendor Pricing</th><th>Qty</th><th>Status</th><th>Notes</th></tr></thead>
+      <tbody><tr><td colspan="4">Loading...</td></tr></tbody>
+    </table>
+  </div>
 
-    <div class="card" style="margin-top:16px;">
-      <details id="requestPane">
-        <summary style="font-size:1.25em;font-weight:bold;">New Request</summary>
-        <div style="margin-top:12px">
-          <label for="itemSearch">Item from Catalog</label>
-          <input id="itemSearch" list="itemsDatalist" placeholder="Search for an item...">
-          <datalist id="itemsDatalist"></datalist>
+<div class="card" style="margin-top:16px;">
+  <details id="requestPane">
+    <summary style="font-size:1.25em;font-weight:bold;">New Request</summary>
+    <div style="margin-top:12px">
+      <label for="itemSearch">Item from Catalog</label>
+      <select id="itemSearch" placeholder="Search for an item..."></select>
 
-          <div style="margin:8px 0;">
-            <input type="checkbox" id="isOther" style="width:auto;">
-            <label for="isOther" style="display:inline;font-weight:normal;">Or, request an item not in the list</label>
-          </div>
+      <div style="margin:8px 0;">
+        <input type="checkbox" id="isOther" style="width:auto;">
+        <label for="isOther" style="display:inline;font-weight:normal;">Or, request an item not in the list</label>
+      </div>
 
-          <input id="otherItem" placeholder="Enter unlisted item name..." style="display:none;">
+      <input id="otherItem" placeholder="Enter unlisted item name..." style="display:none;">
 
-          <label for="qty">Quantity (Optional)</label>
-          <input id="qty" type="text" placeholder="e.g., 1 Box or 5 EA">
+      <label for="qty">Quantity (Optional)</label>
+      <input id="qty" type="text" placeholder="e.g., 1 Box or 5 EA">
 
-          <label for="notes">Notes (Optional)</label>
-          <input id="notes" placeholder="e.g., For Unit 31">
+      <label for="notes">Notes (Optional)</label>
+      <input id="notes" placeholder="e.g., For Unit 31">
 
-          <button id="submitBtn" style="margin-top:12px;">Submit Request</button>
-          <div id="msg" class="muted" style="margin-top:8px;"></div>
-          </div>
-         </details>
-    </div>
+      <button id="submitBtn" style="margin-top:12px;">Submit Request</button>
+      <div id="msg" class="muted" style="margin-top:8px;"></div>
+      </div>
+     </details>
+  </div>
 
-    <div class="card" style="margin-top:16px;">
-        <details id="historyPane">
-          <summary style="font-size:1.5em;font-weight:bold;">View Order History</summary>
-          <div class="toolbar">
-            <button class="btn hist" data-days="30">Last 30 Days</button>
-            <button class="btn hist" data-days="60">Last 60 Days</button>
-            <button class="btn hist" data-days="90">Last 90 Days</button>
-            <input id="historySearch" placeholder="Search history..." style="width:auto;flex:1;">
-          </div>
-          <table id="historyTable">
-            <thead><tr><th>Item</th><th>Received</th><th>Notes</th></tr></thead>
-            <tbody><tr><td colspan="3">Select a date range to view history.</td></tr></tbody>
-          </table>
-        </details>
-    </div>
+  <div class="card" style="margin-top:16px;">
+    <details id="historyPane">
+      <summary style="font-size:1.5em;font-weight:bold;">View Order History</summary>
+      <div class="toolbar">
+        <button class="btn hist active" data-days="30">Last 30 Days</button>
+        <button class="btn hist" data-days="60">Last 60 Days</button>
+        <button class="btn hist" data-days="90">Last 90 Days</button>
+        <input id="historySearch" placeholder="Search history..." style="width:auto;flex:1;">
+      </div>
+      <table id="historyTable">
+        <thead><tr><th>Item</th><th>Received</th><th>Notes</th></tr></thead>
+        <tbody><tr><td colspan="3">Select a date range to view history.</td></tr></tbody>
+      </table>
+    </details>
+  </div>
 </div>
 
 <script type="module">
@@ -109,6 +110,8 @@
     catalogMap: new Map(),
     vendorMap: new Map()
   };
+
+  let itemSelectChoices; // Variable to hold the Choices.js instance
 
   const $ = (sel) => document.querySelector(sel);
   const escapeHtml = (s = "") => String(s).replace(/[&<>"']/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
@@ -138,32 +141,38 @@
       state.vendors = vendorSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
       state.catalogMap = new Map(state.catalog.map((c) => [c.id, c]));
       state.vendorMap = new Map(state.vendors.map((v) => [v.id, v]));
-      populateCatalogDatalist();
+      
+      populateChoices();
       renderPending();
       renderHistory(currentHistoryDays, currentHistoryQuery);
     } catch (err) {
       console.error("Failed to load Firestore data", err);
-      $('#pendingTable tbody').innerHTML = '<tr><td colspan="4" style="color:#a00;font-weight:700;">Error: Could not load data. Please check Firestore security rules.</td></tr>';
+      $('#pendingTable tbody').innerHTML = '<tr><td colspan="4" style="color:#a00;font-weight:700;">Error: Could not load data. Check security rules.</td></tr>';
     }
   }
 
-  function populateCatalogDatalist() {
-    const sorted = [...state.catalog].sort((a, b) => (a.itemName || "").localeCompare(b.itemName || ""));
-    const options = [];
-    sorted.forEach((item) => {
-      const primary = item.itemName || "";
-      const alt = item.itemNameAlt || "";
-      if (primary) options.push(`<option value="${escapeHtml(primary)}"></option>`);
-      if (alt && alt.toLowerCase() !== primary.toLowerCase()) {
-        options.push(`<option value="${escapeHtml(alt)}"></option>`);
-      }
+  function populateChoices() {
+    const itemElement = document.getElementById('itemSearch');
+    if (itemSelectChoices) {
+        itemSelectChoices.destroy();
+    }
+    itemSelectChoices = new Choices(itemElement, {
+        searchEnabled: true,
+        placeholderValue: 'Search for an item...',
+        allowHTML: false,
     });
-    $('#itemsDatalist').innerHTML = options.join("");
+    
+    const options = state.catalog
+        .filter(c => c.isActive !== false)
+        .map(item => ({ value: item.id, label: item.itemName }));
+    itemSelectChoices.setChoices(options, 'value', 'label', true);
   }
 
   function formatRequestName(request) {
-    const catalogItem = request.catalogId ? state.catalogMap.get(request.catalogId) : null;
-    const primary = request.otherItemName || catalogItem?.itemName || catalogItem?.itemNameAlt || "Other Item";
+    // FIXED: Check for both 'catalogId' (new) and 'ItemID' (old)
+    const itemId = request.catalogId || request.ItemID;
+    const catalogItem = itemId ? state.catalogMap.get(itemId) : null;
+    const primary = request.otherItemName || catalogItem?.itemName || "Unknown Item";
     const alt = catalogItem?.itemNameAlt && catalogItem?.itemNameAlt !== primary ? catalogItem.itemNameAlt : "";
     return { primary, alt };
   }
@@ -176,28 +185,21 @@
       return;
     }
     tbody.innerHTML = pending.sort((a, b) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0)).map((request) => {
-      const { primary, alt } = formatRequestName(request);
-      const pricing = (request.catalogId ? state.vendorPricing.filter((vp) => vp.catalogId === request.catalogId) : []).sort((a, b) => (parseFloat(a.unitPrice) || Infinity) - (parseFloat(b.unitPrice) || Infinity));
-      const pricingHTML = pricing.length ? pricing.map(vp => `<tr><td>${escapeHtml(state.vendorMap.get(vp.vendorId)?.name || vp.vendorId || '')}</td><td>${money(vp.unitPrice)}</td><td>${escapeHtml(vp.vendorItemNo || '')}</td></tr>`).join("") : '<tr><td colspan="3">No pricing info</td></tr>';
-      return `
-        <tr>
-          <td>
-            <details>
-              <summary>${escapeHtml(primary)} ${alt ? `<span class="muted">${escapeHtml(alt)}</span>` : ''}</summary>
-              <table class="vendor-table">
-                <thead><tr><th>Vendor</th><th>Price</th><th>Item#</th></tr></thead>
-                <tbody>${pricingHTML}</tbody>
-              </table>
-            </details>
-          </td>
-          <td>${escapeHtml(request.qty || '')}</td>
-          <td class="status-btns">
-            <button class="btn ${String(request.status || 'open').toLowerCase() === 'open' ? 'active' : ''}" data-request-id="${request.id}" data-status="open">Pending</button>
-            <button class="btn ${String(request.status || '').toLowerCase() === 'ordered' ? 'active' : ''}" data-request-id="${request.id}" data-status="ordered">Ordered</button>
-            <button class="btn ${String(request.status || '').toLowerCase() === 'received' ? 'active' : ''}" data-request-id="${request.id}" data-status="received">Received</button>
-          </td>
-          <td>${escapeHtml(request.notes || '')}</td>
-        </tr>`;
+        const { primary, alt } = formatRequestName(request);
+        const itemId = request.catalogId || request.ItemID;
+        const pricing = (itemId ? state.vendorPricing.filter((vp) => vp.catalogId === itemId) : []).sort((a, b) => (parseFloat(a.unitPrice) || Infinity) - (parseFloat(b.unitPrice) || Infinity));
+        const pricingHTML = pricing.length ? pricing.map(vp => `<tr><td>${escapeHtml(state.vendorMap.get(vp.vendorId)?.name || vp.vendorId || '')}</td><td>${money(vp.unitPrice)}</td><td>${escapeHtml(vp.vendorItemNo || '')}</td></tr>`).join("") : '<tr><td colspan="3">No pricing info</td></tr>';
+        return `
+          <tr>
+            <td><details><summary>${escapeHtml(primary)} ${alt ? `<span class="muted">${escapeHtml(alt)}</span>` : ''}</summary><table class="vendor-table"><thead><tr><th>Vendor</th><th>Price</th><th>Item#</th></tr></thead><tbody>${pricingHTML}</tbody></table></details></td>
+            <td>${escapeHtml(request.qty || '')}</td>
+            <td class="status-btns">
+              <button class="btn ${String(request.status || 'open').toLowerCase() === 'open' ? 'active' : ''}" data-request-id="${request.id}" data-status="open">Pending</button>
+              <button class="btn ${String(request.status || '').toLowerCase() === 'ordered' ? 'active' : ''}" data-request-id="${request.id}" data-status="ordered">Ordered</button>
+              <button class="btn ${String(request.status || '').toLowerCase() === 'received' ? 'active' : ''}" data-request-id="${request.id}" data-status="received">Received</button>
+            </td>
+            <td>${escapeHtml(request.notes || '')}</td>
+          </tr>`;
     }).join("");
 
     tbody.querySelectorAll('.status-btns button').forEach((btn) => {
@@ -213,102 +215,93 @@
     const tbody = $('#historyTable tbody');
     const now = new Date();
     const cutoff = new Date(now.getTime() - currentHistoryDays * 24 * 60 * 60 * 1000);
-    cutoff.setHours(0, 0, 0, 0);
-
     const received = state.requests.filter((r) => {
-      const status = String(r.status || '').toLowerCase();
-      if (!['received', 'fulfilled', 'complete', 'completed'].includes(status)) return false;
-      const ts = toDate(r.receivedAt || r.updatedAt || r.createdAt);
-      return ts && ts >= cutoff;
+        const status = String(r.status || '').toLowerCase();
+        if (!['received', 'completed'].includes(status)) return false;
+        const ts = toDate(r.receivedAt || r.updatedAt || r.createdAt);
+        return ts && ts >= cutoff;
     });
-
     const filtered = received.filter((req) => {
-      if (!queryText) return true;
-      const { primary } = formatRequestName(req);
-      const haystack = `${primary} ${req.notes || ''}`.toLowerCase();
-      return haystack.includes(queryText.toLowerCase());
+        if (!queryText) return true;
+        const { primary } = formatRequestName(req);
+        return `${primary} ${req.notes || ''}`.toLowerCase().includes(queryText.toLowerCase());
     });
-
     if (!filtered.length) {
-      tbody.innerHTML = `<tr><td colspan="3">No history in the last ${currentHistoryDays} days.</td></tr>`;
-      return;
+        tbody.innerHTML = `<tr><td colspan="3">No history in the last ${currentHistoryDays} days.</td></tr>`;
+        return;
     }
-
-    tbody.innerHTML = filtered.sort((a, b) => (toDate(a.receivedAt || a.updatedAt || a.createdAt) || 0) - (toDate(b.receivedAt || b.updatedAt || b.createdAt) || 0)).map((req) => {
-      const { primary } = formatRequestName(req);
-      const ts = toDate(req.receivedAt || req.updatedAt || req.createdAt);
-      return `
-        <tr>
-          <td>${escapeHtml(primary)}</td>
-          <td>${ts ? ts.toLocaleDateString() : ''}</td>
-          <td>${escapeHtml(req.notes || '')}</td>
-        </tr>`;
+    tbody.innerHTML = filtered.sort((a, b) => (toDate(b.receivedAt || b.updatedAt) || 0) - (toDate(a.receivedAt || a.updatedAt) || 0)).map((req) => {
+        const { primary } = formatRequestName(req);
+        const ts = toDate(req.receivedAt || req.updatedAt || req.createdAt);
+        return `<tr><td>${escapeHtml(primary)}</td><td>${ts ? ts.toLocaleDateString() : ''}</td><td>${escapeHtml(req.notes || '')}</td></tr>`;
     }).join("");
   }
   
   function setupForm() {
     $('#isOther').addEventListener('change', () => {
-      const on = $('#isOther').checked;
-      $('#itemSearch').style.display = on ? 'none' : 'block';
-      $('#otherItem').style.display = on ? 'block' : 'none';
+        const on = $('#isOther').checked;
+        const choicesEl = document.querySelector('.choices');
+        if (choicesEl) choicesEl.style.display = on ? 'none' : 'block';
+        $('#otherItem').style.display = on ? 'block' : 'none';
+        if (itemSelectChoices) itemSelectChoices.clearInput();
+        $('#otherItem').value = '';
     });
 
     $('#submitBtn').addEventListener('click', async () => {
-      const msg = $('#msg');
-      msg.textContent = '';
+        const msg = $('#msg');
+        const onOther = $('#isOther').checked;
+        const otherName = $('#otherItem').value.trim();
+        const catalogId = itemSelectChoices.getValue(true);
+        
+        const data = {
+            qty: $('#qty').value.trim() || '',
+            notes: $('#notes').value.trim() || '',
+            status: 'Open',
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+            requesterEmail: 'Public Request'
+        };
 
-      const onOther = $('#isOther').checked;
-      const itemName = $('#itemSearch').value.trim();
-      const otherName = $('#otherItem').value.trim();
-      
-      const data = {
-        qty: $('#qty').value.trim() || '',
-        notes: $('#notes').value.trim() || '',
-        status: 'Open',
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-        requesterEmail: 'Public Request'
-      };
+        if (onOther) {
+            if (!otherName) { msg.textContent = 'Please enter the item name.'; return; }
+            data.otherItemName = otherName;
+            data.catalogId = null;
+        } else {
+            if (!catalogId) { msg.textContent = 'Please select a valid item from the list.'; return; }
+            data.catalogId = catalogId;
+        }
 
-      if (onOther) {
-        if (!otherName) { msg.textContent = 'Please enter the item name.'; return; }
-        data.otherItemName = otherName;
-        data.catalogId = null;
-      } else {
-        const catalogItem = state.catalog.find((item) => (item.itemName || '').toLowerCase() === itemName.toLowerCase() || (item.itemNameAlt || '').toLowerCase() === itemName.toLowerCase());
-        if (!catalogItem) { msg.textContent = 'Please select a valid item from the list or choose "other".'; return; }
-        data.catalogId = catalogItem.id;
-      }
-
-      msg.textContent = 'Submitting…';
-      try {
-        await addDoc(collection(db, 'requests'), data);
-        msg.textContent = 'Request submitted successfully!';
-        $('#itemSearch').value = '';
-        $('#otherItem').value = '';
-        $('#qty').value = '';
-        $('#notes').value = '';
-        await loadAllData();
-      } catch (err) {
-        console.error('Failed to submit request', err);
-        msg.textContent = 'An error occurred submitting the request.';
-      }
+        msg.textContent = 'Submitting…';
+        try {
+            await addDoc(collection(db, 'requests'), data);
+            msg.textContent = 'Request submitted successfully!';
+            if (itemSelectChoices) itemSelectChoices.clearInput();
+            $('#otherItem').value = '';
+            $('#qty').value = '';
+            $('#notes').value = '';
+            await loadAllData();
+        } catch (err) {
+            console.error('Failed to submit request', err);
+            msg.textContent = 'An error occurred submitting the request.';
+        }
     });
   }
 
   function setupHistoryControls() {
     document.querySelectorAll('button.hist').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        renderHistory(Number(btn.dataset.days) || 30, currentHistoryQuery);
-      });
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('button.hist').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            renderHistory(Number(btn.dataset.days) || 30, currentHistoryQuery);
+        });
     });
     $('#historySearch').addEventListener('input', (e) => {
-      renderHistory(currentHistoryDays, e.target.value);
+        renderHistory(currentHistoryDays, e.target.value);
     });
     $('#historyPane').addEventListener('toggle', (e) => {
-      if (e.target.open) {
-        renderHistory(currentHistoryDays, currentHistoryQuery);
-      }
+        if (e.target.open) {
+            renderHistory(currentHistoryDays, currentHistoryQuery);
+        }
     });
   }
 
