@@ -103,7 +103,7 @@
 
 <div id="catalogModal" class="modal">
   <div class="modal-content">
-    <div class="modal-header"><h2>Edit Catalog Item</h2></div>
+    <div class="modal-header"><h2 id="catalogModalTitle">Edit Catalog Item</h2></div>
     <div class="modal-body">
       <label>Item Name <input id="editItemName"></label>
       <label>Alt Names <input id="editItemNameAlt"></label>
@@ -133,7 +133,7 @@
 
 <div id="pricingModal" class="modal">
     <div class="modal-content">
-      <div class="modal-header"><h2>Add/Edit Vendor Price</h2></div>
+      <div class="modal-header"><h2 id="pricingModalTitle">Add/Edit Vendor Price</h2></div>
       <div class="modal-body">
         <label>Item <select id="priceItemSelect"></select></label>
         <label>Vendor <select id="priceVendorSelect"></select></label>
@@ -210,12 +210,13 @@
             $("login-container").style.display = "none";
             $("loading-container").style.display = "none";
             
-            applyPermissions(state.userRole);
-
             if (!appInitialized) {
                 appInitialized = true;
                 await boot();
             }
+            
+            applyPermissions(state.userRole);
+
         } catch (error) {
             console.error("Error handling signed-in user:", error);
             alert("Permission Error: Could not read user data. Please check Firestore security rules.");
@@ -467,7 +468,7 @@
         };
         const openModal = (itemId = null) => {
             currentItemId = itemId; const item = itemId ? state.catalog.find(i => i.id === itemId) : {};
-            $('catalogModal h2').textContent = itemId ? 'Edit Catalog Item' : 'Add New Catalog Item';
+            $('catalogModalTitle').textContent = itemId ? 'Edit Catalog Item' : 'Add New Catalog Item';
             $('editItemName').value = item.itemName || ''; $('editItemNameAlt').value = item.itemNameAlt || '';
             $('editCategory').value = item.category || ''; $('editItemRef').value = item.itemRef || '';
             $('editUnit').value = item.unit || ''; $('editPackSize').value = item.packSize || 1;
@@ -503,6 +504,7 @@
             $('priceItemSelect').innerHTML = state.catalog.map(i => `<option value="${i.id}" ${price.catalogId === i.id ? 'selected' : ''}>${i.itemName}</option>`).join('');
             $('priceVendorSelect').innerHTML = state.vendors.map(v => `<option value="${v.id}" ${price.vendorId === v.id ? 'selected' : ''}>${v.name}</option>`).join('');
             $('priceSku').value = price.vendorItemNo || ''; $('priceUnitPrice').value = price.unitPrice || '';
+            $('pricingModalTitle').textContent = priceId ? 'Edit Vendor Price' : 'Add New Price';
             $('pricingModal').style.display = 'flex';
         };
         $('showPricingModal').addEventListener('click', () => openModal());
