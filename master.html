@@ -125,7 +125,7 @@
     </div>
     <div class="modal-footer">
       <button class="btn" id="cancelCatalogEdit">Cancel</button>
-      <button class="btn danger" id="deleteCatalogItem" style="float: left;">Delete</button>
+      <button class="btn danger" id="inactivateCatalogItem" style="float: left;">Inactivate</button>
       <button class="btn primary" id="saveCatalogEdit">Save Changes</button>
     </div>
   </div>
@@ -214,9 +214,6 @@
                 appInitialized = true;
                 await boot();
             }
-            
-            applyPermissions(state.userRole);
-
         } catch (error) {
             console.error("Error handling signed-in user:", error);
             alert("Permission Error: Could not read user data. Please check Firestore security rules.");
@@ -226,9 +223,7 @@
     
     function applyPermissions(role) {
         const isAdmin = (role === 'Admin');
-        document.querySelectorAll('.btn.danger').forEach(btn => {
-            btn.style.display = isAdmin ? 'inline-block' : 'none';
-        });
+        // This function can be expanded later if non-admins need other restrictions
     }
 
     function handleUserSignedOut() {
@@ -473,7 +468,7 @@
             $('editCategory').value = item.category || ''; $('editItemRef').value = item.itemRef || '';
             $('editUnit').value = item.unit || ''; $('editPackSize').value = item.packSize || 1;
             $('editIsActive').checked = item.isActive !== false;
-            $('deleteCatalogItem').style.display = itemId ? 'inline-block' : 'none';
+            $('inactivateCatalogItem').style.display = itemId ? 'inline-block' : 'none';
             renderBarcodeList(item.barcode);
             applyPermissions(state.userRole);
             $('catalogModal').style.display = 'flex';
@@ -490,11 +485,15 @@
         $('saveCatalogEdit').addEventListener('click', async () => {
             const barcodes = Array.from(document.querySelectorAll('#barcodeList .barcode-item-text')).map(el => el.textContent);
             const data = { itemName: $('editItemName').value, itemNameAlt: $('editItemNameAlt').value, category: $('editCategory').value, itemRef: $('editItemRef').value, unit: $('editUnit').value, packSize: Number($('editPackSize').value) || 1, barcode: barcodes, isActive: $('editIsActive').checked, updatedAt: new Date().toISOString() };
-            if (currentItemId) { await updateDoc(doc(db, "catalog", currentItemId), data); } else { await addDoc(collection(db, "catalog"), data); }
+            if (currentItemId) { await updateDoc(doc(db, "catalog", currentItemId), data); } else { data.id = doc(collection(db, "catalog")).id; await setDoc(doc(db, "catalog", data.id), data); }
             $('catalogModal').style.display = 'none'; await loadAllData();
         });
-        $('deleteCatalogItem').addEventListener('click', async () => {
-            if (currentItemId && confirm('Are you sure?')) { await deleteDoc(doc(db, "catalog", currentItemId)); $('catalogModal').style.display = 'none'; await loadAllData(); }
+        $('inactivateCatalogItem').addEventListener('click', async () => {
+            if (currentItemId && confirm('Are you sure you want to mark this item as inactive?')) {
+                await updateDoc(doc(db, "catalog", currentItemId), { isActive: false });
+                $('catalogModal').style.display = 'none';
+                await loadAllData();
+            }
         });
     }
     function setupPricingModal() {
