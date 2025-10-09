@@ -53,7 +53,7 @@
     <div class="card">
         <h2>Admin Login</h2>
         <button id="googleLoginBtn" class="btn primary" style="width: 100%;">Sign in with Google</button>
-        <p id="auth-status-login" class="muted" style="text-align: center; margin-top: 1rem;">Please sign in to continue.</p>
+        <p id="auth-status-login" class="muted" style="text-align: center; margin-top: 1rem;">Please sign in with a gemfireems.org account.</p>
     </div>
   </div>
 
@@ -152,7 +152,6 @@
     import { getAuth, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
     import { getFirestore, collection, getDocs, doc, setDoc, getDoc, addDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp, query, where, orderBy } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
-    // --- Firebase Initialization ---
     const firebaseConfig = {
         apiKey: "AIzaSyD7pMc-AHXb1cApzSfImkWvIjM9iwCoym4",
         authDomain: "supplies-ems.firebaseapp.com",
@@ -165,13 +164,11 @@
     const auth = getAuth(app);
     const db = getFirestore(app);
 
-    // --- State & Helpers ---
     let state = { user: null, userRole: null, catalog: [], vendors: [], pricingAll: [], orders: [], requests: [], units: [], compartments: [], catalogMap: new Map(), vendorMap: new Map(), pricingMap: new Map() };
     const $ = id => document.getElementById(id);
     let appInitialized = false;
     let isScannerActive = false;
 
-    // --- Authentication ---
     $("loading-container").style.display = "block";
 
     onAuthStateChanged(auth, async (user) => {
@@ -185,6 +182,7 @@
     $("googleLoginBtn").addEventListener("click", () => {
         const provider = new GoogleAuthProvider();
         provider.setCustomParameters({
+            'hd': 'gemfireems.org',
             'oauth_web_client_id': '649560661195-m4c2sa1bncop9jnhajpvfum5dal3iqha.apps.googleusercontent.com'
         });
         signInWithPopup(auth, provider).catch((error) => {
@@ -194,22 +192,26 @@
     });
 
     async function handleUserSignedIn(user) {
+        if (!user.email.endsWith('@gemfireems.org')) {
+            alert("Access denied. Please use a valid gemfireems.org email account.");
+            signOut(auth);
+            return;
+        }
+
         try {
             const userDocSnap = await getDoc(doc(db, "users", user.uid));
-            state.userRole = userDocSnap.exists() ? userDocSnap.data().role : "User";
-            if (!userDocSnap.exists()) await setDoc(doc(db, "users", user.uid), { email: user.email, role: "User" });
-            
-            if (!['Admin', 'Staff'].includes(state.userRole)) {
-                alert("You do not have sufficient permissions to access this page.");
-                signOut(auth);
-                return;
+            state.userRole = userDocSnap.exists() ? userDocSnap.data().role : "Staff";
+            if (!userDocSnap.exists()) {
+                await setDoc(doc(db, "users", user.uid), { email: user.email, role: "Staff" });
             }
-
+            
             $("auth-status-main").textContent = `${user.email} (${state.userRole})`;
             $("app-container").style.display = "block";
             $("login-container").style.display = "none";
             $("loading-container").style.display = "none";
             
+            applyPermissions(state.userRole);
+
             if (!appInitialized) {
                 appInitialized = true;
                 await boot();
@@ -219,6 +221,13 @@
             alert("Permission Error: Could not read user data. Please check Firestore security rules.");
             signOut(auth);
         }
+    }
+    
+    function applyPermissions(role) {
+        const isAdmin = (role === 'Admin');
+        document.querySelectorAll('.btn.danger').forEach(btn => {
+            btn.style.display = isAdmin ? 'inline-block' : 'none';
+        });
     }
 
     function handleUserSignedOut() {
@@ -230,16 +239,12 @@
 
     $("logoutBtn").addEventListener("click", () => signOut(auth));
 
-    // --- Data Loading ---
     async function loadAllData() {
         const [catSnap, venSnap, priceSnap, ordSnap, reqSnap, unitSnap, compSnap] = await Promise.all([
-            getDocs(collection(db, "catalog")),
-            getDocs(collection(db, "vendors")),
-            getDocs(collection(db, "vendorPricing")),
-            getDocs(collection(db, "orders")),
+            getDocs(collection(db, "catalog")), getDocs(collection(db, "vendors")),
+            getDocs(collection(db, "vendorPricing")), getDocs(collection(db, "orders")),
             getDocs(query(collection(db, "requests"), where("status", "==", "Open"))),
-            getDocs(collection(db, "units")),
-            getDocs(collection(db, "compartments")),
+            getDocs(collection(db, "units")), getDocs(collection(db, "compartments")),
         ]);
         
         state.catalog = catSnap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -261,7 +266,6 @@
         renderAll();
     }
 
-    // --- Render Functions ---
     function renderAll() {
         renderPlanner(); renderActiveOrders(); renderCatalog(); renderPricing(); renderUnits(); renderCompartments();
     }
@@ -324,40 +328,28 @@
         const query = $('catSearch').value.toLowerCase();
         const filtered = state.catalog.filter(i => (i.itemName || '').toLowerCase().includes(query) || (i.itemNameAlt || '').toLowerCase().includes(query));
         $('kvCatalog').textContent = `(${filtered.length})`;
-        const rows = filtered.map(i => `
-            <tr style="${i.isActive === false ? 'opacity: 0.5; text-decoration: line-through;' : ''}">
-                <td>${i.itemName || ''}</td><td>${i.itemNameAlt || ''}</td><td>${i.category || ''}</td><td>${i.itemRef || ''}</td>
-                <td><button class="btn" data-edit-id="${i.id}">Edit</button></td>
-            </tr>`).join('');
+        const rows = filtered.map(i => `<tr style="${i.isActive === false ? 'opacity: 0.5; text-decoration: line-through;' : ''}"><td>${i.itemName || ''}</td><td>${i.itemNameAlt || ''}</td><td>${i.category || ''}</td><td>${i.itemRef || ''}</td><td><button class="btn" data-edit-id="${i.id}">Edit</button></td></tr>`).join('');
         $('catalogTable').innerHTML = `<table><thead><tr><th>Name</th><th>Alt Name</th><th>Category</th><th>Ref #</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table>`;
     }
     
     function renderPricing() {
         $('kvPricing').textContent = `(${state.pricingAll.length})`;
-        const rows = state.pricingAll.map(p => `
-            <tr>
-                <td>${state.catalogMap.get(p.catalogId) || `ID: ${p.catalogId}`}</td>
-                <td>${state.vendorMap.get(p.vendorId) || `ID: ${p.vendorId}`}</td>
-                <td>${p.vendorItemNo || ''}</td>
-                <td>$${Number(p.unitPrice || 0).toFixed(2)}</td>
-                <td><button class="btn" data-edit-price-id="${p.id}">Edit</button></td>
-            </tr>`).join('');
+        const rows = state.pricingAll.map(p => `<tr><td>${state.catalogMap.get(p.catalogId) || ''}</td><td>${state.vendorMap.get(p.vendorId) || ''}</td><td>${p.vendorItemNo || ''}</td><td>$${Number(p.unitPrice || 0).toFixed(2)}</td><td><button class="btn" data-edit-price-id="${p.id}">Edit</button></td></tr>`).join('');
         $('pricingTable').innerHTML = `<table><thead><tr><th>Item</th><th>Vendor</th><th>SKU</th><th>Price</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table>`;
     }
 
     function renderUnits() {
         $('kvUnits').textContent = `(${state.units.length})`;
-        const rows = state.units.map(u => `<tr><td>${u.name}</td><td>${u.id}</td><td><button class="btn" data-delete-unit-id="${u.id}">Delete</button></td></tr>`).join('');
+        const rows = state.units.map(u => `<tr><td>${u.name}</td><td>${u.id}</td><td><button class="btn danger" data-delete-unit-id="${u.id}">Delete</button></td></tr>`).join('');
         $('unitsTable').innerHTML = `<div class="row"><input id="newUnitName" placeholder="New Unit Name"><button id="addUnitBtn" class="btn primary">Add Unit</button></div><table><thead><tr><th>Name</th><th>ID</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table>`;
     }
 
     function renderCompartments() {
         $('kvCompartments').textContent = `(${state.compartments.length})`;
-        const rows = state.compartments.map(c => `<tr><td>${c.name}</td><td><button class="btn" data-delete-comp-id="${c.id}">Delete</button></td></tr>`).join('');
+        const rows = state.compartments.map(c => `<tr><td>${c.name}</td><td><button class="btn danger" data-delete-comp-id="${c.id}">Delete</button></td></tr>`).join('');
         $('compartmentsTable').innerHTML = `<div class="row"><input id="newCompName" placeholder="New Compartment Name"><button id="addCompBtn" class="btn primary">Add Compartment</button></div><table><thead><tr><th>Name</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table>`;
     }
 
-    // --- Barcode Scanner ---
     function startScanner(targetInput, viewportElement) {
         if (isScannerActive) {
             Quagga.stop();
@@ -366,265 +358,180 @@
             return;
         }
         viewportElement.style.display = 'block';
-        Quagga.init({
-            inputStream: { name: "Live", type: "LiveStream", target: viewportElement, constraints: { facingMode: "environment" } },
-            decoder: { readers: ["code_128_reader", "ean_reader", "upc_reader"] }
-        }, (err) => {
-            if (err) {
-                console.error("Quagga Error:", err);
-                viewportElement.style.display = 'none';
-                return;
-            }
+        Quagga.init({ inputStream: { name: "Live", type: "LiveStream", target: viewportElement, constraints: { facingMode: "environment" } }, decoder: { readers: ["code_128_reader", "ean_reader", "upc_reader"] }}, (err) => {
+            if (err) { console.error("Quagga Error:", err); viewportElement.style.display = 'none'; return; }
             Quagga.start();
             isScannerActive = true;
         });
-
         Quagga.onDetected(result => {
             Quagga.stop();
             isScannerActive = false;
             viewportElement.style.display = 'none';
-            if (result && result.codeResult) {
-                targetInput.value = result.codeResult.code;
-            }
+            if (result && result.codeResult) targetInput.value = result.codeResult.code;
         });
     }
-
-    // --- Modals & Actions ---
+    
     function setupAllModalsAndActions() {
-        setupCatalogModal();
-        setupPricingModal();
-        setupRequestActions();
-        setupUnitActions();
-        setupCompartmentActions();
+        setupCatalogModal(); setupPricingModal();
+        $('createOrderBtn').addEventListener('click', async () => {
+            const selectedIds = [...document.querySelectorAll('.request-checkbox:checked')].map(cb => cb.dataset.requestId);
+            if (selectedIds.length === 0) return alert('No requests selected.');
+
+            const requestsToProcess = state.requests.filter(r => selectedIds.includes(r.id));
+            const itemsByVendor = {};
+
+            for (const req of requestsToProcess) {
+                const prices = (state.pricingMap.get(req.catalogId) || []).sort((a,b) => a.unitPrice - b.unitPrice);
+                const bestPrice = prices[0];
+                if (!bestPrice) {
+                    alert(`No pricing info for ${state.catalogMap.get(req.catalogId)}. Cannot create order.`);
+                    return;
+                }
+                const vendorId = bestPrice.vendorId;
+                if (!itemsByVendor[vendorId]) {
+                    itemsByVendor[vendorId] = [];
+                }
+                itemsByVendor[vendorId].push({
+                    catalogId: req.catalogId,
+                    qty: req.qty,
+                    vendorItemNo: bestPrice.vendorItemNo,
+                    unitPrice: bestPrice.unitPrice,
+                    status: ''
+                });
+            }
+
+            const batch = writeBatch(db);
+            for (const vendorId in itemsByVendor) {
+                const orderRef = doc(collection(db, "orders"));
+                batch.set(orderRef, {
+                    vendorId: vendorId,
+                    createdAt: serverTimestamp(),
+                    status: 'Pending',
+                    items: itemsByVendor[vendorId]
+                });
+            }
+            
+            selectedIds.forEach(reqId => {
+                const reqRef = doc(db, "requests", reqId);
+                batch.update(reqRef, { status: 'Ordered' });
+            });
+
+            await batch.commit();
+            alert('Orders created successfully!');
+            await loadAllData();
+        });
+
+        $('activeOrders').addEventListener('change', async (e) => {
+            const target = e.target;
+            const { orderId, itemId } = target.dataset;
+
+            if (orderId && itemId && target.tagName === 'SELECT') {
+                const newStatus = target.value;
+                const order = state.orders.find(o => o.id === orderId);
+                const item = order.items.find(i => i.catalogId === itemId);
+                item.status = newStatus;
+                await updateDoc(doc(db, "orders", orderId), { items: order.items });
+            } else if (orderId && target.classList.contains('order-ref')) {
+                await updateDoc(doc(db, "orders", orderId), { referenceNumber: target.value });
+            }
+        });
+        
+        $('activeOrders').addEventListener('click', async (e) => {
+            const completeOrderId = e.target.dataset.completeOrderId;
+            if(completeOrderId) {
+                if (confirm("Are you sure you want to mark this entire order as Completed?")) {
+                    await updateDoc(doc(db, "orders", completeOrderId), { status: 'Completed' });
+                    await loadAllData();
+                }
+            }
+        });
 
         $('app-container').addEventListener('click', async (e) => {
-            const target = e.target.closest('button');
-            if (!target) return;
-
-            const { deleteUnitId, deleteCompId, orderId, status } = target.dataset;
-
-            if (deleteUnitId) {
-                if (confirm(`Are you sure you want to delete unit ${deleteUnitId}?`)) {
-                    await deleteDoc(doc(db, "units", deleteUnitId));
-                    await loadAllData();
-                }
-            }
-            if (deleteCompId) {
-                if (confirm(`Are you sure you want to delete compartment ${deleteCompId}?`)) {
-                    await deleteDoc(doc(db, "compartments", deleteCompId));
-                    await loadAllData();
-                }
-            }
-            if (orderId && status) {
-                await updateDoc(doc(db, "orders", orderId), { status });
-                await loadAllData();
-            }
+            const target = e.target.closest('button'); if (!target) return;
+            const { deleteUnitId, deleteCompId } = target.dataset;
+            if (deleteUnitId) { if (confirm(`Delete unit ${deleteUnitId}?`)) { await deleteDoc(doc(db, "units", deleteUnitId)); await loadAllData(); }}
+            if (deleteCompId) { if (confirm(`Delete compartment ${deleteCompId}?`)) { await deleteDoc(doc(db, "compartments", deleteCompId)); await loadAllData(); }}
         });
+        setupUnitActions(); setupCompartmentActions();
     }
-
+    
     function setupCatalogModal() {
-        let currentItemId = null;
-        const barcodeList = $('barcodeList');
-        
+        let currentItemId = null; const barcodeList = $('barcodeList');
         const renderBarcodeList = (barcodes = []) => {
-            barcodeList.innerHTML = '';
-            const barcodeArray = Array.isArray(barcodes) ? barcodes : (barcodes ? [barcodes] : []);
+            barcodeList.innerHTML = ''; const barcodeArray = Array.isArray(barcodes) ? barcodes : (barcodes ? [barcodes] : []);
             barcodeArray.forEach(code => {
-                const item = document.createElement('div');
-                item.className = 'barcode-item';
+                const item = document.createElement('div'); item.className = 'barcode-item';
                 item.innerHTML = `<span class="barcode-item-text">${code}</span><button class="btn danger" style="padding: 2px 6px;">&times;</button>`;
                 barcodeList.appendChild(item);
             });
         };
-
         const openModal = (itemId = null) => {
-            currentItemId = itemId;
-            const item = itemId ? state.catalog.find(i => i.id === itemId) : {};
-            
-            $('catalogModal').querySelector('h2').textContent = itemId ? 'Edit Catalog Item' : 'Add New Catalog Item';
-            $('editItemName').value = item.itemName || '';
-            $('editItemNameAlt').value = item.itemNameAlt || '';
-            $('editCategory').value = item.category || '';
-            $('editItemRef').value = item.itemRef || '';
-            $('editUnit').value = item.unit || '';
-            $('editPackSize').value = item.packSize || 1;
+            currentItemId = itemId; const item = itemId ? state.catalog.find(i => i.id === itemId) : {};
+            $('catalogModal h2').textContent = itemId ? 'Edit Catalog Item' : 'Add New Catalog Item';
+            $('editItemName').value = item.itemName || ''; $('editItemNameAlt').value = item.itemNameAlt || '';
+            $('editCategory').value = item.category || ''; $('editItemRef').value = item.itemRef || '';
+            $('editUnit').value = item.unit || ''; $('editPackSize').value = item.packSize || 1;
             $('editIsActive').checked = item.isActive !== false;
             $('deleteCatalogItem').style.display = itemId ? 'inline-block' : 'none';
-            
             renderBarcodeList(item.barcode);
-
+            applyPermissions(state.userRole);
             $('catalogModal').style.display = 'flex';
         };
-
         $('showCatalogModal').addEventListener('click', () => openModal());
-        $('catalogTable').addEventListener('click', e => {
-            const id = e.target.dataset.editId;
-            if (id) openModal(id);
-        });
-        $('cancelCatalogEdit').addEventListener('click', () => {
-            if (isScannerActive) Quagga.stop();
-            isScannerActive = false;
-            $('barcodeScannerViewport').style.display = 'none';
-            $('catalogModal').style.display = 'none';
-        });
-
+        $('catalogTable').addEventListener('click', e => { const id = e.target.dataset.editId; if (id) openModal(id); });
+        $('cancelCatalogEdit').addEventListener('click', () => { if (isScannerActive) Quagga.stop(); isScannerActive = false; $('barcodeScannerViewport').style.display = 'none'; $('catalogModal').style.display = 'none'; });
         $('addNewBarcodeBtn').addEventListener('click', () => {
             const newCode = $('newBarcode').value.trim();
-            if (newCode) {
-                const item = document.createElement('div');
-                item.className = 'barcode-item';
-                item.innerHTML = `<span class="barcode-item-text">${newCode}</span><button class="btn danger" style="padding: 2px 6px;">&times;</button>`;
-                barcodeList.appendChild(item);
-                $('newBarcode').value = '';
-            }
+            if (newCode) { const item = document.createElement('div'); item.className = 'barcode-item'; item.innerHTML = `<span class="barcode-item-text">${newCode}</span><button class="btn danger" style="padding: 2px 6px;">&times;</button>`; barcodeList.appendChild(item); $('newBarcode').value = ''; }
         });
-
-        barcodeList.addEventListener('click', (e) => {
-            if (e.target.tagName === 'BUTTON') {
-                e.target.parentElement.remove();
-            }
-        });
-
-        $('scanNewBarcodeBtn').addEventListener('click', () => {
-            startScanner($('newBarcode'), $('barcodeScannerViewport'));
-        });
-        
+        barcodeList.addEventListener('click', (e) => { if (e.target.tagName === 'BUTTON') e.target.parentElement.remove(); });
+        $('scanNewBarcodeBtn').addEventListener('click', () => startScanner($('newBarcode'), $('barcodeScannerViewport')));
         $('saveCatalogEdit').addEventListener('click', async () => {
-            const barcodeElements = document.querySelectorAll('#barcodeList .barcode-item-text');
-            const barcodes = Array.from(barcodeElements).map(el => el.textContent);
-
-            const data = {
-                itemName: $('editItemName').value,
-                itemNameAlt: $('editItemNameAlt').value,
-                category: $('editCategory').value,
-                itemRef: $('editItemRef').value,
-                unit: $('editUnit').value,
-                packSize: Number($('editPackSize').value) || 1,
-                barcode: barcodes,
-                isActive: $('editIsActive').checked,
-                updatedAt: new Date().toISOString()
-            };
-
-            if (currentItemId) { // Update
-                await updateDoc(doc(db, "catalog", currentItemId), data);
-            } else { // Create
-                await addDoc(collection(db, "catalog"), data);
-            }
-            $('catalogModal').style.display = 'none';
-            await loadAllData();
+            const barcodes = Array.from(document.querySelectorAll('#barcodeList .barcode-item-text')).map(el => el.textContent);
+            const data = { itemName: $('editItemName').value, itemNameAlt: $('editItemNameAlt').value, category: $('editCategory').value, itemRef: $('editItemRef').value, unit: $('editUnit').value, packSize: Number($('editPackSize').value) || 1, barcode: barcodes, isActive: $('editIsActive').checked, updatedAt: new Date().toISOString() };
+            if (currentItemId) { await updateDoc(doc(db, "catalog", currentItemId), data); } else { await addDoc(collection(db, "catalog"), data); }
+            $('catalogModal').style.display = 'none'; await loadAllData();
         });
-
         $('deleteCatalogItem').addEventListener('click', async () => {
-            if (currentItemId && confirm('Are you sure you want to delete this item? This cannot be undone.')) {
-                await deleteDoc(doc(db, "catalog", currentItemId));
-                $('catalogModal').style.display = 'none';
-                await loadAllData();
-            }
+            if (currentItemId && confirm('Are you sure?')) { await deleteDoc(doc(db, "catalog", currentItemId)); $('catalogModal').style.display = 'none'; await loadAllData(); }
         });
     }
-
     function setupPricingModal() {
         let currentPriceId = null;
-
         const openModal = (priceId = null) => {
-            currentPriceId = priceId;
-            const price = priceId ? state.pricingAll.find(p => p.id === priceId) : {};
-
+            currentPriceId = priceId; const price = priceId ? state.pricingAll.find(p => p.id === priceId) : {};
             $('priceItemSelect').innerHTML = state.catalog.map(i => `<option value="${i.id}" ${price.catalogId === i.id ? 'selected' : ''}>${i.itemName}</option>`).join('');
             $('priceVendorSelect').innerHTML = state.vendors.map(v => `<option value="${v.id}" ${price.vendorId === v.id ? 'selected' : ''}>${v.name}</option>`).join('');
-            $('priceSku').value = price.vendorItemNo || '';
-            $('priceUnitPrice').value = price.unitPrice || '';
+            $('priceSku').value = price.vendorItemNo || ''; $('priceUnitPrice').value = price.unitPrice || '';
             $('pricingModal').style.display = 'flex';
         };
-
         $('showPricingModal').addEventListener('click', () => openModal());
-        $('pricingTable').addEventListener('click', e => {
-            const id = e.target.dataset.editPriceId;
-            if (id) openModal(id);
-        });
+        $('pricingTable').addEventListener('click', e => { const id = e.target.dataset.editPriceId; if (id) openModal(id); });
         $('cancelPricingEdit').addEventListener('click', () => $('pricingModal').style.display = 'none');
-
         $('savePricingEdit').addEventListener('click', async () => {
-            const data = {
-                catalogId: $('priceItemSelect').value,
-                vendorId: $('priceVendorSelect').value,
-                vendorItemNo: $('priceSku').value,
-                unitPrice: Number($('priceUnitPrice').value) || 0,
-            };
-            if (currentPriceId) {
-                await updateDoc(doc(db, "vendorPricing", currentPriceId), data);
-            } else {
-                await addDoc(collection(db, "vendorPricing"), data);
-            }
-            $('pricingModal').style.display = 'none';
-            await loadAllData();
+            const data = { catalogId: $('priceItemSelect').value, vendorId: $('priceVendorSelect').value, vendorItemNo: $('priceSku').value, unitPrice: Number($('priceUnitPrice').value) || 0 };
+            if (currentPriceId) { await updateDoc(doc(db, "vendorPricing", currentPriceId), data); } else { await addDoc(collection(db, "vendorPricing"), data); }
+            $('pricingModal').style.display = 'none'; await loadAllData();
         });
     }
-
     function setupUnitActions() {
         $('unitsTable').addEventListener('click', async e => {
-            if (e.target.id === 'addUnitBtn') {
-                const name = $('newUnitName').value.trim();
-                if (name) {
-                    await addDoc(collection(db, "units"), { name });
-                    $('newUnitName').value = '';
-                    await loadAllData();
-                }
-            }
+            if (e.target.id === 'addUnitBtn') { const name = $('newUnitName').value.trim(); if (name) { await addDoc(collection(db, "units"), { name }); $('newUnitName').value = ''; await loadAllData(); }}
         });
     }
-
     function setupCompartmentActions() {
         $('compartmentsTable').addEventListener('click', async e => {
-            if (e.target.id === 'addCompBtn') {
-                const name = $('newCompName').value.trim();
-                if (name) {
-                    await addDoc(collection(db, "compartments"), { name });
-                    $('newCompName').value = '';
-                    await loadAllData();
-                }
-            }
+            if (e.target.id === 'addCompBtn') { const name = $('newCompName').value.trim(); if (name) { await addDoc(collection(db, "compartments"), { name }); $('newCompName').value = ''; await loadAllData(); }}
         });
     }
-
-    function setupRequestActions() {
-        $('batchOrderBtn').addEventListener('click', async () => {
-            const selectedIds = [...document.querySelectorAll('.request-checkbox:checked')].map(cb => cb.dataset.requestId);
-            if (selectedIds.length === 0) return alert('No requests selected.');
-
-            const vendorId = prompt("Enter the Vendor ID for this new order:");
-            if (!vendorId || !state.vendorMap.has(vendorId)) return alert('Invalid Vendor ID.');
-
-            const notes = prompt("Enter any notes for this order:");
-
-            try {
-                const newOrderRef = await addDoc(collection(db, "orders"), {
-                    vendorId, notes, status: 'pending', orderDate: new Date()
-                });
-                const batch = writeBatch(db);
-                selectedIds.forEach(id => {
-                    batch.update(doc(db, "requests", id), { status: 'batched', batchedIntoOrderId: newOrderRef.id });
-                });
-                await batch.commit();
-                alert('Order created successfully!');
-                await loadAllData();
-            } catch (e) {
-                console.error("Error creating order:", e);
-                alert("Failed to create order.");
-            }
-        });
-    }
-
-    // --- Initial Bootstrapping ---
+    
     function mountTabs() {
         const TABS = ['Order Planner', 'Active Orders', 'Catalog', 'Pricing', 'Units', 'Compartments'];
         $('tabs').innerHTML = TABS.map(t => `<button class="tab" data-tab="${t.toLowerCase().replace(' ', '_')}">${t}</button>`).join('');
         $('tabs').addEventListener('click', (ev) => {
-            const tabId = ev.target.dataset.tab;
-            if (!tabId) return;
+            const tabId = ev.target.dataset.tab; if (!tabId) return;
             document.querySelectorAll('.tab, .panel').forEach(el => el.classList.remove('active'));
-            ev.target.classList.add('active');
-            $(`panel-${tabId}`).classList.add('active');
+            ev.target.classList.add('active'); $(`panel-${tabId}`).classList.add('active');
         });
         $('tabs').querySelector('[data-tab="order_planner"]').click();
     }
@@ -632,9 +539,8 @@
         mountTabs();
         setupAllModalsAndActions();
         
-        ['Requests', 'Orders', 'Catalog', 'Pricing', 'Units', 'Compartments'].forEach(name => {
-            const btn = $(`refresh${name}`);
-            if (btn) btn.addEventListener('click', loadAllData);
+        ['refreshOrders', 'refreshCatalog', 'refreshPricing', 'refreshUnits', 'refreshCompartments'].forEach(id => {
+            const btn = $(id); if (btn) btn.addEventListener('click', loadAllData);
         });
 
         $('catSearch').addEventListener('input', renderCatalog);

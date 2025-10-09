@@ -45,61 +45,69 @@
 </head>
 
 <body>
-<div class="wrap">
-  <div class="card">
-    <h1>Expiring Supplies</h1>
-    <div class="muted">Now backed by Firebase Firestore – no proxy or login required.</div>
-    <div class="toolbar">
-      <label>Window <select id="rangeSel"><option value="30">30 days</option><option value="60">60 days</option><option value="90" selected>90 days</option><option value="ALL">All</option></select></label>
-      <label>Unit <select id="unitSel"><option value="ALL">ALL</option></select></label>
-      <div style="display:flex;gap:8px;align-items:center;flex:1;">
-        <button class="btn" id="startScanBtn" title="Scan Barcode to Search">
-          <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z'/%3E%3C/svg%3E" alt="Barcode Scanner" style="height:20px;width:20px;">
-        </button>
-        <input id="searchBox" placeholder="Search item, compartment…" style="flex:1;"/>
-      </div>
-      <div class="toolbar-actions"><button class="btn" id="refreshBtn">Refresh</button><button class="btn" id="showAddItemModal">+ Add Item</button></div>
-      <span id="count" class="muted"></span>
+<div id="password-modal" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); display:flex; align-items:center; justify-content:center; z-index:2000;">
+    <div style="background:white; padding:2rem; border-radius:8px; text-align:center;">
+        <h3>Enter Passcode</h3>
+        <input type="password" id="passcodeInput" style="margin-bottom:1rem;"/>
+        <button id="passwordSubmit">Submit</button>
+        <p id="password-error" style="color:red; display:none;">Incorrect Passcode</p>
     </div>
-  </div>
+</div>
 
-  <div class="card" style="margin-top: 1rem;">
-    <div class="table-container">
-      <div id="content"><p class="muted">Loading expiring items...</p></div>
+<div class="wrap" style="display:none;">
+    <div class="card">
+        <h1>Expiring Supplies</h1>
+        <div class="muted">Now backed by Firebase Firestore – no proxy or login required.</div>
+        <div class="toolbar">
+            <label>Window <select id="rangeSel"><option value="30">30 days</option><option value="60">60 days</option><option value="90" selected>90 days</option><option value="ALL">All</option></select></label>
+            <label>Unit <select id="unitSel"><option value="ALL">ALL</option></select></label>
+            <div style="display:flex;gap:8px;align-items:center;flex:1;">
+                <button class="btn" id="startScanBtn" title="Scan Barcode to Search">
+                    <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z'/%3E%3C/svg%3E" alt="Barcode Scanner" style="height:20px;width:20px;">
+                </button>
+                <input id="searchBox" placeholder="Search item, compartment…" style="flex:1;"/>
+            </div>
+            <div class="toolbar-actions"><button class="btn" id="refreshBtn">Refresh</button><button class="btn" id="showAddItemModal">+ Add Item</button></div>
+            <span id="count" class="muted"></span>
+        </div>
     </div>
-  </div>
+    <div class="card" style="margin-top: 1rem;">
+        <div class="table-container">
+            <div id="content"><p class="muted">Loading expiring items...</p></div>
+        </div>
+    </div>
 </div>
 
 <div id="addItemModal" class="modal">
     <div class="modal-content">
-      <span class="close-btn">&times;</span>
-      <h3>Add Item to Inventory</h3>
-      <div id="interactive" class="viewport" style="display:none; width:100%; height:240px; border:1px solid #ccc; background:#000; margin-bottom:1rem;"></div>
-      <label>Item</label>
-      <div style="display:flex; gap:8px; align-items:center;">
-          <select id="addItemSelect"></select>
-          <button id="scanBarcodeBtn" class="btn" title="Scan Barcode to Select Item" style="flex-shrink:0;">
-              <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z'/%3E%3C/svg%3E" alt="Barcode Scanner" style="height:20px;width:20px;">
-          </button>
-      </div>
-      <label style="margin-top: 10px;">Unit</label>
-      <select id="addUnitSelect"><option value="">Select...</option></select>
-      <label>Compartment</label>
-      <select id="addCompartmentSelect"><option value="">Select…</option><option>Wall</option><option>Bag</option><option>Supply RM</option><option>Clear Container</option><option>BLS Bag</option><option>ALS Bag</option><option>Other</option></select>
-      <div style="margin-top: 10px;">
-          <label>Expiry Month</label>
-          <div id="addExpiryChips" class="chipbar"></div>
-          <div id="customExpiryWrap" style="display:none; margin-top: 8px;">
-              <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-                  <label>Month <input id="customMonth" type="month"></label>
-                  <label>Exact date <input id="customDate" type="date"></label>
-                  <button id="applyCustomExp" class="btn">Apply</button>
-              </div>
-          </div>
-      </div>
-      <label>Quantity</label>
-      <input id="addQty" type="number" min="1" step="1" value="1"/>
-      <button id="saveNewItemBtn" class="btn" style="width:100%;margin-top:12px;">Save Item</button>
+        <span class="close-btn">&times;</span>
+        <h3>Add Item to Inventory</h3>
+        <div id="interactive" class="viewport" style="display:none; width:100%; height:240px; border:1px solid #ccc; background:#000; margin-bottom:1rem;"></div>
+        <label>Item</label>
+        <div style="display:flex; gap:8px; align-items:center;">
+            <select id="addItemSelect"></select>
+            <button id="scanBarcodeBtn" class="btn" title="Scan Barcode to Select Item" style="flex-shrink:0;">
+                <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z'/%3E%3C/svg%3E" alt="Barcode Scanner" style="height:20px;width:20px;">
+            </button>
+        </div>
+        <label style="margin-top: 10px;">Unit</label>
+        <select id="addUnitSelect"><option value="">Select...</option></select>
+        <label>Compartment</label>
+        <select id="addCompartmentSelect"><option value="">Select…</option><option>Wall</option><option>Bag</option><option>Supply RM</option><option>Clear Container</option><option>BLS Bag</option><option>ALS Bag</option><option>Other</option></select>
+        <div style="margin-top: 10px;">
+            <label>Expiry Month</label>
+            <div id="addExpiryChips" class="chipbar"></div>
+            <div id="customExpiryWrap" style="display:none; margin-top: 8px;">
+                <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                    <label>Month <input id="customMonth" type="month"></label>
+                    <label>Exact date <input id="customDate" type="date"></label>
+                    <button id="applyCustomExp" class="btn">Apply</button>
+                </div>
+            </div>
+        </div>
+        <label>Quantity</label>
+        <input id="addQty" type="number" min="1" step="1" value="1"/>
+        <button id="saveNewItemBtn" class="btn" style="width:100%;margin-top:12px;">Save Item</button>
     </div>
 </div>
 
@@ -109,7 +117,6 @@
     <div id="interactive-search-viewport" class="viewport" style="width:100%; height:100%;"></div>
   </div>
 </div>
-
 
 <div id="noteModal">
   <div class="box">
@@ -125,6 +132,32 @@
 </div>
 
 <script type="module">
+    const SHARED_PASSCODE = "ems1"; // Change this password
+    const passwordModal = document.getElementById('password-modal');
+    const passwordInput = document.getElementById('passcodeInput');
+    const passwordSubmit = document.getElementById('passwordSubmit');
+    const passwordError = document.getElementById('password-error');
+    const mainWrap = document.querySelector('.wrap');
+
+    function checkAuth() {
+        if (sessionStorage.getItem('isAuthenticated') === 'true') {
+            passwordModal.style.display = 'none';
+            mainWrap.style.display = 'block';
+            init(); 
+        } else {
+            passwordModal.style.display = 'flex';
+        }
+    }
+
+    passwordSubmit.addEventListener('click', () => {
+        if (passwordInput.value === SHARED_PASSCODE) {
+            sessionStorage.setItem('isAuthenticated', 'true');
+            checkAuth();
+        } else {
+            passwordError.style.display = 'block';
+        }
+    });
+    
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
     import { getFirestore, collection, getDocs, addDoc, updateDoc, doc, serverTimestamp, query, where } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
@@ -135,7 +168,6 @@
         storageBucket: "supplies-ems.firebasestorage.app",
         messagingSenderId: "649560661195",
         appId: "1:649560661195:web:f389f3e620c0c36559cf4e",
-        measurementId: "G-EN8MDYD571"
     };
 
     const app = initializeApp(firebaseConfig);
@@ -345,13 +377,10 @@
         $('#showAddItemModal').addEventListener('click', () => {
             populateAddItemDropdowns();
             buildExpiryChips();
-
-            // FIX: Set the unit based on the main page's filter
             const currentUnit = $('#unitSel').value;
             if (currentUnit !== 'ALL') {
                 $('#addUnitSelect').value = currentUnit;
             }
-
             modal.style.display = 'block';
         });
         modal.querySelector('.close-btn').addEventListener('click', () => modal.style.display = 'none');
@@ -459,7 +488,7 @@
     }
 
     async function handleBarcode(code, forSearch) {
-        const q = query(collection(db, "catalog"), where("barcode", "==", code));
+        const q = query(collection(db, "catalog"), where("barcode", "array-contains", code));
         const querySnapshot = await getDocs(q);
         
         if (querySnapshot.empty) {
@@ -530,7 +559,8 @@
         $('#scanBarcodeBtn').addEventListener('click', () => startScanner(false));
     }
     
-    init();
+    checkAuth();
+
 </script>
 </body>
 </html>
