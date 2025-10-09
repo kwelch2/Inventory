@@ -15,7 +15,7 @@
     body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:var(--bg)}
     .wrap{max-width:1100px;margin:0 auto;padding:16px}
     .card{background:var(--card);border:1px solid var(--b);border-radius:12px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
-    h1{margin:0 0 6px}
+    h1, h2{margin:0 0 6px}
     .muted{color:var(--muted);font-size:.9rem}
     .toolbar{display: flex;flex-wrap: wrap;gap: 10px;align-items: center;margin-top: 10px;}
     .toolbar-actions {display: flex;gap: 10px;margin-left: auto;}
@@ -41,6 +41,9 @@
     .viewport { position: relative; }
     .viewport video, .viewport .drawingBuffer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
     #addItemModal .choices { flex: 1; min-width: 0; }
+    .nav-links { float: right; font-size: 0.9rem; }
+    .nav-links a { color: #007bff; text-decoration: none; margin-left: 1rem; }
+    .tag { display: inline-block; font-size: 0.8rem; padding: 3px 6px; border-radius: 999px; background: #eee; }
 </style>
 </head>
 
@@ -56,8 +59,12 @@
 
 <div class="wrap" style="display:none;">
     <div class="card">
+        <div class="nav-links">
+            <a href="requests.html">Go to Requests</a>
+            <a href="master.html">Go to Admin</a>
+        </div>
         <h1>Expiring Supplies</h1>
-        <div class="muted">Now backed by Firebase Firestore – no proxy or login required.</div>
+        <div class="muted">Now backed by Firebase Firestore.</div>
         <div class="toolbar">
             <label>Window <select id="rangeSel"><option value="30">30 days</option><option value="60">60 days</option><option value="90" selected>90 days</option><option value="ALL">All</option></select></label>
             <label>Unit <select id="unitSel"><option value="ALL">ALL</option></select></label>
@@ -76,38 +83,44 @@
             <div id="content"><p class="muted">Loading expiring items...</p></div>
         </div>
     </div>
+    <div class="card" style="margin-top: 1rem;">
+        <h2>Recently Replaced / OK'd</h2>
+        <div id="history-content"><p class="muted">Loading recent history...</p></div>
+    </div>
 </div>
 
 <div id="addItemModal" class="modal">
     <div class="modal-content">
-        <span class="close-btn">&times;</span>
-        <h3>Add Item to Inventory</h3>
-        <div id="interactive" class="viewport" style="display:none; width:100%; height:240px; border:1px solid #ccc; background:#000; margin-bottom:1rem;"></div>
-        <label>Item</label>
-        <div style="display:flex; gap:8px; align-items:center;">
-            <select id="addItemSelect"></select>
-            <button id="scanBarcodeBtn" class="btn" title="Scan Barcode to Select Item" style="flex-shrink:0;">
-                <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z'/%3E%3C/svg%3E" alt="Barcode Scanner" style="height:20px;width:20px;">
-            </button>
-        </div>
-        <label style="margin-top: 10px;">Unit</label>
-        <select id="addUnitSelect"><option value="">Select...</option></select>
-        <label>Compartment</label>
-        <select id="addCompartmentSelect"><option value="">Select…</option><option>Wall</option><option>Bag</option><option>Supply RM</option><option>Clear Container</option><option>BLS Bag</option><option>ALS Bag</option><option>Other</option></select>
-        <div style="margin-top: 10px;">
-            <label>Expiry Month</label>
-            <div id="addExpiryChips" class="chipbar"></div>
-            <div id="customExpiryWrap" style="display:none; margin-top: 8px;">
-                <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-                    <label>Month <input id="customMonth" type="month"></label>
-                    <label>Exact date <input id="customDate" type="date"></label>
-                    <button id="applyCustomExp" class="btn">Apply</button>
-                </div>
-            </div>
-        </div>
-        <label>Quantity</label>
-        <input id="addQty" type="number" min="1" step="1" value="1"/>
-        <button id="saveNewItemBtn" class="btn" style="width:100%;margin-top:12px;">Save Item</button>
+      <span class="close-btn">&times;</span>
+      <h3>Add Item to Inventory</h3>
+      <div id="interactive" class="viewport" style="display:none; width:100%; height:240px; border:1px solid #ccc; background:#000; margin-bottom:1rem; position:relative;">
+          <button id="closeScannerBtn" style="position:absolute; top:5px; right:5px; z-index:10; color:white; background:rgba(0,0,0,0.5); border:1px solid white;">[ X ]</button>
+      </div>
+      <label>Item</label>
+      <div style="display:flex; gap:8px; align-items:center;">
+          <select id="addItemSelect"></select>
+          <button id="scanBarcodeBtn" class="btn" title="Scan Barcode to Select Item" style="flex-shrink:0;">
+              <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z'/%3E%3C/svg%3E" alt="Barcode Scanner" style="height:20px;width:20px;">
+          </button>
+      </div>
+      <label style="margin-top: 10px;">Unit</label>
+      <select id="addUnitSelect"><option value="">Select...</option></select>
+      <label>Compartment</label>
+      <select id="addCompartmentSelect"><option value="">Select…</option><option>Wall</option><option>Bag</option><option>Supply RM</option><option>Clear Container</option><option>BLS Bag</option><option>ALS Bag</option><option>Other</option></select>
+      <div style="margin-top: 10px;">
+          <label>Expiry Month</label>
+          <div id="addExpiryChips" class="chipbar"></div>
+          <div id="customExpiryWrap" style="display:none; margin-top: 8px;">
+              <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                  <label>Month <input id="customMonth" type="month"></label>
+                  <label>Exact date <input id="customDate" type="date"></label>
+                  <button id="applyCustomExp" class="btn">Apply</button>
+              </div>
+          </div>
+      </div>
+      <label>Quantity</label>
+      <input id="addQty" type="number" min="1" step="1" value="1"/>
+      <button id="saveNewItemBtn" class="btn" style="width:100%;margin-top:12px;">Save Item</button>
     </div>
 </div>
 
@@ -132,7 +145,10 @@
 </div>
 
 <script type="module">
-    const SHARED_PASSCODE = "ems1"; // Change this password
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+    import { getFirestore, collection, getDocs, addDoc, updateDoc, doc, serverTimestamp, query, where, orderBy, limit } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+
+    const SHARED_PASSCODE = "ems1";
     const passwordModal = document.getElementById('password-modal');
     const passwordInput = document.getElementById('passcodeInput');
     const passwordSubmit = document.getElementById('passwordSubmit');
@@ -158,18 +174,11 @@
         }
     });
     
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-    import { getFirestore, collection, getDocs, addDoc, updateDoc, doc, serverTimestamp, query, where } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
-
     const firebaseConfig = {
         apiKey: "AIzaSyD7pMc-AHXb1cApzSfImkWvIjM9iwCoym4",
         authDomain: "supplies-ems.firebaseapp.com",
         projectId: "supplies-ems",
-        storageBucket: "supplies-ems.firebasestorage.app",
-        messagingSenderId: "649560661195",
-        appId: "1:649560661195:web:f389f3e620c0c36559cf4e",
     };
-
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
     
@@ -195,9 +204,10 @@
             catalog = catalogSnap.docs.map(d => ({ id: d.id, ...d.data() }));
             fillUnitSelect();
             render();
+            renderHistory();
         } catch (e) {
             console.error("Error loading data: ", e);
-            $('#content').innerHTML = `<p style="color:red;">Error loading data from Firestore. Check permissions and collection names.</p>`;
+            $('#content').innerHTML = `<p style="color:red;">Error loading data. Check permissions.</p>`;
         } finally {
             $('#refreshBtn').disabled = false;
         }
@@ -207,7 +217,7 @@
         $('#unitSel').innerHTML = `<option value="ALL">ALL</option>` + units.map(u => `<option value="${u.id}">${u.name}</option>`).join('');
     }
 
-    function rowClass(days, status) {
+    function rowClass(days) {
         if (days !== null && days !== undefined) {
             if (days <= 0) return 'bad';
             if (days <= 30) return 'warn';
@@ -228,13 +238,13 @@
             if (status === 'ok' || status === 'replaced') return false;
             if (!item.expiryDate) return false;
             
-            const expiry = new Date(item.expiryDate.seconds ? item.expiryDate.seconds * 1000 : item.expiryDate);
+            const expiry = new Date(item.expiryDate?.seconds ? item.expiryDate.seconds * 1000 : item.expiryDate);
             if (isNaN(expiry)) return false;
 
             const today = new Date(); today.setHours(0, 0, 0, 0);
             item.daysToExpire = Math.ceil((expiry - today) / (1000 * 60 * 60 * 24));
             
-            if (item.daysToExpire > withinDays) return false;
+            if (rangeValue !== 'ALL' && item.daysToExpire > withinDays) return false;
             if (unitFilter !== 'ALL' && item.unitId !== unitFilter) return false;
 
             const catalogItem = catalogMap.get(item.catalogId);
@@ -256,13 +266,12 @@
                         const catalogItem = catalogMap.get(item.catalogId);
                         const itemName = catalogItem ? catalogItem.itemName : `Unknown (ID: ${item.catalogId})`;
                         const unit = units.find(u => u.id === item.unitId);
-                        const expiryDate = new Date(item.expiryDate.seconds ? item.expiryDate.seconds * 1000 : item.expiryDate).toLocaleDateString();
-
+                        const expiryDate = new Date(item.expiryDate?.seconds ? item.expiryDate.seconds * 1000 : item.expiryDate).toLocaleDateString();
                         const unitOptions = units.map(u => `<option value="${u.id}" ${u.id === item.unitId ? 'selected' : ''}>${u.name}</option>`).join('');
                         const compartmentOptions = ['Wall', 'Bag', 'Supply RM', 'Clear Container', 'BLS Bag', 'ALS Bag', 'Other'].map(c => `<option value="${c}" ${c === item.compartment ? 'selected' : ''}>${c}</option>`).join('');
 
                         return `
-                            <tr class="${rowClass(item.daysToExpire, item.status)}" data-id="${item.inventoryId}">
+                            <tr class="${rowClass(item.daysToExpire)}" data-id="${item.inventoryId}">
                                 <td><strong>${escapeHtml(itemName)}</strong></td>
                                 <td>
                                     <span class="unit-display">${escapeHtml(unit ? unit.name : item.unitId)}</span>
@@ -293,6 +302,39 @@
         
         $('#content').innerHTML = filtered.length > 0 ? tableHTML : '<p class="muted">No expiring items match your criteria.</p>';
         attachActionListeners();
+    }
+
+    function renderHistory() {
+        const historyContainer = $('#history-content');
+        const catalogMap = new Map(catalog.map(item => [item.id, item]));
+        
+        const historyItems = allInventory
+            .filter(item => item.status === 'OK' || item.status === 'Replaced')
+            .sort((a, b) => (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0))
+            .slice(0, 30);
+
+        if (historyItems.length === 0) {
+            historyContainer.innerHTML = '<p class="muted">No items have been marked OK or Replaced recently.</p>';
+            return;
+        }
+
+        const tableHTML = `
+            <table style="font-size: 0.9rem;">
+                <thead><tr><th>Item</th><th>Status</th><th>Updated</th></tr></thead>
+                <tbody>
+                    ${historyItems.map(item => {
+                        const itemName = catalogMap.get(item.catalogId)?.itemName || 'Unknown Item';
+                        const updatedTime = item.updatedAt ? new Date(item.updatedAt.seconds * 1000).toLocaleString() : 'N/A';
+                        return `
+                            <tr>
+                                <td>${escapeHtml(itemName)}</td>
+                                <td><span class="tag">${escapeHtml(item.status)}</span></td>
+                                <td class="muted">${updatedTime}</td>
+                            </tr>`;
+                    }).join('')}
+                </tbody>
+            </table>`;
+        historyContainer.innerHTML = tableHTML;
     }
 
     function attachActionListeners() {
@@ -336,12 +378,13 @@
             const updateStatus = async (newStatus) => {
                  try {
                     await updateDoc(doc(db, "inventory", id), { status: newStatus, updatedAt: serverTimestamp() });
-                    item.status = newStatus;
-                    if (newStatus === 'OK' || newStatus === 'Replaced') {
-                        tr.remove();
-                    } else {
-                        render();
+                    const item = allInventory.find(i => i.inventoryId === id);
+                    if (item) {
+                        item.status = newStatus;
+                        item.updatedAt = { seconds: Date.now() / 1000 };
                     }
+                    render();
+                    renderHistory(); // Refresh history on status change
                 } catch (err) { console.error("Update failed:", err); alert("Update failed"); }
             };
             
@@ -385,6 +428,7 @@
         });
         modal.querySelector('.close-btn').addEventListener('click', () => modal.style.display = 'none');
         window.addEventListener('click', e => { if (e.target === modal) modal.style.display = 'none'; });
+        $('#closeScannerBtn').addEventListener('click', () => stopScanner(false));
 
         $('#saveNewItemBtn').addEventListener('click', async () => {
             const payload = {
@@ -470,21 +514,13 @@
     
     function stopScanner(forSearch = false) {
         if (isScannerActive) {
-            try {
-                Quagga.stop();
-            } catch (err) {
-                console.warn('Quagga.stop failed but proceeding.', err);
-            }
+            try { Quagga.stop(); } catch (err) { console.warn('Quagga.stop failed', err); }
             isScannerActive = false;
-            if (quaggaHandler && typeof Quagga.offDetected === 'function') {
-                Quagga.offDetected(quaggaHandler);
-                quaggaHandler = null;
-            }
         }
-        const modal = forSearch ? $('#interactive-search-modal') : $('#addItemModal');
-        const viewport = forSearch ? $('#interactive-search-viewport') : $('#interactive');
-        modal.style.display = 'none';
-        viewport.style.display = 'none';
+        if (forSearch) {
+            $('#interactive-search-modal').style.display = 'none';
+        }
+        $('#interactive').style.display = 'none';
     }
 
     async function handleBarcode(code, forSearch) {
@@ -496,8 +532,7 @@
             return;
         }
 
-        const itemDoc = querySnapshot.docs[0];
-        const item = { id: itemDoc.id, ...itemDoc.data() };
+        const item = { id: querySnapshot.docs[0].id, ...querySnapshot.docs[0].data() };
 
         if (forSearch) {
             $('#searchBox').value = item.itemName;
@@ -514,11 +549,12 @@
             stopScanner(forSearch);
             return;
         }
-
         const modal = forSearch ? $('#interactive-search-modal') : $('#addItemModal');
         const viewport = forSearch ? $('#interactive-search-viewport') : $('#interactive');
 
-        modal.style.display = 'block';
+        if (!forSearch) { // Only show the main modal if we're adding an item
+            modal.style.display = 'block';
+        }
         viewport.style.display = 'block';
 
         Quagga.init({
@@ -535,7 +571,7 @@
             isScannerActive = true;
 
             quaggaHandler = (result) => {
-                stopScanner(forSearch);
+                stopScanner(forSearch); 
                 handleBarcode(result.codeResult.code, forSearch);
             };
             Quagga.onDetected(quaggaHandler);
@@ -554,13 +590,11 @@
         $('#unitSel').addEventListener('change', render);
         $('#searchBox').addEventListener('input', render);
         $('#refreshBtn').addEventListener('click', loadAll);
-
         $('#startScanBtn').addEventListener('click', () => startScanner(true));
         $('#scanBarcodeBtn').addEventListener('click', () => startScanner(false));
     }
     
     checkAuth();
-
 </script>
 </body>
 </html>
