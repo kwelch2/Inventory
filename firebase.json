@@ -1,6 +1,6 @@
 {
   "hosting": {
-    "public": "Inventory-main",
+    "public": "",
     "ignore": [
       "firebase.json",
       "**/.*",
