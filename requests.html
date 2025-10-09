@@ -91,7 +91,7 @@
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-  import { getFirestore, collection, getDocs, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+  import { getFirestore, collection, getDocs, addDoc, serverTimestamp, updateDoc, doc } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyD7pMc-AHXb1cApzSfImkWvIjM9iwCoym4",
@@ -143,40 +143,68 @@
       renderHistory(currentHistoryDays, currentHistoryQuery);
     } catch (err) {
       console.error("Failed to load Firestore data", err);
-      $('#pendingTable tbody').innerHTML = '<tr><td colspan="4" style="color:#a00;font-weight:700;">Error: Could not load data. Check security rules.</td></tr>';
+      $('#pendingTable tbody').innerHTML = '<tr><td colspan="4" style="color:#a00;font-weight:700;">Error: Could not load data. Please check Firestore security rules.</td></tr>';
     }
   }
 
   function populateCatalogDatalist() {
     const sorted = [...state.catalog].sort((a, b) => (a.itemName || "").localeCompare(b.itemName || ""));
-    const options = sorted.map(item => `<option value="${escapeHtml(item.itemName)}"></option>`);
+    const options = [];
+    sorted.forEach((item) => {
+      const primary = item.itemName || "";
+      const alt = item.itemNameAlt || "";
+      if (primary) options.push(`<option value="${escapeHtml(primary)}"></option>`);
+      if (alt && alt.toLowerCase() !== primary.toLowerCase()) {
+        options.push(`<option value="${escapeHtml(alt)}"></option>`);
+      }
+    });
     $('#itemsDatalist').innerHTML = options.join("");
   }
 
   function formatRequestName(request) {
     const catalogItem = request.catalogId ? state.catalogMap.get(request.catalogId) : null;
-    return { primary: request.otherItemName || catalogItem?.itemName || "Other Item" };
+    const primary = request.otherItemName || catalogItem?.itemName || catalogItem?.itemNameAlt || "Other Item";
+    const alt = catalogItem?.itemNameAlt && catalogItem?.itemNameAlt !== primary ? catalogItem.itemNameAlt : "";
+    return { primary, alt };
   }
 
   function renderPending() {
     const tbody = $('#pendingTable tbody');
-    const pending = state.requests.filter((r) => !['received', 'completed', 'closed'].includes(String(r.status || 'open').toLowerCase()));
+    const pending = state.requests.filter((r) => !['received', 'fulfilled', 'complete', 'completed', 'closed'].includes(String(r.status || 'open').toLowerCase()));
     if (!pending.length) {
       tbody.innerHTML = '<tr><td colspan="4">No pending requests.</td></tr>';
       return;
     }
     tbody.innerHTML = pending.sort((a, b) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0)).map((request) => {
-        const { primary } = formatRequestName(request);
-        const pricing = (request.catalogId ? state.vendorPricing.filter((vp) => vp.catalogId === request.catalogId) : []).sort((a, b) => (parseFloat(a.unitPrice) || Infinity) - (parseFloat(b.unitPrice) || Infinity));
-        const pricingHTML = pricing.length ? pricing.map(vp => `<tr><td>${state.vendorMap.get(vp.vendorId)?.name || ''}</td><td>${money(vp.unitPrice)}</td><td>${vp.vendorItemNo || ''}</td></tr>`).join("") : '<tr><td colspan="3">No pricing info</td></tr>';
-        return `
-          <tr>
-            <td><details><summary>${escapeHtml(primary)}</summary><table class="vendor-table"><thead><tr><th>Vendor</th><th>Price</th><th>Item#</th></tr></thead><tbody>${pricingHTML}</tbody></table></details></td>
-            <td>${escapeHtml(request.qty || '')}</td>
-            <td>${escapeHtml(request.status || 'open')}</td>
-            <td>${escapeHtml(request.notes || '')}</td>
-          </tr>`;
+      const { primary, alt } = formatRequestName(request);
+      const pricing = (request.catalogId ? state.vendorPricing.filter((vp) => vp.catalogId === request.catalogId) : []).sort((a, b) => (parseFloat(a.unitPrice) || Infinity) - (parseFloat(b.unitPrice) || Infinity));
+      const pricingHTML = pricing.length ? pricing.map(vp => `<tr><td>${escapeHtml(state.vendorMap.get(vp.vendorId)?.name || vp.vendorId || '')}</td><td>${money(vp.unitPrice)}</td><td>${escapeHtml(vp.vendorItemNo || '')}</td></tr>`).join("") : '<tr><td colspan="3">No pricing info</td></tr>';
+      return `
+        <tr>
+          <td>
+            <details>
+              <summary>${escapeHtml(primary)} ${alt ? `<span class="muted">${escapeHtml(alt)}</span>` : ''}</summary>
+              <table class="vendor-table">
+                <thead><tr><th>Vendor</th><th>Price</th><th>Item#</th></tr></thead>
+                <tbody>${pricingHTML}</tbody>
+              </table>
+            </details>
+          </td>
+          <td>${escapeHtml(request.qty || '')}</td>
+          <td class="status-btns">
+            <button class="btn ${String(request.status || 'open').toLowerCase() === 'open' ? 'active' : ''}" data-request-id="${request.id}" data-status="open">Pending</button>
+            <button class="btn ${String(request.status || '').toLowerCase() === 'ordered' ? 'active' : ''}" data-request-id="${request.id}" data-status="ordered">Ordered</button>
+            <button class="btn ${String(request.status || '').toLowerCase() === 'received' ? 'active' : ''}" data-request-id="${request.id}" data-status="received">Received</button>
+          </td>
+          <td>${escapeHtml(request.notes || '')}</td>
+        </tr>`;
     }).join("");
+
+    tbody.querySelectorAll('.status-btns button').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        alert("Status can only be changed from the Admin page.");
+      });
+    });
   }
 
   function renderHistory(days = 30, queryText = "") {
@@ -185,93 +213,102 @@
     const tbody = $('#historyTable tbody');
     const now = new Date();
     const cutoff = new Date(now.getTime() - currentHistoryDays * 24 * 60 * 60 * 1000);
+    cutoff.setHours(0, 0, 0, 0);
+
     const received = state.requests.filter((r) => {
-        const status = String(r.status || '').toLowerCase();
-        if (!['received', 'completed'].includes(status)) return false;
-        const ts = toDate(r.receivedAt || r.updatedAt || r.createdAt);
-        return ts && ts >= cutoff;
+      const status = String(r.status || '').toLowerCase();
+      if (!['received', 'fulfilled', 'complete', 'completed'].includes(status)) return false;
+      const ts = toDate(r.receivedAt || r.updatedAt || r.createdAt);
+      return ts && ts >= cutoff;
     });
+
     const filtered = received.filter((req) => {
-        if (!queryText) return true;
-        const { primary } = formatRequestName(req);
-        return `${primary} ${req.notes || ''}`.toLowerCase().includes(queryText.toLowerCase());
+      if (!queryText) return true;
+      const { primary } = formatRequestName(req);
+      const haystack = `${primary} ${req.notes || ''}`.toLowerCase();
+      return haystack.includes(queryText.toLowerCase());
     });
+
     if (!filtered.length) {
-        tbody.innerHTML = `<tr><td colspan="3">No history in the last ${currentHistoryDays} days.</td></tr>`;
-        return;
+      tbody.innerHTML = `<tr><td colspan="3">No history in the last ${currentHistoryDays} days.</td></tr>`;
+      return;
     }
-    tbody.innerHTML = filtered.sort((a, b) => (toDate(b.receivedAt || b.updatedAt) || 0) - (toDate(a.receivedAt || a.updatedAt) || 0)).map((req) => {
-        const { primary } = formatRequestName(req);
-        const ts = toDate(req.receivedAt || req.updatedAt || req.createdAt);
-        return `
-          <tr>
-            <td>${escapeHtml(primary)}</td>
-            <td>${ts ? ts.toLocaleDateString() : ''}</td>
-            <td>${escapeHtml(req.notes || '')}</td>
-          </tr>`;
+
+    tbody.innerHTML = filtered.sort((a, b) => (toDate(a.receivedAt || a.updatedAt || a.createdAt) || 0) - (toDate(b.receivedAt || b.updatedAt || b.createdAt) || 0)).map((req) => {
+      const { primary } = formatRequestName(req);
+      const ts = toDate(req.receivedAt || req.updatedAt || req.createdAt);
+      return `
+        <tr>
+          <td>${escapeHtml(primary)}</td>
+          <td>${ts ? ts.toLocaleDateString() : ''}</td>
+          <td>${escapeHtml(req.notes || '')}</td>
+        </tr>`;
     }).join("");
   }
-
+  
   function setupForm() {
     $('#isOther').addEventListener('change', () => {
-        const on = $('#isOther').checked;
-        $('#itemSearch').style.display = on ? 'none' : 'block';
-        $('#otherItem').style.display = on ? 'block' : 'none';
-        $('#itemSearch').value = '';
-        $('#otherItem').value = '';
+      const on = $('#isOther').checked;
+      $('#itemSearch').style.display = on ? 'none' : 'block';
+      $('#otherItem').style.display = on ? 'block' : 'none';
     });
 
     $('#submitBtn').addEventListener('click', async () => {
-        const msg = $('#msg');
-        const onOther = $('#isOther').checked;
-        const itemName = $('#itemSearch').value.trim();
-        const otherName = $('#otherItem').value.trim();
-        const data = {
-            qty: $('#qty').value.trim() || '',
-            notes: $('#notes').value.trim() || '',
-            status: 'Open',
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-            requesterEmail: 'Public Request'
-        };
-        if (onOther) {
-            if (!otherName) { msg.textContent = 'Please enter the item name.'; return; }
-            data.otherItemName = otherName;
-            data.catalogId = null;
-        } else {
-            const catalogItem = state.catalog.find((item) => (item.itemName || '').toLowerCase() === itemName.toLowerCase());
-            if (!catalogItem) { msg.textContent = 'Please select a valid item from the list or choose "other".'; return; }
-            data.catalogId = catalogItem.id;
-        }
-        msg.textContent = 'Submitting…';
-        try {
-            await addDoc(collection(db, 'requests'), data);
-            msg.textContent = 'Request submitted successfully!';
-            $('#itemSearch').value = '';
-            $('#otherItem').value = '';
-            $('#qty').value = '';
-            $('#notes').value = '';
-            await loadAllData();
-        } catch (err) {
-            console.error('Failed to submit request', err);
-            msg.textContent = 'An error occurred submitting the request.';
-        }
+      const msg = $('#msg');
+      msg.textContent = '';
+
+      const onOther = $('#isOther').checked;
+      const itemName = $('#itemSearch').value.trim();
+      const otherName = $('#otherItem').value.trim();
+      
+      const data = {
+        qty: $('#qty').value.trim() || '',
+        notes: $('#notes').value.trim() || '',
+        status: 'Open',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        requesterEmail: 'Public Request'
+      };
+
+      if (onOther) {
+        if (!otherName) { msg.textContent = 'Please enter the item name.'; return; }
+        data.otherItemName = otherName;
+        data.catalogId = null;
+      } else {
+        const catalogItem = state.catalog.find((item) => (item.itemName || '').toLowerCase() === itemName.toLowerCase() || (item.itemNameAlt || '').toLowerCase() === itemName.toLowerCase());
+        if (!catalogItem) { msg.textContent = 'Please select a valid item from the list or choose "other".'; return; }
+        data.catalogId = catalogItem.id;
+      }
+
+      msg.textContent = 'Submitting…';
+      try {
+        await addDoc(collection(db, 'requests'), data);
+        msg.textContent = 'Request submitted successfully!';
+        $('#itemSearch').value = '';
+        $('#otherItem').value = '';
+        $('#qty').value = '';
+        $('#notes').value = '';
+        await loadAllData();
+      } catch (err) {
+        console.error('Failed to submit request', err);
+        msg.textContent = 'An error occurred submitting the request.';
+      }
     });
   }
 
   function setupHistoryControls() {
     document.querySelectorAll('button.hist').forEach((btn) => {
-        btn.addEventListener('click', () => {
-            renderHistory(Number(btn.dataset.days) || 30, currentHistoryQuery);
-        });
+      btn.addEventListener('click', () => {
+        renderHistory(Number(btn.dataset.days) || 30, currentHistoryQuery);
+      });
     });
     $('#historySearch').addEventListener('input', (e) => {
-        renderHistory(currentHistoryDays, e.target.value);
+      renderHistory(currentHistoryDays, e.target.value);
     });
     $('#historyPane').addEventListener('toggle', (e) => {
-        if (e.target.open) {
-            renderHistory(currentHistoryDays, currentHistoryQuery);
-        }
+      if (e.target.open) {
+        renderHistory(currentHistoryDays, currentHistoryQuery);
+      }
     });
   }
 
