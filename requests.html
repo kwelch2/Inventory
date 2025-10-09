@@ -40,59 +40,59 @@
     </div>
 
     <div class="card" style="margin-top:16px;">
-    <h2>Pending Requests</h2>
-    <table id="pendingTable">
-      <thead><tr><th>Item / Vendor Pricing</th><th>Qty</th><th>Status</th><th>Notes</th></tr></thead>
-      <tbody><tr><td colspan="4">Loading...</td></tr></tbody>
-    </table>
-  </div>
+        <h2>Pending Requests</h2>
+        <table id="pendingTable">
+          <thead><tr><th>Item / Vendor Pricing</th><th>Qty</th><th>Status</th><th>Notes</th></tr></thead>
+          <tbody><tr><td colspan="4">Loading...</td></tr></tbody>
+        </table>
+    </div>
 
-<div class="card" style="margin-top:16px;">
-  <details id="requestPane">
-    <summary style="font-size:1.25em;font-weight:bold;">New Request</summary>
-    <div style="margin-top:12px">
-      <label for="itemSearch">Item from Catalog</label>
-      <select id="itemSearch" placeholder="Search for an item..."></select>
+    <div class="card" style="margin-top:16px;">
+      <details id="requestPane">
+        <summary style="font-size:1.25em;font-weight:bold;">New Request</summary>
+        <div style="margin-top:12px">
+          <label for="itemSearch">Item from Catalog</label>
+          <select id="itemSearch" placeholder="Search for an item..."></select>
 
-      <div style="margin:8px 0;">
-        <input type="checkbox" id="isOther" style="width:auto;">
-        <label for="isOther" style="display:inline;font-weight:normal;">Or, request an item not in the list</label>
-      </div>
+          <div style="margin:8px 0;">
+            <input type="checkbox" id="isOther" style="width:auto;">
+            <label for="isOther" style="display:inline;font-weight:normal;">Or, request an item not in the list</label>
+          </div>
 
-      <input id="otherItem" placeholder="Enter unlisted item name..." style="display:none;">
+          <input id="otherItem" placeholder="Enter unlisted item name..." style="display:none;">
 
-      <label for="qty">Quantity (Optional)</label>
-      <input id="qty" type="text" placeholder="e.g., 1 Box or 5 EA">
+          <label for="qty">Quantity (Optional)</label>
+          <input id="qty" type="text" placeholder="e.g., 1 Box or 5 EA">
 
-      <label for="notes">Notes (Optional)</label>
-      <input id="notes" placeholder="e.g., For Unit 31">
+          <label for="notes">Notes (Optional)</label>
+          <input id="notes" placeholder="e.g., For Unit 31">
 
-      <button id="submitBtn" style="margin-top:12px;">Submit Request</button>
-      <div id="msg" class="muted" style="margin-top:8px;"></div>
-      </div>
-     </details>
-  </div>
+          <button id="submitBtn" style="margin-top:12px;">Submit Request</button>
+          <div id="msg" class="muted" style="margin-top:8px;"></div>
+          </div>
+         </details>
+    </div>
 
-  <div class="card" style="margin-top:16px;">
-    <details id="historyPane">
-      <summary style="font-size:1.5em;font-weight:bold;">View Order History</summary>
-      <div class="toolbar">
-        <button class="btn hist active" data-days="30">Last 30 Days</button>
-        <button class="btn hist" data-days="60">Last 60 Days</button>
-        <button class="btn hist" data-days="90">Last 90 Days</button>
-        <input id="historySearch" placeholder="Search history..." style="width:auto;flex:1;">
-      </div>
-      <table id="historyTable">
-        <thead><tr><th>Item</th><th>Received</th><th>Notes</th></tr></thead>
-        <tbody><tr><td colspan="3">Select a date range to view history.</td></tr></tbody>
-      </table>
-    </details>
-  </div>
+    <div class="card" style="margin-top:16px;">
+        <details id="historyPane">
+          <summary style="font-size:1.5em;font-weight:bold;">View Order History</summary>
+          <div class="toolbar">
+            <button class="btn hist active" data-days="30">Last 30 Days</button>
+            <button class="btn hist" data-days="60">Last 60 Days</button>
+            <button class="btn hist" data-days="90">Last 90 Days</button>
+            <input id="historySearch" placeholder="Search history..." style="width:auto;flex:1;">
+          </div>
+          <table id="historyTable">
+            <thead><tr><th>Item</th><th>Received</th><th>Notes</th></tr></thead>
+            <tbody><tr><td colspan="3">Select a date range to view history.</td></tr></tbody>
+          </table>
+        </details>
+    </div>
 </div>
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-  import { getFirestore, collection, getDocs, addDoc, serverTimestamp, updateDoc, doc } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+  import { getFirestore, collection, getDocs, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyD7pMc-AHXb1cApzSfImkWvIjM9iwCoym4",
@@ -110,8 +110,8 @@
     catalogMap: new Map(),
     vendorMap: new Map()
   };
-
-  let itemSelectChoices; // Variable to hold the Choices.js instance
+  
+  let itemSelectChoices; // Choices.js instance
 
   const $ = (sel) => document.querySelector(sel);
   const escapeHtml = (s = "") => String(s).replace(/[&<>"']/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
@@ -164,13 +164,13 @@
     
     const options = state.catalog
         .filter(c => c.isActive !== false)
+        .sort((a,b) => (a.itemName || "").localeCompare(b.itemName || ""))
         .map(item => ({ value: item.id, label: item.itemName }));
     itemSelectChoices.setChoices(options, 'value', 'label', true);
   }
 
   function formatRequestName(request) {
-    // FIXED: Check for both 'catalogId' (new) and 'ItemID' (old)
-    const itemId = request.catalogId || request.ItemID;
+    const itemId = request.catalogId || request.ItemID; // Check for both new and old field names
     const catalogItem = itemId ? state.catalogMap.get(itemId) : null;
     const primary = request.otherItemName || catalogItem?.itemName || "Unknown Item";
     const alt = catalogItem?.itemNameAlt && catalogItem?.itemNameAlt !== primary ? catalogItem.itemNameAlt : "";
@@ -241,9 +241,9 @@
     $('#isOther').addEventListener('change', () => {
         const on = $('#isOther').checked;
         const choicesEl = document.querySelector('.choices');
-        if (choicesEl) choicesEl.style.display = on ? 'none' : 'block';
+        if(choicesEl) choicesEl.style.display = on ? 'none' : 'block';
         $('#otherItem').style.display = on ? 'block' : 'none';
-        if (itemSelectChoices) itemSelectChoices.clearInput();
+        if(itemSelectChoices) itemSelectChoices.clearInput();
         $('#otherItem').value = '';
     });
 
@@ -275,7 +275,7 @@
         try {
             await addDoc(collection(db, 'requests'), data);
             msg.textContent = 'Request submitted successfully!';
-            if (itemSelectChoices) itemSelectChoices.clearInput();
+            if(itemSelectChoices) itemSelectChoices.clearInput();
             $('#otherItem').value = '';
             $('#qty').value = '';
             $('#notes').value = '';
