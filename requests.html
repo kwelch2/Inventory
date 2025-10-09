@@ -1,0 +1,278 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Supply Request – GC EMS</title>
+<style>
+  :root{--bg:#f7f7f7;--card:#fff;--b:#ddd;--muted:#666}
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:var(--bg)}
+  .wrap{max-width:960px;margin:0 auto;padding:16px}
+  .card{background:var(--card);border:1px solid var(--b);border-radius:12px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+  h1,h2{margin:0 0 8px}
+  label{display:block;margin:10px 0 6px;font-weight:600}
+  input,button,select{width:100%;padding:10px;border:1px solid #ccc;border-radius:8px}
+  button.btn{width:auto;padding:6px 10px;cursor:pointer}
+  .muted{color:var(--muted);font-size:.9rem}
+  table{width:100%;border-collapse:collapse;margin-top:12px}
+  th,td{padding:8px;border-bottom:1px solid #eee;text-align:left;vertical-align:top}
+  .status-btns button{width:auto;margin-right:5px}
+  .status-btns .active{background:#0275d8;color:#fff;border-color:#0275d8}
+  .vendor-table{font-size:.9em;margin-top:8px;background:#fafafa}
+  .vendor-table th,.vendor-table td{padding:4px}
+  summary{cursor:pointer;font-weight:bold}
+  .toolbar{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap;align-items:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+    <div class="card" style="margin-top:16px;">
+    <h2>Pending Requests</h2>
+    <table id="pendingTable">
+      <thead><tr><th>Item / Vendor Pricing</th><th>Qty</th><th>Status</th><th>Notes</th></tr></thead>
+      <tbody><tr><td colspan="4">Loading...</td></tr></tbody>
+    </table>
+  </div>
+
+<div class="card" style="margin-top:16px;">
+  <details id="requestPane">
+    <summary style="font-size:1.25em;font-weight:bold;">New Request</summary>
+    <div style="margin-top:12px">
+      <label for="itemSearch">Item from Catalog</label>
+      <input id="itemSearch" list="itemsDatalist" placeholder="Search for an item...">
+      <datalist id="itemsDatalist"></datalist>
+
+      <div style="margin:8px 0;">
+        <input type="checkbox" id="isOther" style="width:auto;">
+        <label for="isOther" style="display:inline;font-weight:normal;">Or, request an item not in the list</label>
+      </div>
+
+      <input id="otherItem" placeholder="Enter unlisted item name..." style="display:none;">
+
+      <label for="qty">Quantity (Optional)</label>
+      <input id="qty" type="text" placeholder="e.g., 1 Box or 5 EA">
+
+      <label for="notes">Notes (Optional)</label>
+      <input id="notes" placeholder="e.g., For Unit 31">
+
+      <button id="submitBtn" style="margin-top:12px;">Submit Request</button>
+      <div id="msg" class="muted" style="margin-top:8px;"></div>
+      </div>
+     </details>
+  </div>
+
+  <div class="card" style="margin-top:16px;">
+    <details id="historyPane">
+      <summary style="font-size:1.5em;font-weight:bold;">View Order History</summary>
+      <div class="toolbar">
+        <button class="btn hist" data-days="30">Last 30 Days</button>
+        <button class="btn hist" data-days="60">Last 60 Days</button>
+        <button class="btn hist" data-days="90">Last 90 Days</button>
+        <input id="historySearch" placeholder="Search history..." style="width:auto;flex:1;">
+      </div>
+      <table id="historyTable">
+        <thead><tr><th>Item</th><th>Received</th><th>Notes</th></tr></thead>
+        <tbody><tr><td colspan="3">Select a date range to view history.</td></tr></tbody>
+      </table>
+    </details>
+  </div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+    import { getFirestore, collection, getDocs, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyD7pMc-AHXb1cApzSfImkWvIjM9iwCoym4",
+        authDomain: "supplies-ems.firebaseapp.com",
+        projectId: "supplies-ems"
+    };
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    const $ = s => document.querySelector(s);
+    const money = v => Number.isFinite(+v) ? `$${(+v).toFixed(2)}` : 'N/A';
+    const toDate = v => v?.seconds ? new Date(v.seconds * 1000) : new Date(v);
+
+    let state = { catalog: [], requests: [], vendorPricing: [], vendors: [], catalogMap: new Map(), vendorMap: new Map() };
+
+    async function loadAllData() {
+        try {
+            const [catSnap, reqSnap, priceSnap, vendorSnap] = await Promise.all([
+                getDocs(collection(db, "catalog")),
+                getDocs(collection(db, "requests")),
+                getDocs(collection(db, "vendorPricing")),
+                getDocs(collection(db, "vendors"))
+            ]);
+
+            state.catalog = catSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+            state.requests = reqSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+            state.vendorPricing = priceSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+            state.vendors = vendorSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+            state.catalogMap = new Map(state.catalog.map(c => [c.id, c]));
+            state.vendorMap = new Map(state.vendors.map(v => [v.id, v]));
+
+            renderAll();
+        } catch (err) {
+            console.error("Failed to load data", err);
+            $('#pendingTable tbody').innerHTML = '<tr><td colspan="4" style="color:#a00;">Error loading data.</td></tr>';
+        }
+    }
+
+    function renderAll() {
+        $('#itemsDatalist').innerHTML = state.catalog.map(r => `<option value="${r.itemName}"></option>`).join('');
+        renderPending();
+        renderHistory();
+    }
+
+    function renderPending() {
+        const tbody = $('#pendingTable tbody');
+        const pending = state.requests.filter(r => !['received', 'completed', 'closed'].includes(String(r.status || '').toLowerCase()));
+        
+        if (!pending.length) {
+            tbody.innerHTML = '<tr><td colspan="4">No pending requests.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = pending.map(req => {
+            const catItem = state.catalogMap.get(req.catalogId);
+            const itemName = req.otherItemName || catItem?.itemName || 'Unknown Item';
+
+            const prices = (req.catalogId ? state.vendorPricing.filter(vp => vp.catalogId === req.catalogId) : [])
+                .sort((a, b) => (parseFloat(a.unitPrice) || Infinity) - (parseFloat(b.unitPrice) || Infinity));
+
+            const pricingHTML = prices.length ? prices.map(vp => `
+                <tr>
+                    <td>${state.vendorMap.get(vp.vendorId)?.name || 'N/A'}</td>
+                    <td>${money(vp.unitPrice)}</td>
+                    <td>${vp.vendorItemNo || ''}</td>
+                </tr>`).join('') : '<tr><td colspan="3">No pricing info</td></tr>';
+
+            return `
+              <tr>
+                <td>
+                  <details>
+                    <summary>${itemName}</summary>
+                    <table class="vendor-table">
+                      <thead><tr><th>Vendor</th><th>Price</th><th>Item#</th></tr></thead>
+                      <tbody>${pricingHTML}</tbody>
+                    </table>
+                  </details>
+                </td>
+                <td>${req.qty || ''}</td>
+                <td>${req.status || 'Open'}</td>
+                <td>${req.notes || ''}</td>
+              </tr>`;
+        }).join('');
+    }
+
+    function renderHistory() {
+        const days = Number($('.toolbar .hist.active')?.dataset.days || '30');
+        const query = $('#historySearch').value.toLowerCase();
+        
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - days);
+
+        const received = state.requests.filter(r => {
+            const status = String(r.status || '').toLowerCase();
+            if (!['received', 'completed', 'closed'].includes(status)) return false;
+            const receivedDate = toDate(r.receivedAt || r.updatedAt);
+            return receivedDate && receivedDate >= cutoff;
+        });
+
+        const filtered = received.filter(req => {
+            const catItem = state.catalogMap.get(req.catalogId);
+            const name = req.otherItemName || catItem?.itemName || '';
+            return !query || name.toLowerCase().includes(query) || (req.notes || '').toLowerCase().includes(query);
+        });
+
+        const tbody = $('#historyTable tbody');
+        if (!filtered.length) {
+            tbody.innerHTML = `<tr><td colspan="3">No history in the last ${days} days.</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = filtered.map(req => {
+            const catItem = state.catalogMap.get(req.catalogId);
+            const name = req.otherItemName || catItem?.itemName || 'Unknown Item';
+            const receivedDate = toDate(req.receivedAt || req.updatedAt);
+            return `
+              <tr>
+                <td>${name}</td>
+                <td>${receivedDate ? receivedDate.toLocaleDateString() : ''}</td>
+                <td>${req.notes || ''}</td>
+              </tr>`;
+        }).join('');
+    }
+
+    function setupEventListeners() {
+        $('#isOther').addEventListener('change', () => {
+            const on = $('#isOther').checked;
+            $('#itemSearch').style.display = on ? 'none' : 'block';
+            $('#otherItem').style.display = on ? 'block' : 'none';
+            $('#itemSearch').value = '';
+            $('#otherItem').value = '';
+        });
+
+        $('#submitBtn').addEventListener('click', async () => {
+            const msg = $('#msg');
+            const onOther = $('#isOther').checked;
+            const itemName = $('#itemSearch').value.trim();
+            const otherName = $('#otherItem').value.trim();
+            
+            let catalogId = null;
+            if (!onOther) {
+                const catItem = state.catalog.find(c => c.itemName.toLowerCase() === itemName.toLowerCase());
+                if (!catItem) return msg.textContent = 'Please select a valid item from the catalog.';
+                catalogId = catItem.id;
+            } else if (!otherName) {
+                return msg.textContent = 'Please enter the name for the unlisted item.';
+            }
+
+            const payload = {
+                catalogId: catalogId,
+                otherItemName: onOther ? otherName : null,
+                qty: $('#qty').value.trim(),
+                notes: $('#notes').value.trim(),
+                status: 'Open',
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp(),
+                requesterEmail: 'Public Request'
+            };
+
+            msg.textContent = 'Submitting...';
+            try {
+                await addDoc(collection(db, 'requests'), payload);
+                msg.textContent = 'Request submitted successfully!';
+                $('#itemSearch').value = '';
+                $('#otherItem').value = '';
+                $('#qty').value = '';
+                $('#notes').value = '';
+                await loadAllData();
+            } catch (e) {
+                console.error(e);
+                msg.textContent = 'An error occurred.';
+            }
+        });
+
+        $('.toolbar').addEventListener('click', e => {
+            if (e.target.classList.contains('hist')) {
+                $('.toolbar .hist.active')?.classList.remove('active');
+                e.target.classList.add('active');
+                renderHistory();
+            }
+        });
+        
+        $('#historySearch').addEventListener('input', () => renderHistory());
+    }
+
+    async function boot() {
+        await loadAllData();
+        setupEventListeners();
+    }
+
+    boot();
+</script>
+</body>
+</html>

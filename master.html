@@ -1,0 +1,646 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>EMS Supplies — Master Admin Dashboard</title>
+  <script src="https://kwelch2.github.io/Inventory/quagga.min.js"></script>
+  <style>
+    :root{--bg:#f7f7f7;--card:#fff;--b:#ddd;--muted:#666;--ink:#111;--accent:#0a66ff;--bad:#b00020;--ok:#137333}
+    *{box-sizing:border-box}
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:var(--bg);color:var(--ink)}
+    .wrap{max-width:1400px;margin:0 auto;padding:16px}
+    #login-container { max-width: 400px; margin: 2rem auto; }
+    #app-container, #loading-container { display: none; }
+    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap;}
+    .auth-info { display: flex; align-items: center; gap: 1rem; }
+    .tabs{display:flex; flex-wrap: wrap; gap:8px;border-bottom:1px solid var(--b);position:sticky;top:0;background:var(--bg);padding:8px 0;z-index:5}
+    .tab{padding:10px 14px;border:1px solid var(--b);border-bottom:none;border-radius:8px 8px 0 0;background:#eee;color:#333;cursor:pointer}
+    .tab.active{background:var(--card);color:#000;border-bottom:1px solid var(--card)}
+    .panel{display:none;background:var(--card);border:1px solid var(--b);border-radius:0 12px 12px 12px;padding:16px;margin-top:-1px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+    .panel.active{display:block}
+    h1,h2{margin:0 0 10px}
+    .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap; margin-bottom: 1rem;}
+    .btn{padding:8px 10px;border:1px solid var(--b);border-radius:10px;background:#fff;cursor:pointer; font-size: 0.9rem;}
+    .btn:disabled { background: #eee; cursor: not-allowed; }
+    .btn.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+    .btn.danger{background:var(--bad); color: white; border-color: var(--bad);}
+    table{width:100%;border-collapse:collapse;font-size:14px}
+    th,td{padding:8px;border-top:1px solid var(--b);text-align:left;vertical-align:top}
+    th{background:#fafafa}
+    input,select{padding:8px;border:1px solid var(--b);border-radius:8px; font-size: 1rem;}
+    .kvd{font-size:12px;color:#555}
+    .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.4); align-items: center; justify-content: center;}
+    .modal-content { background-color: #fefefe; padding: 20px; border: 1px solid #888; width: 80%; max-width: 700px; border-radius: 12px; }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+    .modal-body { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem; }
+    .modal-footer { margin-top: 1.5rem; text-align: right; }
+    .barcode-item { display: flex; justify-content: space-between; align-items: center; background: #f0f0f0; padding: 4px 8px; border-radius: 6px; margin-bottom: 4px; }
+    .viewport { position: relative; }
+    .viewport video, .viewport .drawingBuffer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+    .price-info { font-size: 0.8rem; color: #555; }
+    .best-price { color: var(--ok); font-weight: bold; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  
+  <div id="loading-container" style="text-align: center; margin-top: 3rem;">
+      <p class="muted">Initializing...</p>
+  </div>
+
+  <div id="login-container" style="display: none;">
+    <div class="card">
+        <h2>Admin Login</h2>
+        <button id="googleLoginBtn" class="btn primary" style="width: 100%;">Sign in with Google</button>
+        <p id="auth-status-login" class="muted" style="text-align: center; margin-top: 1rem;">Please sign in to continue.</p>
+    </div>
+  </div>
+
+  <div id="app-container" style="display: none;">
+    <div class="header">
+        <h1>EMS Supplies — Master Admin Dashboard</h1>
+        <div class="auth-info">
+            <span id="auth-status-main" class="muted"></span>
+            <button id="logoutBtn" class="btn">Logout</button>
+        </div>
+    </div>
+    <div class="tabs" id="tabs"></div>
+      <section id="panel-order_planner" class="panel">
+        <h2>Order Planner <span class="kvd" id="kvPlanner"></span></h2>
+        <div class="row">
+            <button class="btn primary" id="createOrderBtn">Create Order from Selected</button>
+        </div>
+        <div id="plannerTable"></div>
+      </section>
+      <section id="panel-active_orders" class="panel">
+        <h2>Active Orders <span class="kvd" id="kvActiveOrders"></span></h2>
+        <div class="row"><button class="btn" id="refreshOrders">Refresh</button></div>
+        <div id="activeOrders"></div>
+      </section>
+      <section id="panel-catalog" class="panel">
+        <h2>Catalog Manager <span class="kvd" id="kvCatalog"></span></h2>
+        <div class="row"><button class="btn" id="refreshCatalog">Refresh</button><button class="btn primary" id="showCatalogModal">Add New Item</button><span style="flex: 1;"></span><input id="catSearch" placeholder="Search..."/></div>
+        <div id="catalogTable"></div>
+      </section>
+      <section id="panel-pricing" class="panel">
+        <h2>Vendor Pricing <span class="kvd" id="kvPricing"></span></h2>
+        <div class="row"><button class="btn" id="refreshPricing">Refresh</button><button class="btn primary" id="showPricingModal">Add New Price</button></div>
+        <div id="pricingTable"></div>
+      </section>
+      <section id="panel-units" class="panel">
+        <h2>Unit Management <span class="kvd" id="kvUnits"></span></h2>
+        <div class="row"><button class="btn" id="refreshUnits">Refresh</button></div>
+        <div id="unitsTable"></div>
+      </section>
+      <section id="panel-compartments" class="panel">
+        <h2>Compartment Management <span class="kvd" id="kvCompartments"></span></h2>
+        <div class="row"><button class="btn" id="refreshCompartments">Refresh</button></div>
+        <div id="compartmentsTable"></div>
+      </section>
+  </div>
+</div>
+
+<div id="catalogModal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header"><h2>Edit Catalog Item</h2></div>
+    <div class="modal-body">
+      <label>Item Name <input id="editItemName"></label>
+      <label>Alt Names <input id="editItemNameAlt"></label>
+      <label>Category <input id="editCategory"></label>
+      <label>Item Ref # <input id="editItemRef"></label>
+      <label>Unit <input id="editUnit"></label>
+      <label>Pack Size <input id="editPackSize" type="number" min="1"></label>
+      <label style="display: flex; align-items: center; gap: 8px;"><input id="editIsActive" type="checkbox"> Is Active</label>
+      <div style="grid-column: 1 / -1;">
+        <label>Barcodes</label>
+        <div id="barcodeList" style="margin-bottom: 8px; max-height: 120px; overflow-y: auto; border: 1px solid #ccc; padding: 5px; border-radius: 8px;"></div>
+        <div class="row" style="margin-bottom: 0;">
+            <input id="newBarcode" placeholder="Add new barcode..." style="flex: 1;">
+            <button id="scanNewBarcodeBtn" class="btn">Scan</button>
+            <button id="addNewBarcodeBtn" class="btn primary">Add</button>
+        </div>
+        <div id="barcodeScannerViewport" class="viewport" style="display:none; width:100%; height:240px; border:1px solid #ccc; background:#000; margin-top:1rem;"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" id="cancelCatalogEdit">Cancel</button>
+      <button class="btn danger" id="deleteCatalogItem" style="float: left;">Delete</button>
+      <button class="btn primary" id="saveCatalogEdit">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<div id="pricingModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header"><h2>Add/Edit Vendor Price</h2></div>
+      <div class="modal-body">
+        <label>Item <select id="priceItemSelect"></select></label>
+        <label>Vendor <select id="priceVendorSelect"></select></label>
+        <label>Vendor SKU <input id="priceSku"></label>
+        <label>Unit Price <input id="priceUnitPrice" type="number" step="0.01"></label>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" id="cancelPricingEdit">Cancel</button>
+        <button class="btn primary" id="savePricingEdit">Save Price</button>
+      </div>
+    </div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+    import { getAuth, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
+    import { getFirestore, collection, getDocs, doc, setDoc, getDoc, addDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp, query, where, orderBy } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+
+    // --- Firebase Initialization ---
+    const firebaseConfig = {
+        apiKey: "AIzaSyD7pMc-AHXb1cApzSfImkWvIjM9iwCoym4",
+        authDomain: "supplies-ems.firebaseapp.com",
+        projectId: "supplies-ems",
+        storageBucket: "supplies-ems.firebasestorage.app",
+        messagingSenderId: "649560661195",
+        appId: "1:649560661195:web:f389f3e620c0c36559cf4e",
+    };
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    // --- State & Helpers ---
+    let state = { user: null, userRole: null, catalog: [], vendors: [], pricingAll: [], orders: [], requests: [], units: [], compartments: [], catalogMap: new Map(), vendorMap: new Map(), pricingMap: new Map() };
+    const $ = id => document.getElementById(id);
+    let appInitialized = false;
+    let isScannerActive = false;
+
+    // --- Authentication ---
+    $("loading-container").style.display = "block";
+
+    onAuthStateChanged(auth, async (user) => {
+        if (user) {
+            await handleUserSignedIn(user);
+        } else {
+            handleUserSignedOut();
+        }
+    });
+
+    $("googleLoginBtn").addEventListener("click", () => {
+        const provider = new GoogleAuthProvider();
+        provider.setCustomParameters({
+            'oauth_web_client_id': '649560661195-m4c2sa1bncop9jnhajpvfum5dal3iqha.apps.googleusercontent.com'
+        });
+        signInWithPopup(auth, provider).catch((error) => {
+            console.error("Popup Sign-in Error:", error);
+            alert(`Login failed: ${error.message}`);
+        });
+    });
+
+    async function handleUserSignedIn(user) {
+        try {
+            const userDocSnap = await getDoc(doc(db, "users", user.uid));
+            state.userRole = userDocSnap.exists() ? userDocSnap.data().role : "User";
+            if (!userDocSnap.exists()) await setDoc(doc(db, "users", user.uid), { email: user.email, role: "User" });
+            
+            if (!['Admin', 'Staff'].includes(state.userRole)) {
+                alert("You do not have sufficient permissions to access this page.");
+                signOut(auth);
+                return;
+            }
+
+            $("auth-status-main").textContent = `${user.email} (${state.userRole})`;
+            $("app-container").style.display = "block";
+            $("login-container").style.display = "none";
+            $("loading-container").style.display = "none";
+            
+            if (!appInitialized) {
+                appInitialized = true;
+                await boot();
+            }
+        } catch (error) {
+            console.error("Error handling signed-in user:", error);
+            alert("Permission Error: Could not read user data. Please check Firestore security rules.");
+            signOut(auth);
+        }
+    }
+
+    function handleUserSignedOut() {
+        $("app-container").style.display = "none";
+        $("login-container").style.display = "block";
+        $("loading-container").style.display = "none";
+        appInitialized = false;
+    }
+
+    $("logoutBtn").addEventListener("click", () => signOut(auth));
+
+    // --- Data Loading ---
+    async function loadAllData() {
+        const [catSnap, venSnap, priceSnap, ordSnap, reqSnap, unitSnap, compSnap] = await Promise.all([
+            getDocs(collection(db, "catalog")),
+            getDocs(collection(db, "vendors")),
+            getDocs(collection(db, "vendorPricing")),
+            getDocs(collection(db, "orders")),
+            getDocs(query(collection(db, "requests"), where("status", "==", "Open"))),
+            getDocs(collection(db, "units")),
+            getDocs(collection(db, "compartments")),
+        ]);
+        
+        state.catalog = catSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        state.vendors = venSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        state.pricingAll = priceSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        state.orders = ordSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        state.requests = reqSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        state.units = unitSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        state.compartments = compSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        
+        state.catalogMap = new Map(state.catalog.map(c => [c.id, c.itemName]));
+        state.vendorMap = new Map(state.vendors.map(v => [v.id, v.name]));
+        state.pricingMap = new Map();
+        state.pricingAll.forEach(p => {
+            if (!state.pricingMap.has(p.catalogId)) state.pricingMap.set(p.catalogId, []);
+            state.pricingMap.get(p.catalogId).push(p);
+        });
+
+        renderAll();
+    }
+
+    // --- Render Functions ---
+    function renderAll() {
+        renderPlanner(); renderActiveOrders(); renderCatalog(); renderPricing(); renderUnits(); renderCompartments();
+    }
+    
+    function renderPlanner() {
+        $('kvPlanner').textContent = `(${state.requests.length} open)`;
+        const rows = state.requests.map(r => {
+            const catItem = state.catalog.find(c => c.id === r.catalogId);
+            const prices = (state.pricingMap.get(r.catalogId) || []).sort((a,b) => a.unitPrice - b.unitPrice);
+            const bestPrice = prices[0];
+            const priceHtml = prices.map(p => {
+                const isBest = p.id === bestPrice?.id;
+                return `<div class="price-info ${isBest ? 'best-price' : ''}">${state.vendorMap.get(p.vendorId) || 'N/A'}: $${Number(p.unitPrice).toFixed(2)}</div>`;
+            }).join('');
+
+            return `<tr>
+                <td><input type="checkbox" class="request-checkbox" data-request-id="${r.id}" checked></td>
+                <td>
+                    <strong>${catItem ? catItem.itemName : 'Unknown'}</strong><br>
+                    <span class="muted">${r.requesterEmail} on ${new Date(r.createdAt?.seconds * 1000).toLocaleDateString()}</span>
+                </td>
+                <td>${r.qty}</td>
+                <td>${priceHtml || 'No pricing'}</td>
+            </tr>`;
+        }).join('');
+        $('plannerTable').innerHTML = `<table><thead><tr><th>Select</th><th>Item & Requester</th><th>Qty</th><th>Vendor Pricing</th></tr></thead><tbody>${rows}</tbody></table>`;
+    }
+
+    function renderActiveOrders() {
+        const activeOrders = state.orders.filter(o => o.status !== 'Completed' && o.status !== 'Cancelled');
+        $('kvActiveOrders').textContent = `(${activeOrders.length})`;
+        $('activeOrders').innerHTML = activeOrders.map(o => {
+            const itemsHtml = (o.items || []).map(i => `
+                <tr>
+                    <td>${state.catalogMap.get(i.catalogId) || ''}</td>
+                    <td>${i.qty}</td>
+                    <td>${i.vendorItemNo || ''}</td>
+                    <td>$${Number(i.unitPrice).toFixed(2)}</td>
+                    <td>
+                        <select data-order-id="${o.id}" data-item-id="${i.catalogId}">
+                            <option value="" ${!i.status ? 'selected' : ''}></option>
+                            <option value="Ordered" ${i.status === 'Ordered' ? 'selected' : ''}>Ordered</option>
+                            <option value="Backordered" ${i.status === 'Backordered' ? 'selected' : ''}>Backordered</option>
+                            <option value="Received" ${i.status === 'Received' ? 'selected' : ''}>Received</option>
+                        </select>
+                    </td>
+                </tr>
+            `).join('');
+
+            return `<div class="card">
+                <h3>Order for ${state.vendorMap.get(o.vendorId)} <span class="muted">- ${new Date(o.createdAt?.seconds * 1000).toLocaleString()}</span></h3>
+                <p>Ref #: <input data-order-id="${o.id}" class="order-ref" value="${o.referenceNumber || ''}" placeholder="Supplier Ref #..."></p>
+                <table><thead><tr><th>Item</th><th>Qty</th><th>SKU</th><th>Price</th><th>Status</th></tr></thead><tbody>${itemsHtml}</tbody></table>
+                <div class="row" style="justify-content:flex-end;"><button class="btn" data-complete-order-id="${o.id}">Mark Order Completed</button></div>
+            </div>`;
+        }).join('');
+    }
+    
+    function renderCatalog() {
+        const query = $('catSearch').value.toLowerCase();
+        const filtered = state.catalog.filter(i => (i.itemName || '').toLowerCase().includes(query) || (i.itemNameAlt || '').toLowerCase().includes(query));
+        $('kvCatalog').textContent = `(${filtered.length})`;
+        const rows = filtered.map(i => `
+            <tr style="${i.isActive === false ? 'opacity: 0.5; text-decoration: line-through;' : ''}">
+                <td>${i.itemName || ''}</td><td>${i.itemNameAlt || ''}</td><td>${i.category || ''}</td><td>${i.itemRef || ''}</td>
+                <td><button class="btn" data-edit-id="${i.id}">Edit</button></td>
+            </tr>`).join('');
+        $('catalogTable').innerHTML = `<table><thead><tr><th>Name</th><th>Alt Name</th><th>Category</th><th>Ref #</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table>`;
+    }
+    
+    function renderPricing() {
+        $('kvPricing').textContent = `(${state.pricingAll.length})`;
+        const rows = state.pricingAll.map(p => `
+            <tr>
+                <td>${state.catalogMap.get(p.catalogId) || `ID: ${p.catalogId}`}</td>
+                <td>${state.vendorMap.get(p.vendorId) || `ID: ${p.vendorId}`}</td>
+                <td>${p.vendorItemNo || ''}</td>
+                <td>$${Number(p.unitPrice || 0).toFixed(2)}</td>
+                <td><button class="btn" data-edit-price-id="${p.id}">Edit</button></td>
+            </tr>`).join('');
+        $('pricingTable').innerHTML = `<table><thead><tr><th>Item</th><th>Vendor</th><th>SKU</th><th>Price</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table>`;
+    }
+
+    function renderUnits() {
+        $('kvUnits').textContent = `(${state.units.length})`;
+        const rows = state.units.map(u => `<tr><td>${u.name}</td><td>${u.id}</td><td><button class="btn" data-delete-unit-id="${u.id}">Delete</button></td></tr>`).join('');
+        $('unitsTable').innerHTML = `<div class="row"><input id="newUnitName" placeholder="New Unit Name"><button id="addUnitBtn" class="btn primary">Add Unit</button></div><table><thead><tr><th>Name</th><th>ID</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table>`;
+    }
+
+    function renderCompartments() {
+        $('kvCompartments').textContent = `(${state.compartments.length})`;
+        const rows = state.compartments.map(c => `<tr><td>${c.name}</td><td><button class="btn" data-delete-comp-id="${c.id}">Delete</button></td></tr>`).join('');
+        $('compartmentsTable').innerHTML = `<div class="row"><input id="newCompName" placeholder="New Compartment Name"><button id="addCompBtn" class="btn primary">Add Compartment</button></div><table><thead><tr><th>Name</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table>`;
+    }
+
+    // --- Barcode Scanner ---
+    function startScanner(targetInput, viewportElement) {
+        if (isScannerActive) {
+            Quagga.stop();
+            isScannerActive = false;
+            viewportElement.style.display = 'none';
+            return;
+        }
+        viewportElement.style.display = 'block';
+        Quagga.init({
+            inputStream: { name: "Live", type: "LiveStream", target: viewportElement, constraints: { facingMode: "environment" } },
+            decoder: { readers: ["code_128_reader", "ean_reader", "upc_reader"] }
+        }, (err) => {
+            if (err) {
+                console.error("Quagga Error:", err);
+                viewportElement.style.display = 'none';
+                return;
+            }
+            Quagga.start();
+            isScannerActive = true;
+        });
+
+        Quagga.onDetected(result => {
+            Quagga.stop();
+            isScannerActive = false;
+            viewportElement.style.display = 'none';
+            if (result && result.codeResult) {
+                targetInput.value = result.codeResult.code;
+            }
+        });
+    }
+
+    // --- Modals & Actions ---
+    function setupAllModalsAndActions() {
+        setupCatalogModal();
+        setupPricingModal();
+        setupRequestActions();
+        setupUnitActions();
+        setupCompartmentActions();
+
+        $('app-container').addEventListener('click', async (e) => {
+            const target = e.target.closest('button');
+            if (!target) return;
+
+            const { deleteUnitId, deleteCompId, orderId, status } = target.dataset;
+
+            if (deleteUnitId) {
+                if (confirm(`Are you sure you want to delete unit ${deleteUnitId}?`)) {
+                    await deleteDoc(doc(db, "units", deleteUnitId));
+                    await loadAllData();
+                }
+            }
+            if (deleteCompId) {
+                if (confirm(`Are you sure you want to delete compartment ${deleteCompId}?`)) {
+                    await deleteDoc(doc(db, "compartments", deleteCompId));
+                    await loadAllData();
+                }
+            }
+            if (orderId && status) {
+                await updateDoc(doc(db, "orders", orderId), { status });
+                await loadAllData();
+            }
+        });
+    }
+
+    function setupCatalogModal() {
+        let currentItemId = null;
+        const barcodeList = $('barcodeList');
+        
+        const renderBarcodeList = (barcodes = []) => {
+            barcodeList.innerHTML = '';
+            const barcodeArray = Array.isArray(barcodes) ? barcodes : (barcodes ? [barcodes] : []);
+            barcodeArray.forEach(code => {
+                const item = document.createElement('div');
+                item.className = 'barcode-item';
+                item.innerHTML = `<span class="barcode-item-text">${code}</span><button class="btn danger" style="padding: 2px 6px;">&times;</button>`;
+                barcodeList.appendChild(item);
+            });
+        };
+
+        const openModal = (itemId = null) => {
+            currentItemId = itemId;
+            const item = itemId ? state.catalog.find(i => i.id === itemId) : {};
+            
+            $('catalogModal').querySelector('h2').textContent = itemId ? 'Edit Catalog Item' : 'Add New Catalog Item';
+            $('editItemName').value = item.itemName || '';
+            $('editItemNameAlt').value = item.itemNameAlt || '';
+            $('editCategory').value = item.category || '';
+            $('editItemRef').value = item.itemRef || '';
+            $('editUnit').value = item.unit || '';
+            $('editPackSize').value = item.packSize || 1;
+            $('editIsActive').checked = item.isActive !== false;
+            $('deleteCatalogItem').style.display = itemId ? 'inline-block' : 'none';
+            
+            renderBarcodeList(item.barcode);
+
+            $('catalogModal').style.display = 'flex';
+        };
+
+        $('showCatalogModal').addEventListener('click', () => openModal());
+        $('catalogTable').addEventListener('click', e => {
+            const id = e.target.dataset.editId;
+            if (id) openModal(id);
+        });
+        $('cancelCatalogEdit').addEventListener('click', () => {
+            if (isScannerActive) Quagga.stop();
+            isScannerActive = false;
+            $('barcodeScannerViewport').style.display = 'none';
+            $('catalogModal').style.display = 'none';
+        });
+
+        $('addNewBarcodeBtn').addEventListener('click', () => {
+            const newCode = $('newBarcode').value.trim();
+            if (newCode) {
+                const item = document.createElement('div');
+                item.className = 'barcode-item';
+                item.innerHTML = `<span class="barcode-item-text">${newCode}</span><button class="btn danger" style="padding: 2px 6px;">&times;</button>`;
+                barcodeList.appendChild(item);
+                $('newBarcode').value = '';
+            }
+        });
+
+        barcodeList.addEventListener('click', (e) => {
+            if (e.target.tagName === 'BUTTON') {
+                e.target.parentElement.remove();
+            }
+        });
+
+        $('scanNewBarcodeBtn').addEventListener('click', () => {
+            startScanner($('newBarcode'), $('barcodeScannerViewport'));
+        });
+        
+        $('saveCatalogEdit').addEventListener('click', async () => {
+            const barcodeElements = document.querySelectorAll('#barcodeList .barcode-item-text');
+            const barcodes = Array.from(barcodeElements).map(el => el.textContent);
+
+            const data = {
+                itemName: $('editItemName').value,
+                itemNameAlt: $('editItemNameAlt').value,
+                category: $('editCategory').value,
+                itemRef: $('editItemRef').value,
+                unit: $('editUnit').value,
+                packSize: Number($('editPackSize').value) || 1,
+                barcode: barcodes,
+                isActive: $('editIsActive').checked,
+                updatedAt: new Date().toISOString()
+            };
+
+            if (currentItemId) { // Update
+                await updateDoc(doc(db, "catalog", currentItemId), data);
+            } else { // Create
+                await addDoc(collection(db, "catalog"), data);
+            }
+            $('catalogModal').style.display = 'none';
+            await loadAllData();
+        });
+
+        $('deleteCatalogItem').addEventListener('click', async () => {
+            if (currentItemId && confirm('Are you sure you want to delete this item? This cannot be undone.')) {
+                await deleteDoc(doc(db, "catalog", currentItemId));
+                $('catalogModal').style.display = 'none';
+                await loadAllData();
+            }
+        });
+    }
+
+    function setupPricingModal() {
+        let currentPriceId = null;
+
+        const openModal = (priceId = null) => {
+            currentPriceId = priceId;
+            const price = priceId ? state.pricingAll.find(p => p.id === priceId) : {};
+
+            $('priceItemSelect').innerHTML = state.catalog.map(i => `<option value="${i.id}" ${price.catalogId === i.id ? 'selected' : ''}>${i.itemName}</option>`).join('');
+            $('priceVendorSelect').innerHTML = state.vendors.map(v => `<option value="${v.id}" ${price.vendorId === v.id ? 'selected' : ''}>${v.name}</option>`).join('');
+            $('priceSku').value = price.vendorItemNo || '';
+            $('priceUnitPrice').value = price.unitPrice || '';
+            $('pricingModal').style.display = 'flex';
+        };
+
+        $('showPricingModal').addEventListener('click', () => openModal());
+        $('pricingTable').addEventListener('click', e => {
+            const id = e.target.dataset.editPriceId;
+            if (id) openModal(id);
+        });
+        $('cancelPricingEdit').addEventListener('click', () => $('pricingModal').style.display = 'none');
+
+        $('savePricingEdit').addEventListener('click', async () => {
+            const data = {
+                catalogId: $('priceItemSelect').value,
+                vendorId: $('priceVendorSelect').value,
+                vendorItemNo: $('priceSku').value,
+                unitPrice: Number($('priceUnitPrice').value) || 0,
+            };
+            if (currentPriceId) {
+                await updateDoc(doc(db, "vendorPricing", currentPriceId), data);
+            } else {
+                await addDoc(collection(db, "vendorPricing"), data);
+            }
+            $('pricingModal').style.display = 'none';
+            await loadAllData();
+        });
+    }
+
+    function setupUnitActions() {
+        $('unitsTable').addEventListener('click', async e => {
+            if (e.target.id === 'addUnitBtn') {
+                const name = $('newUnitName').value.trim();
+                if (name) {
+                    await addDoc(collection(db, "units"), { name });
+                    $('newUnitName').value = '';
+                    await loadAllData();
+                }
+            }
+        });
+    }
+
+    function setupCompartmentActions() {
+        $('compartmentsTable').addEventListener('click', async e => {
+            if (e.target.id === 'addCompBtn') {
+                const name = $('newCompName').value.trim();
+                if (name) {
+                    await addDoc(collection(db, "compartments"), { name });
+                    $('newCompName').value = '';
+                    await loadAllData();
+                }
+            }
+        });
+    }
+
+    function setupRequestActions() {
+        $('batchOrderBtn').addEventListener('click', async () => {
+            const selectedIds = [...document.querySelectorAll('.request-checkbox:checked')].map(cb => cb.dataset.requestId);
+            if (selectedIds.length === 0) return alert('No requests selected.');
+
+            const vendorId = prompt("Enter the Vendor ID for this new order:");
+            if (!vendorId || !state.vendorMap.has(vendorId)) return alert('Invalid Vendor ID.');
+
+            const notes = prompt("Enter any notes for this order:");
+
+            try {
+                const newOrderRef = await addDoc(collection(db, "orders"), {
+                    vendorId, notes, status: 'pending', orderDate: new Date()
+                });
+                const batch = writeBatch(db);
+                selectedIds.forEach(id => {
+                    batch.update(doc(db, "requests", id), { status: 'batched', batchedIntoOrderId: newOrderRef.id });
+                });
+                await batch.commit();
+                alert('Order created successfully!');
+                await loadAllData();
+            } catch (e) {
+                console.error("Error creating order:", e);
+                alert("Failed to create order.");
+            }
+        });
+    }
+
+    // --- Initial Bootstrapping ---
+    function mountTabs() {
+        const TABS = ['Order Planner', 'Active Orders', 'Catalog', 'Pricing', 'Units', 'Compartments'];
+        $('tabs').innerHTML = TABS.map(t => `<button class="tab" data-tab="${t.toLowerCase().replace(' ', '_')}">${t}</button>`).join('');
+        $('tabs').addEventListener('click', (ev) => {
+            const tabId = ev.target.dataset.tab;
+            if (!tabId) return;
+            document.querySelectorAll('.tab, .panel').forEach(el => el.classList.remove('active'));
+            ev.target.classList.add('active');
+            $(`panel-${tabId}`).classList.add('active');
+        });
+        $('tabs').querySelector('[data-tab="order_planner"]').click();
+    }
+    async function boot() {
+        mountTabs();
+        setupAllModalsAndActions();
+        
+        ['Requests', 'Orders', 'Catalog', 'Pricing', 'Units', 'Compartments'].forEach(name => {
+            const btn = $(`refresh${name}`);
+            if (btn) btn.addEventListener('click', loadAllData);
+        });
+
+        $('catSearch').addEventListener('input', renderCatalog);
+        
+        await loadAllData();
+    }
+</script>
+</body>
+</html>

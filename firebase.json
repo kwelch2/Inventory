@@ -1,0 +1,10 @@
+{
+  "hosting": {
+    "public": "Inventory-main",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ]
+  }
+}

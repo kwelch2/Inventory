@@ -1,0 +1,536 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Expiring Supplies – GC EMS</title>
+<link rel="icon" type="image/x-icon" href="https://kwelch2.github.io/Inventory/favicon.ico">
+<script src="https://kwelch2.github.io/Inventory/quagga.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css"/>
+<script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
+
+<style>
+    :root{--bg:#f7f7f7;--card:#fff;--b:#ddd;--muted:#666;--ok:#e7f7ee;--warn:#fff7e6;--bad:#fdecea}
+    *{box-sizing:border-box}
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:var(--bg)}
+    .wrap{max-width:1100px;margin:0 auto;padding:16px}
+    .card{background:var(--card);border:1px solid var(--b);border-radius:12px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+    h1{margin:0 0 6px}
+    .muted{color:var(--muted);font-size:.9rem}
+    .toolbar{display: flex;flex-wrap: wrap;gap: 10px;align-items: center;margin-top: 10px;}
+    .toolbar-actions {display: flex;gap: 10px;margin-left: auto;}
+    select,button,input{padding:8px 10px;border:1px solid var(--b);border-radius:10px;background:#fff}
+    button{cursor:pointer}
+    #showAddItemModal {background-color: #007bff;color: #fff;border-color: #007bff;font-weight: 600;}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:8px 10px;border-bottom:1px solid #eee;text-align:left;vertical-align:top}
+    th{font-weight:600;background:#fafafa}
+    .ok{background:var(--ok)} .warn{background:var(--warn)} .bad{background:var(--bad)}
+    .modal{display:none;position:fixed;z-index:99;left:0;top:0;width:100%;height:100%;overflow:auto;background:rgba(0,0,0,.35)}
+    .modal-content{background:#fff;margin:10% auto;padding:16px;border:1px solid var(--b);width:min(540px,92%);border-radius:12px}
+    .close-btn{float:right;font-size:24px;cursor:pointer}
+    .table-container{overflow-x:auto;width:100%}
+    .actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center;}
+    .btn{padding:6px 10px;border-radius:10px;background:#fafafa; border: 1px solid var(--b);}
+    .btn.red{border-color:#c00} .btn.green{border-color:#090}
+    .btn.pending.is-active { background: #ffeb3b !important; color: #000; font-weight: 600; border-color: #fdd835; }
+    .note-trigger{ min-width:100px; text-align:left; }
+    #noteModal{display:none;position:fixed;z-index:120;inset:0;background:rgba(0,0,0,.35)}
+    #noteModal .box{background:#fff;margin:12% auto;max-width:420px;width:92%;border:1px solid var(--b);border-radius:12px;padding:14px}
+    .chipbar{display:flex;gap:6px;flex-wrap:wrap}
+    .viewport { position: relative; }
+    .viewport video, .viewport .drawingBuffer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+    #addItemModal .choices { flex: 1; min-width: 0; }
+</style>
+</head>
+
+<body>
+<div class="wrap">
+  <div class="card">
+    <h1>Expiring Supplies</h1>
+    <div class="muted">Now backed by Firebase Firestore – no proxy or login required.</div>
+    <div class="toolbar">
+      <label>Window <select id="rangeSel"><option value="30">30 days</option><option value="60">60 days</option><option value="90" selected>90 days</option><option value="ALL">All</option></select></label>
+      <label>Unit <select id="unitSel"><option value="ALL">ALL</option></select></label>
+      <div style="display:flex;gap:8px;align-items:center;flex:1;">
+        <button class="btn" id="startScanBtn" title="Scan Barcode to Search">
+          <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z'/%3E%3C/svg%3E" alt="Barcode Scanner" style="height:20px;width:20px;">
+        </button>
+        <input id="searchBox" placeholder="Search item, compartment…" style="flex:1;"/>
+      </div>
+      <div class="toolbar-actions"><button class="btn" id="refreshBtn">Refresh</button><button class="btn" id="showAddItemModal">+ Add Item</button></div>
+      <span id="count" class="muted"></span>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top: 1rem;">
+    <div class="table-container">
+      <div id="content"><p class="muted">Loading expiring items...</p></div>
+    </div>
+  </div>
+</div>
+
+<div id="addItemModal" class="modal">
+    <div class="modal-content">
+      <span class="close-btn">&times;</span>
+      <h3>Add Item to Inventory</h3>
+      <div id="interactive" class="viewport" style="display:none; width:100%; height:240px; border:1px solid #ccc; background:#000; margin-bottom:1rem;"></div>
+      <label>Item</label>
+      <div style="display:flex; gap:8px; align-items:center;">
+          <select id="addItemSelect"></select>
+          <button id="scanBarcodeBtn" class="btn" title="Scan Barcode to Select Item" style="flex-shrink:0;">
+              <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z'/%3E%3C/svg%3E" alt="Barcode Scanner" style="height:20px;width:20px;">
+          </button>
+      </div>
+      <label style="margin-top: 10px;">Unit</label>
+      <select id="addUnitSelect"><option value="">Select...</option></select>
+      <label>Compartment</label>
+      <select id="addCompartmentSelect"><option value="">Select…</option><option>Wall</option><option>Bag</option><option>Supply RM</option><option>Clear Container</option><option>BLS Bag</option><option>ALS Bag</option><option>Other</option></select>
+      <div style="margin-top: 10px;">
+          <label>Expiry Month</label>
+          <div id="addExpiryChips" class="chipbar"></div>
+          <div id="customExpiryWrap" style="display:none; margin-top: 8px;">
+              <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                  <label>Month <input id="customMonth" type="month"></label>
+                  <label>Exact date <input id="customDate" type="date"></label>
+                  <button id="applyCustomExp" class="btn">Apply</button>
+              </div>
+          </div>
+      </div>
+      <label>Quantity</label>
+      <input id="addQty" type="number" min="1" step="1" value="1"/>
+      <button id="saveNewItemBtn" class="btn" style="width:100%;margin-top:12px;">Save Item</button>
+    </div>
+</div>
+
+<div id="interactive-search-modal" class="modal">
+  <div class="modal-content" style="padding:0; background:#000; height: 360px; position:relative;">
+    <span class="close-btn" style="color:white; position:absolute; top:5px; right:15px; z-index:10;">&times;</span>
+    <div id="interactive-search-viewport" class="viewport" style="width:100%; height:100%;"></div>
+  </div>
+</div>
+
+
+<div id="noteModal">
+  <div class="box">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <strong>Edit note</strong>
+    </div>
+    <textarea id="noteText" rows="3" maxlength="40" placeholder="Short note..."></textarea>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
+      <button id="noteCancel" class="btn">Cancel</button>
+      <button id="noteSave" class="btn">Save</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+    import { getFirestore, collection, getDocs, addDoc, updateDoc, doc, serverTimestamp, query, where } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyD7pMc-AHXb1cApzSfImkWvIjM9iwCoym4",
+        authDomain: "supplies-ems.firebaseapp.com",
+        projectId: "supplies-ems",
+        storageBucket: "supplies-ems.firebasestorage.app",
+        messagingSenderId: "649560661195",
+        appId: "1:649560661195:web:f389f3e620c0c36559cf4e",
+        measurementId: "G-EN8MDYD571"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    
+    let allInventory = [], units = [], catalog = [];
+    let itemSelectChoices;
+    let selectedExp = '';
+    let isScannerActive = false;
+    let quaggaHandler = null;
+
+    const $ = s => document.querySelector(s);
+    const escapeHtml = s => (s??'').toString().replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;' }[m]));
+
+    async function loadAll() {
+        $('#refreshBtn').disabled = true;
+        try {
+            const [invSnap, unitsSnap, catalogSnap] = await Promise.all([
+                getDocs(collection(db, "inventory")),
+                getDocs(collection(db, "units")),
+                getDocs(collection(db, "catalog"))
+            ]);
+            allInventory = invSnap.docs.map(d => ({ inventoryId: d.id, ...d.data() }));
+            units = unitsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+            catalog = catalogSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+            fillUnitSelect();
+            render();
+        } catch (e) {
+            console.error("Error loading data: ", e);
+            $('#content').innerHTML = `<p style="color:red;">Error loading data from Firestore. Check permissions and collection names.</p>`;
+        } finally {
+            $('#refreshBtn').disabled = false;
+        }
+    }
+
+    function fillUnitSelect() {
+        $('#unitSel').innerHTML = `<option value="ALL">ALL</option>` + units.map(u => `<option value="${u.id}">${u.name}</option>`).join('');
+    }
+
+    function rowClass(days, status) {
+        if (days !== null && days !== undefined) {
+            if (days <= 0) return 'bad';
+            if (days <= 30) return 'warn';
+        }
+        return '';
+    }
+
+    function render() {
+        const rangeValue = $('#rangeSel').value;
+        const withinDays = rangeValue === 'ALL' ? 9999 : parseInt(rangeValue, 10);
+        const unitFilter = $('#unitSel').value;
+        const searchQuery = ($('#searchBox').value || '').toLowerCase();
+        
+        const catalogMap = new Map(catalog.map(item => [item.id, item]));
+
+        let filtered = allInventory.filter(item => {
+            const status = (item.status || '').toLowerCase();
+            if (status === 'ok' || status === 'replaced') return false;
+            if (!item.expiryDate) return false;
+            
+            const expiry = new Date(item.expiryDate.seconds ? item.expiryDate.seconds * 1000 : item.expiryDate);
+            if (isNaN(expiry)) return false;
+
+            const today = new Date(); today.setHours(0, 0, 0, 0);
+            item.daysToExpire = Math.ceil((expiry - today) / (1000 * 60 * 60 * 24));
+            
+            if (item.daysToExpire > withinDays) return false;
+            if (unitFilter !== 'ALL' && item.unitId !== unitFilter) return false;
+
+            const catalogItem = catalogMap.get(item.catalogId);
+            const itemName = (catalogItem ? catalogItem.itemName : 'Unknown').toLowerCase();
+            const compartment = (item.compartment || '').toLowerCase();
+            if (searchQuery && !itemName.includes(searchQuery) && !compartment.includes(searchQuery)) return false;
+
+            return true;
+        });
+
+        filtered.sort((a, b) => (a.daysToExpire || 9999) - (b.daysToExpire || 9999));
+        $('#count').textContent = `${filtered.length} item(s)`;
+
+        const tableHTML = `
+            <table>
+                <thead><tr><th>Item</th><th>Unit</th><th>Compartment</th><th>Qty</th><th>Expiry</th><th class="right">Days Left</th><th>Actions</th></tr></thead>
+                <tbody>
+                    ${filtered.map(item => {
+                        const catalogItem = catalogMap.get(item.catalogId);
+                        const itemName = catalogItem ? catalogItem.itemName : `Unknown (ID: ${item.catalogId})`;
+                        const unit = units.find(u => u.id === item.unitId);
+                        const expiryDate = new Date(item.expiryDate.seconds ? item.expiryDate.seconds * 1000 : item.expiryDate).toLocaleDateString();
+
+                        const unitOptions = units.map(u => `<option value="${u.id}" ${u.id === item.unitId ? 'selected' : ''}>${u.name}</option>`).join('');
+                        const compartmentOptions = ['Wall', 'Bag', 'Supply RM', 'Clear Container', 'BLS Bag', 'ALS Bag', 'Other'].map(c => `<option value="${c}" ${c === item.compartment ? 'selected' : ''}>${c}</option>`).join('');
+
+                        return `
+                            <tr class="${rowClass(item.daysToExpire, item.status)}" data-id="${item.inventoryId}">
+                                <td><strong>${escapeHtml(itemName)}</strong></td>
+                                <td>
+                                    <span class="unit-display">${escapeHtml(unit ? unit.name : item.unitId)}</span>
+                                    <select class="unit-edit" style="display:none;">${unitOptions}</select>
+                                </td>
+                                <td>
+                                    <span class="compartment-display">${escapeHtml(item.compartment)}</span>
+                                    <select class="compartment-edit" style="display:none;">${compartmentOptions}</select>
+                                </td>
+                                <td>${escapeHtml(item.qty)}</td>
+                                <td>${expiryDate}</td>
+                                <td class="right">${item.daysToExpire}</td>
+                                <td>
+                                    <div class="actions">
+                                        <button class="btn note-trigger" title="Click to edit note">${escapeHtml(item.crewStatus || 'note…')}</button>
+                                        <button class="btn pending ${item.status==='Pending'?'is-active':''}">Pending</button>
+                                        <button class="btn green ok-btn">OK</button>
+                                        <button class="btn red replaced-btn">Replaced</button>
+                                        <button class="btn edit-btn">Edit</button>
+                                        <button class="btn save-btn" style="display:none;">Save</button>
+                                        <button class="btn cancel-btn" style="display:none;">Cancel</button>
+                                    </div>
+                                </td>
+                            </tr>`;
+                    }).join('')}
+                </tbody>
+            </table>`;
+        
+        $('#content').innerHTML = filtered.length > 0 ? tableHTML : '<p class="muted">No expiring items match your criteria.</p>';
+        attachActionListeners();
+    }
+
+    function attachActionListeners() {
+        document.querySelectorAll('#content tr[data-id]').forEach(tr => {
+            const id = tr.dataset.id;
+            const item = allInventory.find(i => i.inventoryId === id);
+
+            const toggleEditMode = (isEditing) => {
+                tr.querySelector('.unit-display').style.display = isEditing ? 'none' : 'inline';
+                tr.querySelector('.unit-edit').style.display = isEditing ? 'inline' : 'none';
+                tr.querySelector('.compartment-display').style.display = isEditing ? 'none' : 'inline';
+                tr.querySelector('.compartment-edit').style.display = isEditing ? 'inline' : 'none';
+                
+                tr.querySelector('.edit-btn').style.display = isEditing ? 'none' : 'inline';
+                tr.querySelector('.save-btn').style.display = isEditing ? 'inline' : 'none';
+                tr.querySelector('.cancel-btn').style.display = isEditing ? 'inline' : 'none';
+            };
+
+            tr.querySelector('.edit-btn').addEventListener('click', () => toggleEditMode(true));
+            tr.querySelector('.cancel-btn').addEventListener('click', () => toggleEditMode(false));
+            
+            tr.querySelector('.save-btn').addEventListener('click', async () => {
+                const newUnitId = tr.querySelector('.unit-edit').value;
+                const newCompartment = tr.querySelector('.compartment-edit').value;
+                try {
+                    await updateDoc(doc(db, "inventory", id), {
+                        unitId: newUnitId,
+                        compartment: newCompartment,
+                        updatedAt: serverTimestamp()
+                    });
+                    item.unitId = newUnitId;
+                    item.compartment = newCompartment;
+                    render();
+                } catch (e) {
+                    console.error("Save failed:", e);
+                    alert("Save failed");
+                }
+                toggleEditMode(false);
+            });
+
+            const updateStatus = async (newStatus) => {
+                 try {
+                    await updateDoc(doc(db, "inventory", id), { status: newStatus, updatedAt: serverTimestamp() });
+                    item.status = newStatus;
+                    if (newStatus === 'OK' || newStatus === 'Replaced') {
+                        tr.remove();
+                    } else {
+                        render();
+                    }
+                } catch (err) { console.error("Update failed:", err); alert("Update failed"); }
+            };
+            
+            tr.querySelector('.note-trigger')?.addEventListener('click', () => {
+                 openNoteEditor(id, item.crewStatus || '', async (newNote) => {
+                    await updateDoc(doc(db, "inventory", id), { crewStatus: newNote, updatedAt: serverTimestamp() });
+                    item.crewStatus = newNote;
+                    render();
+                });
+            });
+            tr.querySelector('.pending')?.addEventListener('click', () => updateStatus('Pending'));
+            tr.querySelector('.ok-btn')?.addEventListener('click', () => updateStatus('OK'));
+            tr.querySelector('.replaced-btn')?.addEventListener('click', () => updateStatus('Replaced'));
+        });
+    }
+
+    function openNoteEditor(id, initialText, onSave) {
+        const modal = $('#noteModal'), ta = $('#noteText');
+        ta.value = initialText;
+        modal.style.display = 'block';
+        ta.focus();
+        const close = () => modal.style.display = 'none';
+        $('#noteCancel').onclick = close;
+        modal.onclick = e => { if (e.target===modal) close(); };
+        $('#noteSave').onclick = async () => {
+            await onSave(ta.value.trim());
+            close();
+        };
+    }
+
+    function setupAddItemModal() {
+        const modal = $('#addItemModal');
+        $('#showAddItemModal').addEventListener('click', () => {
+            populateAddItemDropdowns();
+            buildExpiryChips();
+
+            // FIX: Set the unit based on the main page's filter
+            const currentUnit = $('#unitSel').value;
+            if (currentUnit !== 'ALL') {
+                $('#addUnitSelect').value = currentUnit;
+            }
+
+            modal.style.display = 'block';
+        });
+        modal.querySelector('.close-btn').addEventListener('click', () => modal.style.display = 'none');
+        window.addEventListener('click', e => { if (e.target === modal) modal.style.display = 'none'; });
+
+        $('#saveNewItemBtn').addEventListener('click', async () => {
+            const payload = {
+                catalogId: itemSelectChoices.getValue(true),
+                unitId: $('#addUnitSelect').value,
+                compartment: $('#addCompartmentSelect').value.trim(),
+                expiryDate: new Date(selectedExp),
+                qty: parseInt($('#addQty').value, 10) || 1,
+                status: "",
+                crewStatus: "",
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp(),
+                updatedBy: "WebApp (Expiring Page)"
+            };
+
+            if (!payload.catalogId || !payload.unitId || !selectedExp) {
+                alert("Please select an item, unit, and expiry date.");
+                return;
+            }
+
+            $('#saveNewItemBtn').disabled = true;
+            $('#saveNewItemBtn').textContent = 'Saving...';
+            
+            try {
+                await addDoc(collection(db, "inventory"), payload);
+                modal.style.display = 'none';
+                await loadAll();
+            } catch (e) {
+                console.error("Error adding document: ", e);
+            } finally {
+                $('#saveNewItemBtn').disabled = false;
+                $('#saveNewItemBtn').textContent = 'Save Item';
+            }
+        });
+    }
+
+    function populateAddItemDropdowns() {
+        $('#addUnitSelect').innerHTML = units.map(u => `<option value="${u.id}">${u.name}</option>`).join('');
+        const catalogOptions = catalog.map(c => ({ value: c.id, label: c.itemName }));
+        if (itemSelectChoices) {
+            itemSelectChoices.clearStore();
+            itemSelectChoices.setChoices(catalogOptions, 'value', 'label', true);
+        } else {
+            itemSelectChoices = new Choices('#addItemSelect', { searchEnabled: true, placeholderValue: 'Select an item...', choices: catalogOptions });
+        }
+    }
+
+    function buildExpiryChips(){
+        const chipBar = $('#addExpiryChips');
+        const now = new Date();
+        const chips = [];
+        for (let i=0; i<3; i++) {
+            const d = new Date(now.getFullYear(), now.getMonth()+i, 1);
+            chips.push({
+                label: d.toLocaleString('default', {month:'short', year:'2-digit'}),
+                iso: new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split('T')[0]
+            });
+        }
+        chipBar.innerHTML = chips.map(c=>`<button class="btn exp-chip" data-exp="${c.iso}">${c.label}</button>`).join('') +
+                            `<button class="btn exp-chip custom" data-exp="">Custom…</button>`;
+        
+        chipBar.querySelectorAll('.exp-chip').forEach(b => b.addEventListener('click', (e) => {
+            e.preventDefault();
+            chipBar.querySelectorAll('.exp-chip').forEach(x => x.style.borderColor = '');
+            b.style.borderColor = 'blue';
+            selectedExp = b.dataset.exp;
+            $('#customExpiryWrap').style.display = b.classList.contains('custom') ? 'block' : 'none';
+        }));
+
+        $('#applyCustomExp').onclick = (e) => {
+            e.preventDefault();
+            const dateVal = $('#customDate').value;
+            const monthVal = $('#customMonth').value;
+            if (dateVal) {
+                selectedExp = dateVal;
+            } else if (monthVal) {
+                const [y, m] = monthVal.split('-');
+                selectedExp = new Date(y, m, 0).toISOString().split('T')[0];
+            } else { return; }
+            $('#customExpiryWrap').style.display = 'none';
+        };
+    }
+    
+    function stopScanner(forSearch = false) {
+        if (isScannerActive) {
+            try {
+                Quagga.stop();
+            } catch (err) {
+                console.warn('Quagga.stop failed but proceeding.', err);
+            }
+            isScannerActive = false;
+            if (quaggaHandler && typeof Quagga.offDetected === 'function') {
+                Quagga.offDetected(quaggaHandler);
+                quaggaHandler = null;
+            }
+        }
+        const modal = forSearch ? $('#interactive-search-modal') : $('#addItemModal');
+        const viewport = forSearch ? $('#interactive-search-viewport') : $('#interactive');
+        modal.style.display = 'none';
+        viewport.style.display = 'none';
+    }
+
+    async function handleBarcode(code, forSearch) {
+        const q = query(collection(db, "catalog"), where("barcode", "==", code));
+        const querySnapshot = await getDocs(q);
+        
+        if (querySnapshot.empty) {
+            alert(`Barcode ${code} not found in catalog.`);
+            return;
+        }
+
+        const itemDoc = querySnapshot.docs[0];
+        const item = { id: itemDoc.id, ...itemDoc.data() };
+
+        if (forSearch) {
+            $('#searchBox').value = item.itemName;
+            render();
+        } else {
+            if (itemSelectChoices) {
+                itemSelectChoices.setChoiceByValue(item.id);
+            }
+        }
+    }
+
+    function startScanner(forSearch = false) {
+        if (isScannerActive) {
+            stopScanner(forSearch);
+            return;
+        }
+
+        const modal = forSearch ? $('#interactive-search-modal') : $('#addItemModal');
+        const viewport = forSearch ? $('#interactive-search-viewport') : $('#interactive');
+
+        modal.style.display = 'block';
+        viewport.style.display = 'block';
+
+        Quagga.init({
+            inputStream: { name: "Live", type: "LiveStream", target: viewport },
+            decoder: { readers: ["code_128_reader", "ean_reader", "upc_reader"] }
+        }, (err) => {
+            if (err) {
+                console.error(err);
+                alert("Error initializing scanner: " + err);
+                stopScanner(forSearch);
+                return;
+            }
+            Quagga.start();
+            isScannerActive = true;
+
+            quaggaHandler = (result) => {
+                stopScanner(forSearch);
+                handleBarcode(result.codeResult.code, forSearch);
+            };
+            Quagga.onDetected(quaggaHandler);
+        });
+
+        if (forSearch) {
+            modal.querySelector('.close-btn').onclick = () => stopScanner(true);
+        }
+    }
+
+
+    function init() {
+        loadAll();
+        setupAddItemModal();
+        $('#rangeSel').addEventListener('change', render);
+        $('#unitSel').addEventListener('change', render);
+        $('#searchBox').addEventListener('input', render);
+        $('#refreshBtn').addEventListener('click', loadAll);
+
+        $('#startScanBtn').addEventListener('click', () => startScanner(true));
+        $('#scanBarcodeBtn').addEventListener('click', () => startScanner(false));
+    }
+    
+    init();
+</script>
+</body>
+</html>

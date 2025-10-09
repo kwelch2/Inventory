@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>EMS Supplies – Home</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      margin: 0;
+      background: #f7f7f7;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      text-align: center;
+    }
+    .logo {
+      max-width: 250px;
+      margin-bottom: 2rem;
+      cursor: pointer;
+    }
+    .btn {
+      display: inline-block;
+      margin: 0.5rem;
+      padding: 1rem 2rem;
+      font-size: 1.2rem;
+      color: #fff;
+      background: #0077cc;
+      border: none;
+      border-radius: 8px;
+      text-decoration: none;
+      transition: background 0.2s ease;
+    }
+    .btn:hover {
+      background: #005fa3;
+    }
+    .admin-link {
+      display: none;
+      margin-top: 1rem;
+      background: #cc0000;
+    }
+  </style>
+</head>
+<body>
+  <!-- Logo -->
+  <img src="Logo-1.jpg" alt="EMS Logo" class="logo" id="logo">
+
+  <!-- Main buttons -->
+  <a href="expiry3.html" class="btn">Supplies: Expiring</a>
+  <a href="requests.html" class="btn">Requests</a>
+
+  <!-- Hidden admin button -->
+  <a href="master.html" class="btn admin-link" id="adminLink">Admin</a>
+
+  <script>
+    let clickCount = 0;
+    const logo = document.getElementById('logo');
+    const adminLink = document.getElementById('adminLink');
+
+    logo.addEventListener('click', () => {
+      clickCount++;
+      if (clickCount >= 4) {
+        adminLink.style.display = 'inline-block';
+        clickCount = 0; // reset after showing
+      }
+      setTimeout(() => { clickCount = 0; }, 1000); // reset if not quick clicks
+    });
+  </script>
+</body>
+</html>
