@@ -111,7 +111,7 @@
     vendorMap: new Map()
   };
   
-  let itemSelectChoices; // Variable to hold the Choices.js instance
+  let itemSelectChoices; // Choices.js instance
 
   const $ = (sel) => document.querySelector(sel);
   const escapeHtml = (s = "") => String(s).replace(/[&<>"']/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
@@ -170,8 +170,7 @@
   }
 
   function formatRequestName(request) {
-    // FIXED: Check for both the new 'catalogId' and the old 'ItemID' for backward compatibility
-    const itemId = request.catalogId || request.ItemID;
+    const itemId = request.catalogId || request.ItemID; // Check for both new and old field names
     const catalogItem = itemId ? state.catalogMap.get(itemId) : null;
     const primary = request.otherItemName || catalogItem?.itemName || "Unknown Item";
     const alt = catalogItem?.itemNameAlt && catalogItem?.itemNameAlt !== primary ? catalogItem.itemNameAlt : "";
@@ -241,7 +240,7 @@
   function setupForm() {
     $('#isOther').addEventListener('change', () => {
         const on = $('#isOther').checked;
-        const choicesEl = document.querySelector('#requestPane .choices'); // Target the right element
+        const choicesEl = document.querySelector('#requestPane .choices');
         if(choicesEl) choicesEl.style.display = on ? 'none' : 'block';
         $('#otherItem').style.display = on ? 'block' : 'none';
         if(itemSelectChoices) itemSelectChoices.clearInput();
@@ -281,4 +280,38 @@
             $('#qty').value = '';
             $('#notes').value = '';
             await loadAllData();
-        } catch (err)
+        } catch (err) {
+            console.error('Failed to submit request', err);
+            msg.textContent = 'An error occurred submitting the request.';
+        }
+    });
+  }
+
+  function setupHistoryControls() {
+    document.querySelectorAll('button.hist').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('button.hist').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            renderHistory(Number(btn.dataset.days) || 30, currentHistoryQuery);
+        });
+    });
+    $('#historySearch').addEventListener('input', (e) => {
+        renderHistory(currentHistoryDays, e.target.value);
+    });
+    $('#historyPane').addEventListener('toggle', (e) => {
+        if (e.target.open) {
+            renderHistory(currentHistoryDays, currentHistoryQuery);
+        }
+    });
+  }
+
+  async function boot() {
+    await loadAllData();
+    setupForm();
+    setupHistoryControls();
+  }
+  
+  boot();
+</script>
+</body>
+</html>
