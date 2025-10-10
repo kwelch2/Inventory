@@ -18,8 +18,6 @@
   .muted{color:var(--muted);font-size:.9rem}
   table{width:100%;border-collapse:collapse;margin-top:12px}
   th,td{padding:8px;border-bottom:1px solid #eee;text-align:left;vertical-align:top}
-  .status-btns button{width:auto;margin-right:5px}
-  .status-btns .active{background:#0275d8;color:#fff;border-color:#0275d8}
   .vendor-table{font-size:.9em;margin-top:8px;background:#fafafa}
   .vendor-table th,.vendor-table td{padding:4px}
   summary{cursor:pointer;font-weight:bold}
@@ -42,8 +40,8 @@
     <div class="card" style="margin-top:16px;">
         <h2>Pending Requests</h2>
         <table id="pendingTable">
-          <thead><tr><th>Item / Vendor Pricing</th><th>Qty</th><th>Status</th><th>Notes</th></tr></thead>
-          <tbody><tr><td colspan="4">Loading...</td></tr></tbody>
+          <thead><tr><th>Item / Vendor Pricing</th><th>Qty</th><th>Status</th><th>Notes</th><th>Action</th></tr></thead>
+          <tbody><tr><td colspan="5">Loading...</td></tr></tbody>
         </table>
     </div>
 
@@ -92,7 +90,7 @@
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-  import { getFirestore, collection, getDocs, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+  import { getFirestore, collection, getDocs, addDoc, serverTimestamp, updateDoc, doc } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyD7pMc-AHXb1cApzSfImkWvIjM9iwCoym4",
@@ -127,7 +125,7 @@
   let currentHistoryQuery = "";
 
   async function loadAllData() {
-    $('#pendingTable tbody').innerHTML = '<tr><td colspan="4">Loading…</td></tr>';
+    $('#pendingTable tbody').innerHTML = '<tr><td colspan="5">Loading…</td></tr>';
     try {
       const [catSnap, reqSnap, priceSnap, vendorSnap] = await Promise.all([
         getDocs(collection(db, "catalog")),
@@ -147,7 +145,7 @@
       renderHistory(currentHistoryDays, currentHistoryQuery);
     } catch (err) {
       console.error("Failed to load Firestore data", err);
-      $('#pendingTable tbody').innerHTML = '<tr><td colspan="4" style="color:#a00;font-weight:700;">Error: Could not load data. Check security rules.</td></tr>';
+      $('#pendingTable tbody').innerHTML = '<tr><td colspan="5" style="color:#a00;font-weight:700;">Error: Could not load data. Check security rules.</td></tr>';
     }
   }
 
@@ -170,7 +168,7 @@
   }
 
   function formatRequestName(request) {
-    const itemId = request.catalogId || request.ItemID; // Check for both new and old field names
+    const itemId = request.catalogId || request.ItemID;
     const catalogItem = itemId ? state.catalogMap.get(itemId) : null;
     const primary = request.otherItemName || catalogItem?.itemName || "Unknown Item";
     const alt = catalogItem?.itemNameAlt && catalogItem?.itemNameAlt !== primary ? catalogItem.itemNameAlt : "";
@@ -181,7 +179,7 @@
     const tbody = $('#pendingTable tbody');
     const pending = state.requests.filter((r) => !['received', 'fulfilled', 'complete', 'completed', 'closed'].includes(String(r.status || 'open').toLowerCase()));
     if (!pending.length) {
-      tbody.innerHTML = '<tr><td colspan="4">No pending requests.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="5">No pending requests.</td></tr>';
       return;
     }
     tbody.innerHTML = pending.sort((a, b) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0)).map((request) => {
@@ -193,18 +191,30 @@
           <tr>
             <td><details><summary>${escapeHtml(primary)} ${alt ? `<span class="muted">${escapeHtml(alt)}</span>` : ''}</summary><table class="vendor-table"><thead><tr><th>Vendor</th><th>Price</th><th>Item#</th></tr></thead><tbody>${pricingHTML}</tbody></table></details></td>
             <td>${escapeHtml(request.qty || '')}</td>
-            <td class="status-btns">
-              <button class="btn ${String(request.status || 'open').toLowerCase() === 'open' ? 'active' : ''}" data-request-id="${request.id}" data-status="open">Pending</button>
-              <button class="btn ${String(request.status || '').toLowerCase() === 'ordered' ? 'active' : ''}" data-request-id="${request.id}" data-status="ordered">Ordered</button>
-              <button class="btn ${String(request.status || '').toLowerCase() === 'received' ? 'active' : ''}" data-request-id="${request.id}" data-status="received">Received</button>
-            </td>
+            <td><strong>${escapeHtml(request.status || 'Requested')}</strong></td>
             <td>${escapeHtml(request.notes || '')}</td>
+            <td><button class="btn" data-receive-id="${request.id}">Mark Received</button></td>
           </tr>`;
     }).join("");
 
-    tbody.querySelectorAll('.status-btns button').forEach((btn) => {
+    tbody.querySelectorAll('[data-receive-id]').forEach((btn) => {
       btn.addEventListener('click', async () => {
-        alert("Status can only be changed from the Admin page.");
+        const requestId = btn.dataset.receiveId;
+        if (!requestId) return;
+        btn.disabled = true;
+        btn.textContent = 'Saving...';
+        try {
+            await updateDoc(doc(db, "requests", requestId), { 
+                status: 'Received',
+                receivedAt: serverTimestamp()
+            });
+            await loadAllData(); // Refresh the whole page data
+        } catch(e) {
+            console.error("Failed to mark as received:", e);
+            alert("Error: Could not update status. You may not have permission.");
+            btn.disabled = false;
+            btn.textContent = 'Mark Received';
+        }
       });
     });
   }
