@@ -506,7 +506,7 @@
         if (addItemChoices) addItemChoices.destroy();
         addItemChoices = new Choices(itemElement, { searchEnabled: true, placeholderValue: 'Select an item to add...' });
 
-        $('showAddItemToOrderModal').addEventListener('click', () => {
+        $('showAddItemModal').addEventListener('click', () => {
             const options = state.catalog.filter(c=>c.isActive !== false).map(c=>({value: c.id, label: c.itemName}));
             addItemChoices.setChoices(options, 'value', 'label', true);
             modal.style.display = 'flex';
