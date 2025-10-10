@@ -290,7 +290,7 @@
         applyPermissions(state.userRole);
     }
     
-    function renderOrders() {
+     function renderOrders() {
         const container = $('ordersTableContainer');
         const showHistory = $('showHistoryToggle').checked;
         const activeFilter = document.querySelector('.filter-btn.active')?.dataset.status || 'Open';
@@ -358,7 +358,57 @@
                 <thead><tr><th>Item/Requester</th><th>Qty</th><th>Vendor (Lowest Price)</th><th>SKU</th><th>Actions</th></tr></thead>
                 <tbody>${rows || `<tr><td colspan="5" class="muted">No requests found.</td></tr>`}</tbody>
             </table>`;
+
+        // Attach event listeners directly to the buttons after rendering
+        document.querySelectorAll('[data-toggle-details]').forEach(button => {
+            button.addEventListener('click', () => {
+                const row = button.closest('tr[data-request-id]');
+                if (!row) return;
+                const requestId = row.dataset.requestId;
+                const detailsRow = document.querySelector(`[data-details-for="${requestId}"]`);
+                if (detailsRow) {
+                    detailsRow.classList.toggle('visible');
+                }
+            });
+        });
     }
+
+    // ... (keep the rest of your JavaScript code the same, but update the event listener below)
+
+    $('ordersTableContainer').addEventListener('click', async e => {
+        const target = e.target;
+        const row = target.closest('tr[data-request-id]');
+        if (!row) return;
+        const requestId = row.dataset.requestId;
+
+        // The toggle logic is now handled above, so we don't need it here.
+
+        if (target.dataset.status) {
+            await updateRequestStatus(requestId, target.dataset.status);
+        }
+        
+        if (target.dataset.editPrice) {
+            const detailsCell = target.closest('.details-cell');
+            const priceInput = detailsCell.querySelector('.edit-price-input');
+            const vendorSelect = detailsCell.querySelector('.edit-price-vendor-select');
+            const newPrice = parseFloat(priceInput.value);
+            const vendorId = vendorSelect.value;
+            const request = state.requests.find(r => r.id === requestId);
+            
+            if (!request || !vendorId || isNaN(newPrice)) {
+                return alert('Please select a vendor and enter a valid price.');
+            }
+            
+            const pricingDoc = state.pricingAll.find(p => p.catalogId === request.catalogId && p.vendorId === vendorId);
+            if (pricingDoc) {
+                await updateDoc(doc(db, 'vendorPricing', pricingDoc.id), { unitPrice: newPrice });
+                alert('Price updated!');
+                await loadAllData();
+            } else {
+                alert('No existing price document for this item/vendor combo. Please add it in the "Vendor Pricing" tab.');
+            }
+        }
+    });
 
     function renderCatalog() {
         const query = $('catSearch').value.toLowerCase();
