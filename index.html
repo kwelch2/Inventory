@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>EMS Supplies – Home</title>
+  <title>EMS Supplies – Dashboard</title>
   <style>
     body {
       font-family: system-ui, sans-serif;
@@ -13,14 +13,16 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      height: 100vh;
+      min-height: 100vh;
       text-align: center;
     }
+
     .logo {
-      max-width: 250px;
+      max-width: 220px;
       margin-bottom: 2rem;
       cursor: pointer;
     }
+
     .btn {
       display: inline-block;
       margin: 0.5rem;
@@ -33,40 +35,66 @@
       text-decoration: none;
       transition: background 0.2s ease;
     }
-    .btn:hover {
+    .btn:hover, .btn:active {
       background: #005fa3;
     }
-    .admin-link {
-      display: none;
-      margin-top: 1rem;
-      background: #cc0000;
+
+    /* Top-right admin link */
+    .admin-top {
+      position: absolute;
+      top: 10px;
+      right: 15px;
+      font-size: 0.9rem;
+    }
+    .admin-top a {
+      color: #666;
+      text-decoration: none;
+      padding: 6px 10px;
+      border-radius: 6px;
+      background: rgba(240,240,240,0.8);
+      transition: background 0.2s;
+    }
+    .admin-top a:hover {
+      background: rgba(220,220,220,1);
+    }
+
+    /* Mobile layout spacing */
+    @media (max-width: 600px) {
+      .btn {
+        width: 80%;
+        font-size: 1.1rem;
+      }
     }
   </style>
 </head>
 <body>
+
+  <!-- Small top admin/login link -->
+  <div class="admin-top">
+    <a href="https://supplies-ems.web.app/master.html">🔒 Admin / Login supplies</a>
+  </div>
+
   <!-- Logo -->
   <img src="Logo-1.jpg" alt="EMS Logo" class="logo" id="logo">
 
   <!-- Main buttons -->
-  <a href="expiry3.html" class="btn">Supplies: Expiring</a>
-  <a href="requests.html" class="btn">Requests</a>
-
-  <!-- Hidden admin button -->
-  <a href="master.html" class="btn admin-link" id="adminLink">Admin</a>
+  <a href="https://supplies-ems.web.app/expiry3.html" class="btn">Supplies: Expiring</a>
+  <a href="https://supplies-ems.web.app/requests.html" class="btn">Requests</a>
+  <a href="https://chores-ems.gemfireems.org/" class="btn">EMS-Chores</a>
 
   <script>
+    // Optional: Easter egg click to reveal admin link (still works)
     let clickCount = 0;
     const logo = document.getElementById('logo');
-    const adminLink = document.getElementById('adminLink');
-
     logo.addEventListener('click', () => {
       clickCount++;
       if (clickCount >= 4) {
-        adminLink.style.display = 'inline-block';
-        clickCount = 0; // reset after showing
+        alert('Admin shortcut: https://supplies-ems.web.app/master.html');
+        clickCount = 0;
       }
-      setTimeout(() => { clickCount = 0; }, 1000); // reset if not quick clicks
+      setTimeout(() => { clickCount = 0; }, 1000);
     });
   </script>
+
 </body>
 </html>

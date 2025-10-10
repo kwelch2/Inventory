@@ -71,38 +71,34 @@
         </div>
     </div>
     <div class="tabs" id="tabs"></div>
-
       <section id="panel-orders" class="panel">
         <h2>Orders & Requests</h2>
         <div class="row">
-            <button class="btn primary" id="showAddItemModal">+ Add Item to Order</button>
+            <button class="btn primary" id="showAddItemToOrderModal">+ Add Item to Order</button>
             <span class="spacer"></span>
             <strong style="margin-left: 2rem;">Filter by Status:</strong>
             <button class="btn filter-btn active" data-status="Open">Open</button>
             <button class="btn filter-btn" data-status="Ordered">Ordered</button>
             <button class="btn filter-btn" data-status="Backordered">Backordered</button>
+            <label style="margin-left:1rem; font-weight:normal;"><input type="checkbox" id="showHistoryToggle"> Show History</label>
         </div>
         <div id="ordersTableContainer"></div>
       </section>
-      
       <section id="panel-catalog" class="panel">
         <h2>Catalog Manager <span class="kvd" id="kvCatalog"></span></h2>
         <div class="row"><button class="btn" id="refreshCatalog">Refresh</button><button class="btn primary" id="showCatalogModal">Add New Item</button><span style="flex: 1;"></span><input id="catSearch" placeholder="Search..."/></div>
         <div id="catalogTable"></div>
       </section>
-      
       <section id="panel-pricing" class="panel">
         <h2>Vendor Pricing <span class="kvd" id="kvPricing"></span></h2>
         <div class="row"><button class="btn" id="refreshPricing">Refresh</button><button class="btn primary" id="showPricingModal">Add New Price</button></div>
         <div id="pricingTable"></div>
       </section>
-
       <section id="panel-units" class="panel">
         <h2>Unit Management <span class="kvd" id="kvUnits"></span></h2>
         <div class="row"><button class="btn" id="refreshUnits">Refresh</button></div>
         <div id="unitsTable"></div>
       </section>
-
       <section id="panel-compartments" class="panel">
         <h2>Compartment Management <span class="kvd" id="kvCompartments"></span></h2>
         <div class="row"><button class="btn" id="refreshCompartments">Refresh</button></div>
@@ -116,7 +112,7 @@
       <div class="modal-header"><h2>Add Item to Order List</h2></div>
       <div class="modal-body">
         <label>Item <select id="addItemSelect"></select></label>
-        <label>Quantity <input id="addItemQty" type="number" value="1" min="1"></label>
+        <label>Quantity <input id="addItemQty" type="text" placeholder="e.g., 1 Box or 5"></label>
       </div>
       <div class="modal-footer">
         <button class="btn" id="cancelAddItemBtn">Cancel</button>
@@ -186,7 +182,7 @@
     const db = getFirestore(app);
 
     let state = { user: null, userRole: null, catalog: [], vendors: [], pricingAll: [], requests: [], units: [], compartments: [], catalogMap: new Map(), vendorMap: new Map(), pricingMap: new Map() };
-    let itemSelectChoices;
+    let addItemChoices;
     const $ = id => document.getElementById(id);
     let appInitialized = false;
     let isScannerActive = false;
@@ -226,7 +222,6 @@
                 appInitialized = true;
                 await boot();
             }
-            applyPermissions(state.userRole);
         } catch (error) {
             console.error("Error handling signed-in user:", error);
             alert("Permission Error: Could not read user data.");
@@ -251,44 +246,58 @@
     $("logoutBtn").addEventListener("click", () => signOut(auth));
 
     async function loadAllData() {
-        const [catSnap, venSnap, priceSnap, reqSnap, unitSnap, compSnap] = await Promise.all([
+        const collectionsToFetch = [
             getDocs(collection(db, "catalog")), getDocs(collection(db, "vendors")),
-            getDocs(collection(db, "vendorPricing")), 
-            getDocs(query(collection(db, "requests"), where("status", "!=", "Received"))),
+            getDocs(collection(db, "vendorPricing")), getDocs(collection(db, "requests")),
             getDocs(collection(db, "units")), getDocs(collection(db, "compartments")),
-        ]);
+        ];
         
-        state.catalog = catSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-        state.vendors = venSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-        state.pricingAll = priceSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-        state.requests = reqSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-        state.units = unitSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-        state.compartments = compSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-        
-        state.catalogMap = new Map(state.catalog.map(c => [c.id, c]));
-        state.vendorMap = new Map(state.vendors.map(v => [v.id, v.name]));
-        state.pricingMap = new Map();
-        state.pricingAll.forEach(p => {
-            if (!state.pricingMap.has(p.catalogId)) state.pricingMap.set(p.catalogId, []);
-            state.pricingMap.get(p.catalogId).push(p);
-        });
+        try {
+            const [catSnap, venSnap, priceSnap, reqSnap, unitSnap, compSnap] = await Promise.all(collectionsToFetch);
+            
+            state.catalog = catSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+            state.vendors = venSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+            state.pricingAll = priceSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+            state.requests = reqSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+            state.units = unitSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+            state.compartments = compSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+            
+            state.catalogMap = new Map(state.catalog.map(c => [c.id, c]));
+            state.vendorMap = new Map(state.vendors.map(v => [v.id, v.name]));
+            state.pricingMap = new Map();
+            state.pricingAll.forEach(p => {
+                if (!state.pricingMap.has(p.catalogId)) state.pricingMap.set(p.catalogId, []);
+                state.pricingMap.get(p.catalogId).push(p);
+            });
 
-        renderAll();
+            renderAll();
+        } catch(e) {
+            console.error("Data Load Failed:", e);
+            alert("Could not load all necessary data. Check Firestore rules and collection names.");
+        }
     }
 
     function renderAll() {
         renderOrders(); renderCatalog(); renderPricing(); renderUnits(); renderCompartments();
+        applyPermissions(state.userRole);
     }
     
     function renderOrders() {
         const container = $('ordersTableContainer');
+        const showHistory = $('showHistoryToggle').checked;
         const activeFilter = document.querySelector('.filter-btn.active')?.dataset.status || 'Open';
         
-        const filteredRequests = state.requests.filter(r => (r.status || 'Open') === activeFilter);
+        const requestsToShow = state.requests.filter(r => {
+            const status = r.status || 'Open';
+            if (showHistory) {
+                return status === 'Received' || status === 'Completed';
+            }
+            return status === activeFilter;
+        });
         
-        const rows = filteredRequests.map(r => {
+        const rows = requestsToShow.map(r => {
             const catItem = state.catalogMap.get(r.catalogId);
-            if (!catItem) return ''; // Skip if catalog item not found
+            if (!catItem) return ''; 
 
             const prices = (state.pricingMap.get(r.catalogId) || []).sort((a,b) => a.unitPrice - b.unitPrice);
             const bestPrice = prices[0];
@@ -324,7 +333,7 @@
                         <strong>All Prices:</strong>
                         ${otherPricesHtml || '<div class="muted">No other prices found.</div>'}
                         <div style="margin-top: 8px;">
-                            <strong>Last Ordered:</strong> <span class="muted">${r.lastOrdered || 'N/A'}</span>
+                            <strong>Last Ordered:</strong> <span class="muted">${r.lastOrdered ? new Date(r.lastOrdered.seconds * 1000).toLocaleDateString() : 'N/A'}</span>
                         </div>
                         <div style="margin-top: 8px;">
                             <input type="number" step="0.01" placeholder="New Price" class="edit-price-input" style="width: 100px;"/>
@@ -339,19 +348,21 @@
         container.innerHTML = `
             <table>
                 <thead><tr><th>Item/Requester</th><th>Qty</th><th>Vendor (Lowest Price)</th><th>SKU</th><th>Actions</th></tr></thead>
-                <tbody>${rows || `<tr><td colspan="5" class="muted">No requests with status "${activeFilter}".</td></tr>`}</tbody>
+                <tbody>${rows || `<tr><td colspan="5" class="muted">No requests found.</td></tr>`}</tbody>
             </table>`;
     }
 
-    function renderCatalog() { /* Unchanged */ }
-    function renderPricing() { /* Unchanged */ }
-    function renderUnits() { /* Unchanged */ }
-    function renderCompartments() { /* Unchanged */ }
-    function startScanner() { /* Unchanged */ }
+    function renderCatalog() { /* Unchanged from previous full version */ }
+    function renderPricing() { /* Unchanged from previous full version */ }
+    function renderUnits() { /* Unchanged from previous full version */ }
+    function renderCompartments() { /* Unchanged from previous full version */ }
+    function startScanner() { /* Unchanged from previous full version */ }
     
     function setupAllModalsAndActions() {
-        setupCatalogModal(); setupPricingModal(); setupAddItemModal();
-        
+        setupCatalogModal(); 
+        setupPricingModal(); 
+        setupAddItemToOrderModal();
+
         document.querySelector('#panel-orders .row').addEventListener('click', e => {
             if (e.target.classList.contains('filter-btn')) {
                 document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
@@ -359,6 +370,8 @@
                 renderOrders();
             }
         });
+
+        $('showHistoryToggle').addEventListener('change', renderOrders);
         
         $('ordersTableContainer').addEventListener('click', async e => {
             const target = e.target;
@@ -376,15 +389,15 @@
             }
             
             if (target.dataset.editPrice) {
-                const priceInput = row.querySelector('.edit-price-input');
-                const vendorSelect = row.querySelector('.edit-price-vendor-select');
+                const detailsCell = target.closest('.details-cell');
+                const priceInput = detailsCell.querySelector('.edit-price-input');
+                const vendorSelect = detailsCell.querySelector('.edit-price-vendor-select');
                 const newPrice = parseFloat(priceInput.value);
                 const vendorId = vendorSelect.value;
                 const request = state.requests.find(r => r.id === requestId);
                 
                 if (!request || !vendorId || isNaN(newPrice)) {
-                    alert('Please select a vendor and enter a valid price.');
-                    return;
+                    return alert('Please select a vendor and enter a valid price.');
                 }
                 
                 const pricingDoc = state.pricingAll.find(p => p.catalogId === request.catalogId && p.vendorId === vendorId);
@@ -405,18 +418,21 @@
                 const requestId = target.closest('tr').dataset.requestId;
                 if (newStatus && requestId) {
                     await updateRequestStatus(requestId, newStatus);
-                    target.value = ''; // Reset dropdown
                 }
+                target.value = ''; // Reset dropdown
             }
         });
+
+        setupUnitActions(); 
+        setupCompartmentActions();
     }
 
     async function updateRequestStatus(requestId, newStatus) {
         if (!requestId || !newStatus) return;
-        const updatePayload = { status: newStatus };
-        if (newStatus === 'Received') {
-            updatePayload.receivedAt = serverTimestamp();
-        }
+        const updatePayload = { status: newStatus, updatedAt: serverTimestamp() };
+        if (newStatus === 'Received') updatePayload.receivedAt = serverTimestamp();
+        if (newStatus === 'Ordered') updatePayload.lastOrdered = serverTimestamp();
+        
         try {
             await updateDoc(doc(db, 'requests', requestId), updatePayload);
             const req = state.requests.find(r => r.id === requestId);
@@ -428,25 +444,24 @@
         }
     }
     
-    function setupAddItemModal() {
+    function setupAddItemToOrderModal() {
         const modal = $('addItemToOrderModal');
         const itemElement = $('addItemSelect');
-        if (itemSelectChoices) itemSelectChoices.destroy();
-        itemSelectChoices = new Choices(itemElement, { searchEnabled: true, placeholderValue: 'Select item...' });
+        if (addItemChoices) addItemChoices.destroy();
+        addItemChoices = new Choices(itemElement, { searchEnabled: true, placeholderValue: 'Select an item to add...' });
 
-        $('showAddItemModal').addEventListener('click', () => {
+        $('showAddItemToOrderModal').addEventListener('click', () => {
             const options = state.catalog.filter(c=>c.isActive !== false).map(c=>({value: c.id, label: c.itemName}));
-            itemSelectChoices.setChoices(options, 'value', 'label', true);
+            addItemChoices.setChoices(options, 'value', 'label', true);
             modal.style.display = 'flex';
         });
 
         $('cancelAddItemBtn').addEventListener('click', () => modal.style.display = 'none');
         $('saveAddItemBtn').addEventListener('click', async () => {
-            const catalogId = itemSelectChoices.getValue(true);
-            const qty = Number($('addItemQty').value);
-            if (!catalogId || qty < 1) {
-                alert('Please select an item and quantity.');
-                return;
+            const catalogId = addItemChoices.getValue(true);
+            const qty = $('addItemQty').value;
+            if (!catalogId || !qty) {
+                return alert('Please select an item and quantity.');
             }
             const payload = {
                 catalogId,
@@ -461,10 +476,10 @@
         });
     }
 
-    function setupCatalogModal() { /* Unchanged */ }
-    function setupPricingModal() { /* Unchanged */ }
-    function setupUnitActions() { /* Unchanged */ }
-    function setupCompartmentActions() { /* Unchanged */ }
+    function setupCatalogModal() { /* Unchanged from previous full version */ }
+    function setupPricingModal() { /* Unchanged from previous full version */ }
+    function setupUnitActions() { /* Unchanged from previous full version */ }
+    function setupCompartmentActions() { /* Unchanged from previous full version */ }
     
     function mountTabs() {
         const TABS = ['Orders', 'Catalog', 'Pricing', 'Units', 'Compartments'];
