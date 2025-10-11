@@ -15,6 +15,7 @@
   label{display:block;margin:10px 0 6px;font-weight:600}
   input,button,select{width:100%;padding:10px;border:1px solid #ccc;border-radius:8px}
   button.btn{width:auto;padding:6px 10px;cursor:pointer}
+  .btn.primary{background-color: #007bff;color: #fff;border-color: #007bff;font-weight: 600;}
   .muted{color:var(--muted);font-size:.9rem}
   table{width:100%;border-collapse:collapse;margin-top:12px}
   th,td{padding:8px;border-bottom:1px solid #eee;text-align:left;vertical-align:top}
@@ -24,6 +25,11 @@
   .toolbar{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap;align-items:center}
   .nav-links { float: right; font-size: 0.9rem; }
   .nav-links a { color: #007bff; text-decoration: none; margin-left: 1rem; }
+  .modal{display:none;position:fixed;z-index:1000;left:0;top:0;width:100%;height:100%;overflow:auto;background-color:rgba(0,0,0,0.4)}
+  .modal-content{background-color:#fefefe;margin:15% auto;padding:20px;border:1px solid #888;width:80%;max-width:500px;border-radius:12px}
+  .modal-header{display:flex;justify-content:space-between;align-items:center;padding-bottom:10px;border-bottom:1px solid #ddd;margin-bottom:1rem}
+  .close-btn{color:#aaa;float:right;font-size:28px;font-weight:bold;cursor:pointer}
+  .close-btn:hover,.close-btn:focus{color:black;text-decoration:none;cursor:pointer}
 </style>
 </head>
 <body>
@@ -43,32 +49,9 @@
           <thead><tr><th>Item / Vendor Pricing</th><th>Qty</th><th>Status</th><th>Notes</th><th>Action</th></tr></thead>
           <tbody><tr><td colspan="5">Loading...</td></tr></tbody>
         </table>
-    </div>
-
-    <div class="card" style="margin-top:16px;">
-      <details id="requestPane">
-        <summary style="font-size:1.25em;font-weight:bold;">New Request</summary>
-        <div style="margin-top:12px">
-          <label for="itemSearch">Item from Catalog</label>
-          <select id="itemSearch" placeholder="Search for an item..."></select>
-
-          <div style="margin:8px 0;">
-            <input type="checkbox" id="isOther" style="width:auto;">
-            <label for="isOther" style="display:inline;font-weight:normal;">Or, request an item not in the list</label>
-          </div>
-
-          <input id="otherItem" placeholder="Enter unlisted item name..." style="display:none;">
-
-          <label for="qty">Quantity (Optional)</label>
-          <input id="qty" type="text" placeholder="e.g., 1 Box or 5 EA">
-
-          <label for="notes">Notes (Optional)</label>
-          <input id="notes" placeholder="e.g., For Unit 31">
-
-          <button id="submitBtn" style="margin-top:12px;">Submit Request</button>
-          <div id="msg" class="muted" style="margin-top:8px;"></div>
-          </div>
-         </details>
+        <div style="text-align: right; margin-top: 1rem;">
+            <button id="showRequestModalBtn" class="btn primary">New Request</button>
+        </div>
     </div>
 
     <div class="card" style="margin-top:16px;">
@@ -85,6 +68,35 @@
             <tbody><tr><td colspan="3">Select a date range to view history.</td></tr></tbody>
           </table>
         </details>
+    </div>
+</div>
+
+<div id="requestModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>New Supply Request</h2>
+            <span class="close-btn">&times;</span>
+        </div>
+        <div class="modal-body">
+            <label for="itemSearch">Item from Catalog</label>
+            <select id="itemSearch" placeholder="Search for an item..."></select>
+
+            <div style="margin:8px 0;">
+                <input type="checkbox" id="isOther" style="width:auto;">
+                <label for="isOther" style="display:inline;font-weight:normal;">Or, request an item not in the list</label>
+            </div>
+
+            <input id="otherItem" placeholder="Enter unlisted item name..." style="display:none;">
+
+            <label for="qty">Quantity (Optional)</label>
+            <input id="qty" type="text" placeholder="e.g., 1 Box or 5 EA">
+
+            <label for="notes">Notes (Optional)</label>
+            <input id="notes" placeholder="e.g., For Unit 31">
+
+            <button id="submitBtn" class="btn primary" style="margin-top:12px; width: 100%;">Submit Request</button>
+            <div id="msg" class="muted" style="margin-top:8px;"></div>
+        </div>
     </div>
 </div>
 
@@ -250,7 +262,7 @@
   function setupForm() {
     $('#isOther').addEventListener('change', () => {
         const on = $('#isOther').checked;
-        const choicesEl = document.querySelector('#requestPane .choices');
+        const choicesEl = document.querySelector('#requestModal .choices');
         if(choicesEl) choicesEl.style.display = on ? 'none' : 'block';
         $('#otherItem').style.display = on ? 'block' : 'none';
         if(itemSelectChoices) itemSelectChoices.clearInput();
@@ -289,6 +301,7 @@
             $('#otherItem').value = '';
             $('#qty').value = '';
             $('#notes').value = '';
+            $('#requestModal').style.display = "none";
             await loadAllData();
         } catch (err) {
             console.error('Failed to submit request', err);
@@ -314,11 +327,30 @@
         }
     });
   }
+  
+  function setupRequestModal() {
+    const modal = $('#requestModal');
+    const btn = $('#showRequestModalBtn');
+    const span = modal.querySelector('.close-btn');
+
+    btn.onclick = function() {
+      modal.style.display = "block";
+    }
+    span.onclick = function() {
+      modal.style.display = "none";
+    }
+    window.onclick = function(event) {
+      if (event.target == modal) {
+        modal.style.display = "none";
+      }
+    }
+  }
 
   async function boot() {
     await loadAllData();
     setupForm();
     setupHistoryControls();
+    setupRequestModal();
   }
   
   boot();
