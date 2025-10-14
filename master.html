@@ -194,8 +194,14 @@
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const db = getFirestore(app);
+
+    // This is the correct way to enable multi-tab persistence
     enableMultiTabIndexedDbPersistence(db).catch((err) => {
-        console.error("Firestore persistence error: ", err);
+        if (err.code === 'failed-precondition') {
+            console.warn("Persistence failed because multiple tabs are open and could not sync. One tab will have persistence and the others will not.");
+        } else if (err.code === 'unimplemented') {
+            console.warn("Persistence is not available in this browser.");
+        }
     });
 
     let state = { user: null, userRole: null, catalog: [], vendors: [], pricingAll: [], requests: [], units: [], compartments: [], catalogMap: new Map(), vendorMap: new Map(), pricingMap: new Map() };

@@ -110,8 +110,8 @@
     projectId: "supplies-ems"
   };
   const app = initializeApp(firebaseConfig);
-  const db = initializeFirestore(app, { 
-      localCache: persistentLocalCache({ synchronizeTabs: true }) 
+  const db = initializeFirestore(app, {
+      cache: persistentLocalCache({ synchronizeTabs: true })
   });
 
   const state = {
