@@ -189,7 +189,9 @@
         projectId: "supplies-ems",
     };
     const app = initializeApp(firebaseConfig);
-    const db = initializeFirestore(app, { localCache: persistentLocalCache() });
+    const db = initializeFirestore(app, { 
+        localCache: persistentLocalCache({ tabManager: "PRIMARY" }) 
+    });
     
     let allInventory = [], units = [], catalog = [];
     let itemSelectChoices;
