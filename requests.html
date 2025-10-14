@@ -102,7 +102,7 @@
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-  import { getFirestore, collection, getDocs, addDoc, serverTimestamp, updateDoc, doc, enablePersistence, onSnapshot } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+  import { getFirestore, collection, getDocs, addDoc, serverTimestamp, updateDoc, doc, onSnapshot, initializeFirestore, persistentLocalCache } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyD7pMc-AHXb1cApzSfImkWvIjM9iwCoym4",
@@ -110,8 +110,7 @@
     projectId: "supplies-ems"
   };
   const app = initializeApp(firebaseConfig);
-  const db = getFirestore(app);
-  enablePersistence(db).catch(err => console.error("Firestore persistence error: ", err));
+  const db = initializeFirestore(app, { localCache: persistentLocalCache() });
 
   const state = {
     catalog: [],
@@ -148,7 +147,7 @@
       state.vendorPricing = priceSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
       state.vendors = vendorSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
       state.catalogMap = new Map(state.catalog.map((c) => [c.id, c]));
-      state.vendorMap = new Map(state.vendors.map((v) => [v.id, v]));
+      state.vendorMap = new Map(state.vendors.map((v) => [v.id, v.name]));
       
       populateChoices();
     } catch (err) {

@@ -19,7 +19,8 @@
     .muted{color:var(--muted);font-size:.9rem}
     .toolbar{display: flex;flex-wrap: wrap;gap: 10px;align-items: center;margin-top: 10px;}
     .toolbar-actions {display: flex;gap: 10px;margin-left: auto;}
-    select,button,input{padding:8px 10px;border:1px solid var(--b);border-radius:10px;background:#fff}
+    select,button,input,textarea{padding:8px 10px;border:1px solid var(--b);border-radius:10px;background:#fff;width:100%;font-family:inherit;font-size:inherit}
+    button, select{width:auto}
     button{cursor:pointer}
     #showAddItemModal {background-color: #007bff;color: #fff;border-color: #007bff;font-weight: 600;}
     table{width:100%;border-collapse:collapse}
@@ -45,6 +46,7 @@
     .nav-links a { color: #007bff; text-decoration: none; margin-left: 1rem; }
     .tag { display: inline-block; font-size: 0.8rem; padding: 3px 6px; border-radius: 999px; background: #eee; }
     summary { cursor: pointer; font-weight: bold; font-size: 1.25em; }
+    .unit-color-tag { font-size: 1.2em; margin-right: 6px; }
 </style>
 </head>
 <body>
@@ -78,7 +80,7 @@
                 </button>
                 <input id="searchBox" placeholder="Search item, compartment…" style="flex:1;"/>
             </div>
-            <div class="toolbar-actions"><button class="btn" id="refreshBtn">Refresh</button><button class="btn" id="showAddItemModal">+ Add Item</button></div>
+            <div class="toolbar-actions"><button class="btn" id="showAddItemModal">+ Add Item</button></div>
             <span id="count" class="muted"></span>
         </div>
     </div>
@@ -153,7 +155,7 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-    import { getFirestore, collection, getDocs, addDoc, updateDoc, doc, serverTimestamp, query, where, orderBy, limit, enablePersistence, onSnapshot } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+    import { getFirestore, collection, getDocs, addDoc, updateDoc, doc, serverTimestamp, query, where, orderBy, limit, onSnapshot, initializeFirestore, persistentLocalCache } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
     const SHARED_PASSCODE = "ems1";
     const passwordModal = document.getElementById('password-modal');
@@ -187,17 +189,30 @@
         projectId: "supplies-ems",
     };
     const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
-    enablePersistence(db).catch(err => console.error("Firestore persistence error: ", err));
+    const db = initializeFirestore(app, { localCache: persistentLocalCache() });
     
     let allInventory = [], units = [], catalog = [];
     let itemSelectChoices;
     let selectedExp = '';
     let isScannerActive = false;
     let quaggaHandler = null;
+    const unitColorCache = new Map();
 
     const $ = s => document.querySelector(s);
     const escapeHtml = s => (s??'').toString().replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;' }[m]));
+
+    function getColorForUnit(unitName) {
+        if (unitColorCache.has(unitName)) {
+            return unitColorCache.get(unitName);
+        }
+        let hash = 0;
+        for (let i = 0; i < unitName.length; i++) {
+            hash = unitName.charCodeAt(i) + ((hash << 5) - hash);
+        }
+        const color = `hsl(${hash % 360}, 70%, 40%)`;
+        unitColorCache.set(unitName, color);
+        return color;
+    }
 
     async function initializeStaticData() {
         try {
@@ -291,6 +306,8 @@
                         const catalogItem = catalogMap.get(item.catalogId);
                         const itemName = catalogItem ? catalogItem.itemName : `Unknown (ID: ${item.catalogId})`;
                         const unit = units.find(u => u.id === item.unitId);
+                        const unitName = unit ? unit.name : item.unitId;
+                        const unitColor = getColorForUnit(unitName);
                         const expiryDate = new Date(item.expiryDate?.seconds ? item.expiryDate.seconds * 1000 : item.expiryDate).toLocaleDateString();
                         const unitOptions = units.map(u => `<option value="${u.id}" ${u.id === item.unitId ? 'selected' : ''}>${u.name}</option>`).join('');
                         const compartmentOptions = ['Wall', 'Bag', 'Supply RM', 'Clear Container', 'BLS Bag', 'ALS Bag', 'Other'].map(c => `<option value="${c}" ${c === item.compartment ? 'selected' : ''}>${c}</option>`).join('');
@@ -299,7 +316,10 @@
                             <tr class="${rowClass(item.daysToExpire)}" data-id="${item.inventoryId}">
                                 <td><strong>${escapeHtml(itemName)}</strong></td>
                                 <td>
-                                    <span class="unit-display">${escapeHtml(unit ? unit.name : item.unitId)}</span>
+                                    <div class="unit-display" style="display: flex; align-items: center;">
+                                        <span class="unit-color-tag" style="color: ${unitColor};">●</span>
+                                        <span>${escapeHtml(unitName)}</span>
+                                    </div>
                                     <select class="unit-edit" style="display:none;">${unitOptions}</select>
                                 </td>
                                 <td>
@@ -371,7 +391,7 @@
             const item = allInventory.find(i => i.inventoryId === id);
 
             const toggleEditMode = (isEditing) => {
-                tr.querySelector('.unit-display').style.display = isEditing ? 'none' : 'inline';
+                tr.querySelector('.unit-display').style.display = isEditing ? 'none' : 'flex';
                 tr.querySelector('.unit-edit').style.display = isEditing ? 'inline' : 'none';
                 tr.querySelector('.compartment-display').style.display = isEditing ? 'none' : 'inline';
                 tr.querySelector('.compartment-edit').style.display = isEditing ? 'inline' : 'none';
@@ -637,12 +657,6 @@
         $('#rangeSel').addEventListener('change', render);
         $('#unitSel').addEventListener('change', render);
         $('#searchBox').addEventListener('input', render);
-        $('#refreshBtn').addEventListener('click', async () => {
-             await initializeStaticData();
-             // The listener will handle the inventory refresh automatically.
-        });
-        $('#startScanBtn').addEventListener('click', () => startScanner(true));
-        $('#scanBarcodeBtn').addEventListener('click', () => startScanner(false));
         
         let historyLoaded = false;
         $('#history-details').addEventListener('toggle', (event) => {

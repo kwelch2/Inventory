@@ -184,7 +184,7 @@
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
     import { getAuth, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
-    import { getFirestore, collection, getDocs, doc, setDoc, getDoc, addDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp, query, where, orderBy, enablePersistence, onSnapshot } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+    import { getFirestore, collection, getDocs, doc, setDoc, getDoc, addDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp, query, where, orderBy, onSnapshot, initializeFirestore, persistentLocalCache } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
     const firebaseConfig = {
         apiKey: "AIzaSyD7pMc-AHXb1cApzSfImkWvIjM9iwCoym4",
@@ -193,8 +193,7 @@
     };
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
-    const db = getFirestore(app);
-    enablePersistence(db).catch(err => console.error("Firestore persistence error: ", err));
+    const db = initializeFirestore(app, { localCache: persistentLocalCache() });
 
     let state = { user: null, userRole: null, catalog: [], vendors: [], pricingAll: [], requests: [], units: [], compartments: [], catalogMap: new Map(), vendorMap: new Map(), pricingMap: new Map() };
     let addItemChoices;
@@ -305,11 +304,6 @@
             renderPricing();
             renderOrders(); 
         });
-    }
-
-    function renderAll() {
-        renderOrders(); renderCatalog(); renderPricing(); renderUnits(); renderCompartments();
-        applyPermissions(state.userRole);
     }
     
      function renderOrders() {
