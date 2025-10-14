@@ -16,6 +16,8 @@
     #app-container, #loading-container { display: none; }
     .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap;}
     .auth-info { display: flex; align-items: center; gap: 1rem; }
+    .nav-links { font-size: 0.9rem; }
+    .nav-links a { color: #007bff; text-decoration: none; margin-left: 1rem; }
     .tabs{display:flex; flex-wrap: wrap; gap:8px;border-bottom:1px solid var(--b);position:sticky;top:0;background:var(--bg);padding:8px 0;z-index:5}
     .tab{padding:10px 14px;border:1px solid var(--b);border-bottom:none;border-radius:8px 8px 0 0;background:#eee;color:#333;cursor:pointer}
     .tab.active{background:var(--card);color:#000;border-bottom:1px solid var(--card)}
@@ -64,11 +66,18 @@
 
   <div id="app-container" style="display: none;">
     <div class="header">
-        <h1>EMS Supplies — Master Admin Dashboard</h1>
-        <div class="auth-info">
-            <span id="auth-status-main" class="muted"></span>
-            <button id="logoutBtn" class="btn">Logout</button>
+        <h1>EMS Supplies — Master Admin</h1>
+        <div class="nav-links">
+            <a href="https://supplies-ems.web.app/">Home</a>
+            <a href="requests.html">Supply Requests</a>
+            <a href="expiry3.html">Expiring</a>
+            <a href="https://chores-ems.gemfireems.org/">Chores</a>
+            <a href="https://chores-ems.gemfireems.org/issues">Issues</a>
         </div>
+    </div>
+    <div class="auth-info" style="margin-bottom: 1rem;">
+        <span id="auth-status-main" class="muted"></span>
+        <button id="logoutBtn" class="btn">Logout</button>
     </div>
     <div class="tabs" id="tabs"></div>
 
@@ -175,7 +184,7 @@
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
     import { getAuth, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
-    import { getFirestore, collection, getDocs, doc, setDoc, getDoc, addDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp, query, where, orderBy } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+    import { getFirestore, collection, getDocs, doc, setDoc, getDoc, addDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp, query, where, orderBy, enablePersistence, onSnapshot } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
     const firebaseConfig = {
         apiKey: "AIzaSyD7pMc-AHXb1cApzSfImkWvIjM9iwCoym4",
@@ -185,6 +194,7 @@
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const db = getFirestore(app);
+    enablePersistence(db).catch(err => console.error("Firestore persistence error: ", err));
 
     let state = { user: null, userRole: null, catalog: [], vendors: [], pricingAll: [], requests: [], units: [], compartments: [], catalogMap: new Map(), vendorMap: new Map(), pricingMap: new Map() };
     let addItemChoices;
@@ -218,7 +228,7 @@
             state.userRole = userDocSnap.exists() ? userDocSnap.data().role : "Staff";
             if (!userDocSnap.exists()) await setDoc(doc(db, "users", user.uid), { email: user.email, role: "Staff" });
             
-            state.user = user; // Make sure user object is stored in state
+            state.user = user;
             $("auth-status-main").textContent = `${user.email} (${state.userRole})`;
             $("app-container").style.display = "block";
             $("login-container").style.display = "none";
@@ -244,7 +254,7 @@
     }
 
     function handleUserSignedOut() {
-        state.user = null; // Clear user from state on logout
+        state.user = null;
         $("app-container").style.display = "none";
         $("login-container").style.display = "block";
         $("loading-container").style.display = "none";
@@ -253,36 +263,48 @@
 
     $("logoutBtn").addEventListener("click", () => signOut(auth));
 
-    async function loadAllData() {
-        const collectionsToFetch = [
-            getDocs(collection(db, "catalog")), getDocs(collection(db, "vendors")),
-            getDocs(collection(db, "vendorPricing")), getDocs(collection(db, "requests")),
-            getDocs(collection(db, "units")), getDocs(collection(db, "compartments")),
-        ];
-        
+    async function initializeStaticData() {
         try {
-            const [catSnap, venSnap, priceSnap, reqSnap, unitSnap, compSnap] = await Promise.all(collectionsToFetch);
+            const [catSnap, venSnap, unitSnap, compSnap] = await Promise.all([
+                getDocs(collection(db, "catalog")),
+                getDocs(collection(db, "vendors")),
+                getDocs(collection(db, "units")),
+                getDocs(collection(db, "compartments"))
+            ]);
             
             state.catalog = catSnap.docs.map(d => ({ id: d.id, ...d.data() }));
             state.vendors = venSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-            state.pricingAll = priceSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-            state.requests = reqSnap.docs.map(d => ({ id: d.id, ...d.data() }));
             state.units = unitSnap.docs.map(d => ({ id: d.id, ...d.data() }));
             state.compartments = compSnap.docs.map(d => ({ id: d.id, ...d.data() }));
             
             state.catalogMap = new Map(state.catalog.map(c => [c.id, c]));
             state.vendorMap = new Map(state.vendors.map(v => [v.id, v.name]));
-            state.pricingMap = new Map();
+            
+            renderCatalog();
+            renderUnits();
+            renderCompartments();
+        } catch(e) {
+            console.error("Static Data Load Failed:", e);
+            alert("Could not load static data. Check Firestore rules and collection names.");
+        }
+    }
+
+    function setupRealtimeListeners() {
+        onSnapshot(collection(db, "requests"), (reqSnap) => {
+            state.requests = reqSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+            renderOrders();
+        });
+
+        onSnapshot(collection(db, "vendorPricing"), (priceSnap) => {
+            state.pricingAll = priceSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+            state.pricingMap.clear();
             state.pricingAll.forEach(p => {
                 if (!state.pricingMap.has(p.catalogId)) state.pricingMap.set(p.catalogId, []);
                 state.pricingMap.get(p.catalogId).push(p);
             });
-
-            renderAll();
-        } catch(e) {
-            console.error("Data Load Failed:", e);
-            alert("Could not load all necessary data. Check Firestore rules and collection names.");
-        }
+            renderPricing();
+            renderOrders(); 
+        });
     }
 
     function renderAll() {
@@ -358,22 +380,7 @@
                 <thead><tr><th>Item/Requester</th><th>Qty</th><th>Vendor (Lowest Price)</th><th>SKU</th><th>Actions</th></tr></thead>
                 <tbody>${rows || `<tr><td colspan="5" class="muted">No requests found.</td></tr>`}</tbody>
             </table>`;
-
-        // Attach event listeners directly to the buttons after rendering
-        document.querySelectorAll('[data-toggle-details]').forEach(button => {
-            button.addEventListener('click', () => {
-                const row = button.closest('tr[data-request-id]');
-                if (!row) return;
-                const requestId = row.dataset.requestId;
-                const detailsRow = document.querySelector(`[data-details-for="${requestId}"]`);
-                if (detailsRow) {
-                    detailsRow.classList.toggle('visible');
-                }
-            });
-        });
     }
-
-    // ... (keep the rest of your JavaScript code the same, but update the event listener below)
 
     $('ordersTableContainer').addEventListener('click', async e => {
         const target = e.target;
@@ -381,7 +388,12 @@
         if (!row) return;
         const requestId = row.dataset.requestId;
 
-        // The toggle logic is now handled above, so we don't need it here.
+        if (target.dataset.toggleDetails) {
+            const detailsRow = document.querySelector(`[data-details-for="${requestId}"]`);
+            if (detailsRow) {
+                detailsRow.classList.toggle('visible');
+            }
+        }
 
         if (target.dataset.status) {
             await updateRequestStatus(requestId, target.dataset.status);
@@ -403,7 +415,6 @@
             if (pricingDoc) {
                 await updateDoc(doc(db, 'vendorPricing', pricingDoc.id), { unitPrice: newPrice });
                 alert('Price updated!');
-                await loadAllData();
             } else {
                 alert('No existing price document for this item/vendor combo. Please add it in the "Vendor Pricing" tab.');
             }
@@ -472,44 +483,6 @@
 
         $('showHistoryToggle').addEventListener('change', renderOrders);
         
-        $('ordersTableContainer').addEventListener('click', async e => {
-            const target = e.target;
-            const row = target.closest('tr[data-request-id]');
-            if (!row) return;
-            const requestId = row.dataset.requestId;
-
-            if (target.dataset.toggleDetails) {
-                const detailsRow = document.querySelector(`[data-details-for="${requestId}"]`);
-                if (detailsRow) detailsRow.classList.toggle('visible');
-            }
-
-            if (target.dataset.status) {
-                await updateRequestStatus(requestId, target.dataset.status);
-            }
-            
-            if (target.dataset.editPrice) {
-                const detailsCell = target.closest('.details-cell');
-                const priceInput = detailsCell.querySelector('.edit-price-input');
-                const vendorSelect = detailsCell.querySelector('.edit-price-vendor-select');
-                const newPrice = parseFloat(priceInput.value);
-                const vendorId = vendorSelect.value;
-                const request = state.requests.find(r => r.id === requestId);
-                
-                if (!request || !vendorId || isNaN(newPrice)) {
-                    return alert('Please select a vendor and enter a valid price.');
-                }
-                
-                const pricingDoc = state.pricingAll.find(p => p.catalogId === request.catalogId && p.vendorId === vendorId);
-                if (pricingDoc) {
-                    await updateDoc(doc(db, 'vendorPricing', pricingDoc.id), { unitPrice: newPrice });
-                    alert('Price updated!');
-                    await loadAllData();
-                } else {
-                    alert('No existing price document for this item/vendor combo. Please add it in the "Vendor Pricing" tab.');
-                }
-            }
-        });
-        
         $('ordersTableContainer').addEventListener('change', async e => {
             const target = e.target;
             if (target.dataset.statusMore) {
@@ -534,16 +507,6 @@
         
         try {
             await updateDoc(doc(db, 'requests', requestId), updatePayload);
-            const req = state.requests.find(r => r.id === requestId);
-            if (req) {
-                 if (newStatus === 'Received' || newStatus === 'Completed') {
-                    // Remove from active list
-                    state.requests = state.requests.filter(r => r.id !== requestId);
-                } else {
-                    req.status = newStatus;
-                }
-            }
-            renderOrders();
         } catch(e) {
             console.error("Status update failed:", e);
             alert("Could not update status.");
@@ -581,7 +544,6 @@
             };
             await addDoc(collection(db, 'requests'), payload);
             modal.style.display = 'none';
-            await loadAllData();
         });
     }
     
@@ -620,13 +582,13 @@
             const barcodes = Array.from(document.querySelectorAll('#barcodeList .barcode-item-text')).map(el => el.textContent);
             const data = { itemName: $('editItemName').value, itemNameAlt: $('editItemNameAlt').value, category: $('editCategory').value, itemRef: $('editItemRef').value, unit: $('editUnit').value, packSize: Number($('editPackSize').value) || 1, barcode: barcodes, isActive: $('editIsActive').checked, updatedAt: serverTimestamp() };
             if (currentItemId) { await updateDoc(doc(db, "catalog", currentItemId), data); } else { await addDoc(collection(db, "catalog"), data); }
-            $('catalogModal').style.display = 'none'; await loadAllData();
+            $('catalogModal').style.display = 'none'; await initializeStaticData();
         });
         $('inactivateCatalogItem').addEventListener('click', async () => {
             if (currentItemId && confirm('Are you sure you want to mark this item as inactive?')) {
                 await updateDoc(doc(db, "catalog", currentItemId), { isActive: false });
                 $('catalogModal').style.display = 'none';
-                await loadAllData();
+                await initializeStaticData();
             }
         });
     }
@@ -646,17 +608,17 @@
         $('savePricingEdit').addEventListener('click', async () => {
             const data = { catalogId: $('priceItemSelect').value, vendorId: $('priceVendorSelect').value, vendorItemNo: $('priceSku').value, unitPrice: Number($('priceUnitPrice').value) || 0 };
             if (currentPriceId) { await updateDoc(doc(db, "vendorPricing", currentPriceId), data); } else { await addDoc(collection(db, "vendorPricing"), data); }
-            $('pricingModal').style.display = 'none'; await loadAllData();
+            $('pricingModal').style.display = 'none';
         });
     }
     function setupUnitActions() {
         $('unitsTable').addEventListener('click', async e => {
-            if (e.target.id === 'addUnitBtn') { const name = $('newUnitName').value.trim(); if (name) { await addDoc(collection(db, "units"), { name }); $('newUnitName').value = ''; await loadAllData(); }}
+            if (e.target.id === 'addUnitBtn') { const name = $('newUnitName').value.trim(); if (name) { await addDoc(collection(db, "units"), { name }); $('newUnitName').value = ''; await initializeStaticData(); }}
         });
     }
     function setupCompartmentActions() {
         $('compartmentsTable').addEventListener('click', async e => {
-            if (e.target.id === 'addCompBtn') { const name = $('newCompName').value.trim(); if (name) { await addDoc(collection(db, "compartments"), { name }); $('newCompName').value = ''; await loadAllData(); }}
+            if (e.target.id === 'addCompBtn') { const name = $('newCompName').value.trim(); if (name) { await addDoc(collection(db, "compartments"), { name }); $('newCompName').value = ''; await initializeStaticData(); }}
         });
     }
     
@@ -674,13 +636,14 @@
         mountTabs();
         setupAllModalsAndActions();
         
-        ['refreshOrders', 'refreshCatalog', 'refreshPricing', 'refreshUnits', 'refreshCompartments'].forEach(id => {
-            const btn = $(id); if (btn) btn.addEventListener('click', loadAllData);
+        ['refreshCatalog', 'refreshPricing', 'refreshUnits', 'refreshCompartments'].forEach(id => {
+            const btn = $(id); if (btn) btn.addEventListener('click', initializeStaticData);
         });
 
         $('catSearch').addEventListener('input', renderCatalog);
         
-        await loadAllData();
+        await initializeStaticData();
+        setupRealtimeListeners();
     }
 </script>
 </body>
