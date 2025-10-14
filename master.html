@@ -194,7 +194,7 @@
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const db = initializeFirestore(app, { 
-        localCache: persistentLocalCache({ tabManager: "PRIMARY" }) 
+        localCache: persistentLocalCache({ synchronizeTabs: true }) 
     });
 
     let state = { user: null, userRole: null, catalog: [], vendors: [], pricingAll: [], requests: [], units: [], compartments: [], catalogMap: new Map(), vendorMap: new Map(), pricingMap: new Map() };
