@@ -45,7 +45,6 @@
     .nav-links a { color: #007bff; text-decoration: none; margin-left: 1rem; }
     .tag { display: inline-block; font-size: 0.8rem; padding: 3px 6px; border-radius: 999px; background: #eee; }
     summary { cursor: pointer; font-weight: bold; font-size: 1.25em; }
-    .unit-color-tag { font-size: 1.2em; margin-right: 6px; }
 </style>
 </head>
 <body>
@@ -154,7 +153,7 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-    import { getFirestore, collection, getDocs, addDoc, updateDoc, doc, serverTimestamp, query, where, orderBy, limit } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+    import { getFirestore, collection, getDocs, addDoc, updateDoc, doc, serverTimestamp, query, where, orderBy, limit, enablePersistence, onSnapshot } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
     const SHARED_PASSCODE = "ems1";
     const passwordModal = document.getElementById('password-modal');
@@ -189,50 +188,41 @@
     };
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
+    enablePersistence(db).catch(err => console.error("Firestore persistence error: ", err));
     
     let allInventory = [], units = [], catalog = [];
     let itemSelectChoices;
     let selectedExp = '';
     let isScannerActive = false;
     let quaggaHandler = null;
-    const unitColorCache = new Map();
 
     const $ = s => document.querySelector(s);
     const escapeHtml = s => (s??'').toString().replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;' }[m]));
 
-    function getColorForUnit(unitName) {
-        if (unitColorCache.has(unitName)) {
-            return unitColorCache.get(unitName);
-        }
-        let hash = 0;
-        for (let i = 0; i < unitName.length; i++) {
-            hash = unitName.charCodeAt(i) + ((hash << 5) - hash);
-        }
-        const color = `hsl(${hash % 360}, 70%, 80%)`;
-        unitColorCache.set(unitName, color);
-        return color;
-    }
-
-    async function loadAll() {
-        $('#refreshBtn').disabled = true;
+    async function initializeStaticData() {
         try {
-            const [invSnap, unitsSnap, catalogSnap] = await Promise.all([
-                getDocs(collection(db, "inventory")),
+            const [unitsSnap, catalogSnap] = await Promise.all([
                 getDocs(collection(db, "units")),
                 getDocs(collection(db, "catalog"))
             ]);
-            allInventory = invSnap.docs.map(d => ({ inventoryId: d.id, ...d.data() }));
             units = unitsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
             catalog = catalogSnap.docs.map(d => ({ id: d.id, ...d.data() }));
             fillUnitSelect();
-            render();
-            // Don't render history on initial load
         } catch (e) {
-            console.error("Error loading data: ", e);
-            $('#content').innerHTML = `<p style="color:red;">Error loading data. Check permissions.</p>`;
-        } finally {
-            $('#refreshBtn').disabled = false;
+            console.error("Error loading static data: ", e);
+            $('#content').innerHTML = `<p style="color:red;">Error loading static data. Check permissions.</p>`;
         }
+    }
+    
+    function setupInventoryListener() {
+        onSnapshot(collection(db, "inventory"), (invSnap) => {
+            allInventory = invSnap.docs.map(d => ({ inventoryId: d.id, ...d.data() }));
+            render();
+            renderHistory();
+        }, (error) => {
+            console.error("Error with inventory listener: ", error);
+            $('#content').innerHTML = `<p style="color:red;">Error listening to inventory updates.</p>`;
+        });
     }
 
     function fillUnitSelect() {
@@ -301,8 +291,6 @@
                         const catalogItem = catalogMap.get(item.catalogId);
                         const itemName = catalogItem ? catalogItem.itemName : `Unknown (ID: ${item.catalogId})`;
                         const unit = units.find(u => u.id === item.unitId);
-                        const unitName = unit ? unit.name : item.unitId;
-                        const unitColor = getColorForUnit(unitName);
                         const expiryDate = new Date(item.expiryDate?.seconds ? item.expiryDate.seconds * 1000 : item.expiryDate).toLocaleDateString();
                         const unitOptions = units.map(u => `<option value="${u.id}" ${u.id === item.unitId ? 'selected' : ''}>${u.name}</option>`).join('');
                         const compartmentOptions = ['Wall', 'Bag', 'Supply RM', 'Clear Container', 'BLS Bag', 'ALS Bag', 'Other'].map(c => `<option value="${c}" ${c === item.compartment ? 'selected' : ''}>${c}</option>`).join('');
@@ -311,10 +299,7 @@
                             <tr class="${rowClass(item.daysToExpire)}" data-id="${item.inventoryId}">
                                 <td><strong>${escapeHtml(itemName)}</strong></td>
                                 <td>
-                                    <div class="unit-display" style="display: flex; align-items: center;">
-                                        <span class="unit-color-tag" style="color: ${unitColor};">●</span>
-                                        <span>${escapeHtml(unitName)}</span>
-                                    </div>
+                                    <span class="unit-display">${escapeHtml(unit ? unit.name : item.unitId)}</span>
                                     <select class="unit-edit" style="display:none;">${unitOptions}</select>
                                 </td>
                                 <td>
@@ -386,7 +371,7 @@
             const item = allInventory.find(i => i.inventoryId === id);
 
             const toggleEditMode = (isEditing) => {
-                tr.querySelector('.unit-display').style.display = isEditing ? 'none' : 'flex';
+                tr.querySelector('.unit-display').style.display = isEditing ? 'none' : 'inline';
                 tr.querySelector('.unit-edit').style.display = isEditing ? 'inline' : 'none';
                 tr.querySelector('.compartment-display').style.display = isEditing ? 'none' : 'inline';
                 tr.querySelector('.compartment-edit').style.display = isEditing ? 'inline' : 'none';
@@ -418,13 +403,6 @@
                         qty: newQty,
                         updatedAt: serverTimestamp()
                     });
-                    const itemToUpdate = allInventory.find(i => i.inventoryId === id);
-                    if(itemToUpdate) {
-                      itemToUpdate.unitId = newUnitId;
-                      itemToUpdate.compartment = newCompartment;
-                      itemToUpdate.qty = newQty;
-                    }
-                    render();
                 } catch (e) {
                     console.error("Save failed:", e);
                     alert("Save failed");
@@ -435,21 +413,12 @@
             const updateStatus = async (newStatus) => {
                  try {
                     await updateDoc(doc(db, "inventory", id), { status: newStatus, updatedAt: serverTimestamp() });
-                    const itemToUpdate = allInventory.find(i => i.inventoryId === id);
-                    if (itemToUpdate) {
-                        itemToUpdate.status = newStatus;
-                        itemToUpdate.updatedAt = { seconds: Date.now() / 1000 };
-                    }
-                    render();
-                    renderHistory(); // Refresh history on status change
                 } catch (err) { console.error("Update failed:", err); alert("Update failed"); }
             };
             
             tr.querySelector('.note-trigger')?.addEventListener('click', () => {
                  openNoteEditor(id, item.crewStatus || '', async (newNote) => {
                     await updateDoc(doc(db, "inventory", id), { crewStatus: newNote, updatedAt: serverTimestamp() });
-                    item.crewStatus = newNote;
-                    render();
                 });
             });
             tr.querySelector('.pending')?.addEventListener('click', () => updateStatus('Pending'));
@@ -535,7 +504,6 @@
             try {
                 await addDoc(collection(db, "inventory"), payload);
                 modal.style.display = 'none';
-                await loadAll();
             } catch (e) {
                 console.error("Error adding document: ", e);
             } finally {
@@ -599,7 +567,6 @@
         if (forSearch) {
             $('#interactive-search-modal').style.display = 'none';
         }
-        // Only hide the viewport, not the whole modal
         $('#interactive').style.display = 'none'; 
     }
 
@@ -632,7 +599,7 @@
         const modal = forSearch ? $('#interactive-search-modal') : $('#addItemModal');
         const viewport = forSearch ? $('#interactive-search-viewport') : $('#interactive');
         
-        if (!forSearch) { // Make sure main modal is visible
+        if (!forSearch) {
              modal.style.display = 'block';
         }
         viewport.style.display = 'block';
@@ -662,13 +629,18 @@
         }
     }
 
-    function init() {
-        loadAll();
+    async function init() {
+        await initializeStaticData();
+        setupInventoryListener();
+        
         setupAddItemModal();
         $('#rangeSel').addEventListener('change', render);
         $('#unitSel').addEventListener('change', render);
         $('#searchBox').addEventListener('input', render);
-        $('#refreshBtn').addEventListener('click', loadAll);
+        $('#refreshBtn').addEventListener('click', async () => {
+             await initializeStaticData();
+             // The listener will handle the inventory refresh automatically.
+        });
         $('#startScanBtn').addEventListener('click', () => startScanner(true));
         $('#scanBarcodeBtn').addEventListener('click', () => startScanner(false));
         

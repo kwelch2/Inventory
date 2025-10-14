@@ -102,7 +102,7 @@
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-  import { getFirestore, collection, getDocs, addDoc, serverTimestamp, updateDoc, doc } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+  import { getFirestore, collection, getDocs, addDoc, serverTimestamp, updateDoc, doc, enablePersistence, onSnapshot } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyD7pMc-AHXb1cApzSfImkWvIjM9iwCoym4",
@@ -111,6 +111,7 @@
   };
   const app = initializeApp(firebaseConfig);
   const db = getFirestore(app);
+  enablePersistence(db).catch(err => console.error("Firestore persistence error: ", err));
 
   const state = {
     catalog: [],
@@ -121,7 +122,7 @@
     vendorMap: new Map()
   };
   
-  let itemSelectChoices; // Choices.js instance
+  let itemSelectChoices; 
 
   const $ = (sel) => document.querySelector(sel);
   const escapeHtml = (s = "") => String(s).replace(/[&<>"']/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
@@ -136,29 +137,35 @@
   let currentHistoryDays = 30;
   let currentHistoryQuery = "";
 
-  async function loadAllData() {
-    $('#pendingTable tbody').innerHTML = '<tr><td colspan="5">Loading…</td></tr>';
+  async function initializeStaticData() {
     try {
-      const [catSnap, reqSnap, priceSnap, vendorSnap] = await Promise.all([
+      const [catSnap, priceSnap, vendorSnap] = await Promise.all([
         getDocs(collection(db, "catalog")),
-        getDocs(collection(db, "requests")),
         getDocs(collection(db, "vendorPricing")),
         getDocs(collection(db, "vendors"))
       ]);
       state.catalog = catSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      state.requests = reqSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
       state.vendorPricing = priceSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
       state.vendors = vendorSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
       state.catalogMap = new Map(state.catalog.map((c) => [c.id, c]));
       state.vendorMap = new Map(state.vendors.map((v) => [v.id, v]));
       
       populateChoices();
-      renderPending();
-      renderHistory(currentHistoryDays, currentHistoryQuery);
     } catch (err) {
-      console.error("Failed to load Firestore data", err);
+      console.error("Failed to load static data", err);
       $('#pendingTable tbody').innerHTML = '<tr><td colspan="5" style="color:#a00;font-weight:700;">Error: Could not load data. Check security rules.</td></tr>';
     }
+  }
+  
+  function setupRequestsListener() {
+      onSnapshot(collection(db, "requests"), (reqSnap) => {
+          state.requests = reqSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          renderPending();
+          renderHistory();
+      }, (error) => {
+          console.error("Error with requests listener: ", error);
+          $('#pendingTable tbody').innerHTML = '<tr><td colspan="5" style="color:#a00;font-weight:700;">Error listening to requests.</td></tr>';
+      });
   }
 
   function populateChoices() {
@@ -220,7 +227,6 @@
                 status: 'Received',
                 receivedAt: serverTimestamp()
             });
-            await loadAllData(); // Refresh the whole page data
         } catch(e) {
             console.error("Failed to mark as received:", e);
             alert("Error: Could not update status. You may not have permission.");
@@ -302,7 +308,6 @@
             $('#qty').value = '';
             $('#notes').value = '';
             $('#requestModal').style.display = "none";
-            await loadAllData();
         } catch (err) {
             console.error('Failed to submit request', err);
             msg.textContent = 'An error occurred submitting the request.';
@@ -347,7 +352,8 @@
   }
 
   async function boot() {
-    await loadAllData();
+    await initializeStaticData();
+    setupRequestsListener();
     setupForm();
     setupHistoryControls();
     setupRequestModal();
