@@ -61,8 +61,11 @@
 <div class="wrap" style="display:none;">
     <div class="card">
         <div class="nav-links">
-            <a href="requests.html">Go to Requests</a>
-            <a href="master.html">Go to Admin</a>
+            <a href="https://supplies-ems.web.app/">Home</a>
+            <a href="requests.html">Supply Requests</a>
+            <a href="master.html">Admin</a>
+            <a href="https://chores-ems.gemfireems.org/">Chores</a>
+            <a href="https://chores-ems.gemfireems.org/issues">Issues</a>
         </div>
         <h1>Expiring Supplies</h1>
         <div class="muted">Now backed by Firebase Firestore.</div>
@@ -114,15 +117,16 @@
           <label>Expiry Month</label>
           <div id="addExpiryChips" class="chipbar"></div>
           <div id="customExpiryWrap" style="display:none; margin-top: 8px;">
-              <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-                  <label>Month <input id="customMonth" type="month"></label>
-                  <label>Exact date <input id="customDate" type="date"></label>
-                  <button id="applyCustomExp" class="btn">Apply</button>
-              </div>
+              <label><input type="radio" name="expiryType" value="month" checked> Month</label>
+              <label><input type="radio" name="expiryType" value="date"> Exact Date</label>
+              <div id="monthInputWrap"><input id="customMonth" type="month"></div>
+              <div id="dateInputWrap" style="display:none;"><input id="customDate" type="date"></div>
           </div>
       </div>
       <label>Quantity</label>
       <input id="addQty" type="number" min="1" step="1" value="1"/>
+      <label>Note</label>
+      <textarea id="addNote" placeholder="Add a note..."></textarea>
       <button id="saveNewItemBtn" class="btn" style="width:100%;margin-top:12px;">Save Item</button>
     </div>
 </div>
@@ -258,7 +262,20 @@
             return true;
         });
 
-        filtered.sort((a, b) => (a.daysToExpire || 9999) - (b.daysToExpire || 9999));
+        filtered.sort((a, b) => {
+            if (a.daysToExpire !== b.daysToExpire) {
+                return (a.daysToExpire || 9999) - (b.daysToExpire || 9999);
+            }
+            const unitA = units.find(u => u.id === a.unitId)?.name || '';
+            const unitB = units.find(u => u.id === b.unitId)?.name || '';
+            if (unitA !== unitB) {
+                return unitA.localeCompare(unitB);
+            }
+            const itemA = (catalogMap.get(a.catalogId)?.itemName || '').toLowerCase();
+            const itemB = (catalogMap.get(b.catalogId)?.itemName || '').toLowerCase();
+            return itemA.localeCompare(itemB);
+        });
+        
         $('#count').textContent = `${filtered.length} item(s)`;
 
         const tableHTML = `
@@ -284,7 +301,10 @@
                                     <span class="compartment-display">${escapeHtml(item.compartment)}</span>
                                     <select class="compartment-edit" style="display:none;">${compartmentOptions}</select>
                                 </td>
-                                <td>${escapeHtml(item.qty)}</td>
+                                <td>
+                                    <span class="qty-display">${escapeHtml(item.qty)}</span>
+                                    <input class="qty-edit" type="number" value="${escapeHtml(item.qty)}" style="display:none; width: 60px;">
+                                </td>
                                 <td>${expiryDate}</td>
                                 <td class="right">${item.daysToExpire}</td>
                                 <td>
@@ -350,6 +370,8 @@
                 tr.querySelector('.unit-edit').style.display = isEditing ? 'inline' : 'none';
                 tr.querySelector('.compartment-display').style.display = isEditing ? 'none' : 'inline';
                 tr.querySelector('.compartment-edit').style.display = isEditing ? 'inline' : 'none';
+                tr.querySelector('.qty-display').style.display = isEditing ? 'none' : 'inline';
+                tr.querySelector('.qty-edit').style.display = isEditing ? 'inline' : 'none';
                 
                 tr.querySelector('.edit-btn').style.display = isEditing ? 'none' : 'inline';
                 tr.querySelector('.save-btn').style.display = isEditing ? 'inline' : 'none';
@@ -362,16 +384,25 @@
             tr.querySelector('.save-btn').addEventListener('click', async () => {
                 const newUnitId = tr.querySelector('.unit-edit').value;
                 const newCompartment = tr.querySelector('.compartment-edit').value;
+                const newQty = parseInt(tr.querySelector('.qty-edit').value, 10);
+                
+                if (isNaN(newQty) || newQty < 0) {
+                    alert("Please enter a valid quantity.");
+                    return;
+                }
+                
                 try {
                     await updateDoc(doc(db, "inventory", id), {
                         unitId: newUnitId,
                         compartment: newCompartment,
+                        qty: newQty,
                         updatedAt: serverTimestamp()
                     });
                     const itemToUpdate = allInventory.find(i => i.inventoryId === id);
                     if(itemToUpdate) {
                       itemToUpdate.unitId = newUnitId;
                       itemToUpdate.compartment = newCompartment;
+                      itemToUpdate.qty = newQty;
                     }
                     render();
                 } catch (e) {
@@ -437,14 +468,37 @@
         $('#closeScannerBtn').addEventListener('click', () => stopScanner(false));
 
         $('#saveNewItemBtn').addEventListener('click', async () => {
+            const catalogId = itemSelectChoices.getValue(true);
+            const unitId = $('#addUnitSelect').value;
+            const compartment = $('#addCompartmentSelect').value.trim();
+            const note = $('#addNote').value.trim();
+            
+            if (document.querySelector('input[name="expiryType"]:checked').value === 'month') {
+                selectedExp = $('#customMonth').value ? new Date($('#customMonth').value + '-02').toISOString().split('T')[0] : '';
+            } else {
+                selectedExp = $('#customDate').value;
+            }
+
+            const isDuplicate = allInventory.some(item => 
+                item.catalogId === catalogId &&
+                item.unitId === unitId &&
+                item.compartment === compartment
+            );
+
+            if (isDuplicate) {
+                if (!confirm("This item already exists in this unit and compartment. Are you sure you want to add a duplicate?")) {
+                    return;
+                }
+            }
+
             const payload = {
-                catalogId: itemSelectChoices.getValue(true),
-                unitId: $('#addUnitSelect').value,
-                compartment: $('#addCompartmentSelect').value.trim(),
+                catalogId: catalogId,
+                unitId: unitId,
+                compartment: compartment,
                 expiryDate: new Date(selectedExp),
                 qty: parseInt($('#addQty').value, 10) || 1,
                 status: "",
-                crewStatus: "",
+                crewStatus: note,
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp(),
                 updatedBy: "WebApp (Expiring Page)"
@@ -504,18 +558,17 @@
             $('#customExpiryWrap').style.display = b.classList.contains('custom') ? 'block' : 'none';
         }));
 
-        $('#applyCustomExp').onclick = (e) => {
-            e.preventDefault();
-            const dateVal = $('#customDate').value;
-            const monthVal = $('#customMonth').value;
-            if (dateVal) {
-                selectedExp = dateVal;
-            } else if (monthVal) {
-                const [y, m] = monthVal.split('-');
-                selectedExp = new Date(y, m, 0).toISOString().split('T')[0];
-            } else { return; }
-            $('#customExpiryWrap').style.display = 'none';
-        };
+        document.querySelectorAll('input[name="expiryType"]').forEach(radio => {
+            radio.addEventListener('change', function() {
+                if (this.value === 'month') {
+                    $('#monthInputWrap').style.display = 'block';
+                    $('#dateInputWrap').style.display = 'none';
+                } else {
+                    $('#monthInputWrap').style.display = 'none';
+                    $('#dateInputWrap').style.display = 'block';
+                }
+            });
+        });
     }
     
     function stopScanner(forSearch = false) {
