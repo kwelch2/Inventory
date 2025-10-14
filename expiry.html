@@ -45,6 +45,7 @@
     .nav-links a { color: #007bff; text-decoration: none; margin-left: 1rem; }
     .tag { display: inline-block; font-size: 0.8rem; padding: 3px 6px; border-radius: 999px; background: #eee; }
     summary { cursor: pointer; font-weight: bold; font-size: 1.25em; }
+    .unit-color-tag { font-size: 1.2em; margin-right: 6px; }
 </style>
 </head>
 <body>
@@ -194,9 +195,23 @@
     let selectedExp = '';
     let isScannerActive = false;
     let quaggaHandler = null;
+    const unitColorCache = new Map();
 
     const $ = s => document.querySelector(s);
     const escapeHtml = s => (s??'').toString().replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;' }[m]));
+
+    function getColorForUnit(unitName) {
+        if (unitColorCache.has(unitName)) {
+            return unitColorCache.get(unitName);
+        }
+        let hash = 0;
+        for (let i = 0; i < unitName.length; i++) {
+            hash = unitName.charCodeAt(i) + ((hash << 5) - hash);
+        }
+        const color = `hsl(${hash % 360}, 70%, 80%)`;
+        unitColorCache.set(unitName, color);
+        return color;
+    }
 
     async function loadAll() {
         $('#refreshBtn').disabled = true;
@@ -286,6 +301,8 @@
                         const catalogItem = catalogMap.get(item.catalogId);
                         const itemName = catalogItem ? catalogItem.itemName : `Unknown (ID: ${item.catalogId})`;
                         const unit = units.find(u => u.id === item.unitId);
+                        const unitName = unit ? unit.name : item.unitId;
+                        const unitColor = getColorForUnit(unitName);
                         const expiryDate = new Date(item.expiryDate?.seconds ? item.expiryDate.seconds * 1000 : item.expiryDate).toLocaleDateString();
                         const unitOptions = units.map(u => `<option value="${u.id}" ${u.id === item.unitId ? 'selected' : ''}>${u.name}</option>`).join('');
                         const compartmentOptions = ['Wall', 'Bag', 'Supply RM', 'Clear Container', 'BLS Bag', 'ALS Bag', 'Other'].map(c => `<option value="${c}" ${c === item.compartment ? 'selected' : ''}>${c}</option>`).join('');
@@ -294,7 +311,10 @@
                             <tr class="${rowClass(item.daysToExpire)}" data-id="${item.inventoryId}">
                                 <td><strong>${escapeHtml(itemName)}</strong></td>
                                 <td>
-                                    <span class="unit-display">${escapeHtml(unit ? unit.name : item.unitId)}</span>
+                                    <div class="unit-display" style="display: flex; align-items: center;">
+                                        <span class="unit-color-tag" style="color: ${unitColor};">●</span>
+                                        <span>${escapeHtml(unitName)}</span>
+                                    </div>
                                     <select class="unit-edit" style="display:none;">${unitOptions}</select>
                                 </td>
                                 <td>
@@ -366,7 +386,7 @@
             const item = allInventory.find(i => i.inventoryId === id);
 
             const toggleEditMode = (isEditing) => {
-                tr.querySelector('.unit-display').style.display = isEditing ? 'none' : 'inline';
+                tr.querySelector('.unit-display').style.display = isEditing ? 'none' : 'flex';
                 tr.querySelector('.unit-edit').style.display = isEditing ? 'inline' : 'none';
                 tr.querySelector('.compartment-display').style.display = isEditing ? 'none' : 'inline';
                 tr.querySelector('.compartment-edit').style.display = isEditing ? 'inline' : 'none';
