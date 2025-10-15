@@ -121,18 +121,19 @@
   </div>
 </div>
 
+<!-- Modals -->
 <div id="addItemToOrderModal" class="modal">
-    <div class="modal-content">
-      <div class="modal-header"><h2>Add Item to Order List</h2></div>
-      <div class="modal-body">
-        <label>Item <select id="addItemSelect"></select></label>
-        <label>Quantity <input id="addItemQty" type="text" placeholder="e.g., 1 Box or 5"></label>
-      </div>
-      <div class="modal-footer">
-        <button class="btn" id="cancelAddItemBtn">Cancel</button>
-        <button class="btn primary" id="saveAddItemBtn">Add Item</button>
-      </div>
+  <div class="modal-content">
+    <div class="modal-header"><h2>Add Item to Order List</h2></div>
+    <div class="modal-body">
+      <label>Item <select id="addItemSelect"></select></label>
+      <label>Quantity <input id="addItemQty" type="text" placeholder="e.g., 1 Box or 5"></label>
     </div>
+    <div class="modal-footer">
+      <button class="btn" id="cancelAddItemBtn">Cancel</button>
+      <button class="btn primary" id="saveAddItemBtn">Add Item</button>
+    </div>
+  </div>
 </div>
 
 <div id="catalogModal" class="modal">
@@ -150,9 +151,9 @@
         <label>Barcodes</label>
         <div id="barcodeList" style="margin-bottom: 8px; max-height: 120px; overflow-y: auto; border: 1px solid #ccc; padding: 5px; border-radius: 8px;"></div>
         <div class="row" style="margin-bottom: 0;">
-            <input id="newBarcode" placeholder="Add new barcode..." style="flex: 1;">
-            <button id="scanNewBarcodeBtn" class="btn">Scan</button>
-            <button id="addNewBarcodeBtn" class="btn primary">Add</button>
+          <input id="newBarcode" placeholder="Add new barcode..." style="flex: 1;">
+          <button id="scanNewBarcodeBtn" class="btn">Scan</button>
+          <button id="addNewBarcodeBtn" class="btn primary">Add</button>
         </div>
         <div id="barcodeScannerViewport" class="viewport" style="display:none; width:100%; height:240px; border:1px solid #ccc; background:#000; margin-top:1rem;"></div>
       </div>
@@ -166,50 +167,54 @@
 </div>
 
 <div id="pricingModal" class="modal">
-    <div class="modal-content">
-      <div class="modal-header"><h2 id="pricingModalTitle">Add/Edit Vendor Price</h2></div>
-      <div class="modal-body">
-        <label>Item <select id="priceItemSelect"></select></label>
-        <label>Vendor <select id="priceVendorSelect"></select></label>
-        <label>Vendor SKU <input id="priceSku"></label>
-        <label>Unit Price <input id="priceUnitPrice" type="number" step="0.01"></label>
-      </div>
-      <div class="modal-footer">
-        <button class="btn" id="cancelPricingEdit">Cancel</button>
-        <button class="btn primary" id="savePricingEdit">Save Price</button>
-      </div>
+  <div class="modal-content">
+    <div class="modal-header"><h2 id="pricingModalTitle">Add/Edit Vendor Price</h2></div>
+    <div class="modal-body">
+      <label>Item <select id="priceItemSelect"></select></label>
+      <label>Vendor <select id="priceVendorSelect"></select></label>
+      <label>Vendor SKU <input id="priceSku"></label>
+      <label>Unit Price <input id="priceUnitPrice" type="number" step="0.01"></label>
     </div>
+    <div class="modal-footer">
+      <button class="btn" id="cancelPricingEdit">Cancel</button>
+      <button class="btn primary" id="savePricingEdit">Save Price</button>
+    </div>
+  </div>
 </div>
 
 <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-    import { getAuth, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
-    import { getFirestore, collection, getDocs, doc, setDoc, getDoc, addDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp, query, where, orderBy, onSnapshot, enableMultiTabIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+import { getAuth, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
+import { 
+  initializeFirestore, 
+  collection, getDocs, doc, setDoc, getDoc, addDoc, updateDoc, deleteDoc, 
+  writeBatch, serverTimestamp, query, where, orderBy, onSnapshot,
+  persistentLocalCache, persistentMultipleTabManager 
+} from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
-    const firebaseConfig = {
-        apiKey: "AIzaSyD7pMc-AHXb1cApzSfImkWvIjM9iwCoym4",
-        authDomain: "supplies-ems.firebaseapp.com",
-        projectId: "supplies-ems",
-    };
-    const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
-    const db = getFirestore(app);
+const firebaseConfig = {
+  apiKey: "AIzaSyD7pMc-AHXb1cApzSfImkWvIjM9iwCoym4",
+  authDomain: "supplies-ems.firebaseapp.com",
+  projectId: "supplies-ems",
+};
 
-    enableMultiTabIndexedDbPersistence(db).catch((err) => {
-        if (err.code === 'failed-precondition') {
-            console.warn("Persistence failed because multiple tabs are open and could not sync. One tab will have persistence and the others will not.");
-        } else if (err.code === 'unimplemented') {
-            console.warn("Persistence is not available in this browser.");
-        }
-    });
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
 
-    let state = { user: null, userRole: null, catalog: [], vendors: [], pricingAll: [], requests: [], units: [], compartments: [], catalogMap: new Map(), vendorMap: new Map(), pricingMap: new Map() };
-    let addItemChoices;
-    const $ = id => document.getElementById(id);
-    let appInitialized = false;
-    let isScannerActive = false;
+// ✅ Modern Firestore initialization (replaces deprecated enableMultiTabIndexedDbPersistence)
+const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({
+    tabManager: persistentMultipleTabManager(),
+  }),
+});
 
-    $("loading-container").style.display = "block";
+// Rest of your logic (unchanged)
+let state = { user: null, userRole: null, catalog: [], vendors: [], pricingAll: [], requests: [], units: [], compartments: [], catalogMap: new Map(), vendorMap: new Map(), pricingMap: new Map() };
+let addItemChoices;
+const $ = id => document.getElementById(id);
+let appInitialized = false;
+let isScannerActive = false;
+$("loading-container").style.display = "block";
 
     onAuthStateChanged(auth, async (user) => {
         if (user) await handleUserSignedIn(user);
