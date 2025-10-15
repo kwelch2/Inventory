@@ -30,6 +30,9 @@
   .modal-header{display:flex;justify-content:space-between;align-items:center;padding-bottom:10px;border-bottom:1px solid #ddd;margin-bottom:1rem}
   .close-btn{color:#aaa;float:right;font-size:28px;font-weight:bold;cursor:pointer}
   .close-btn:hover,.close-btn:focus{color:black;text-decoration:none;cursor:pointer}
+  .status-open { background-color: #ffc107; color: #000; padding: 2px 5px; border-radius: 4px;}
+  .status-backordered, .status-pending { background-color: #fd7e14; color: #fff; padding: 2px 5px; border-radius: 4px;}
+  .status-ordered { background-color: #28a745; color: #fff; padding: 2px 5px; border-radius: 4px;}
 </style>
 </head>
 <body>
@@ -44,14 +47,14 @@
     </div>
 
     <div class="card" style="margin-top:16px;">
-        <h2>Pending Requests</h2>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <h2>Pending Requests</h2>
+            <button id="showRequestModalBtn" class="btn primary">New Request</button>
+        </div>
         <table id="pendingTable">
           <thead><tr><th>Item / Vendor Pricing</th><th>Qty</th><th>Status</th><th>Notes</th><th>Action</th></tr></thead>
           <tbody><tr><td colspan="5">Loading...</td></tr></tbody>
         </table>
-        <div style="text-align: right; margin-top: 1rem;">
-            <button id="showRequestModalBtn" class="btn primary">New Request</button>
-        </div>
     </div>
 
     <div class="card" style="margin-top:16px;">
@@ -202,17 +205,23 @@
       tbody.innerHTML = '<tr><td colspan="5">No pending requests.</td></tr>';
       return;
     }
-    tbody.innerHTML = pending.sort((a, b) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0)).map((request) => {
+    const sortOrder = { "Open": 1, "Backordered": 2, "Pending": 2, "Ordered": 3 };
+    tbody.innerHTML = pending.sort((a, b) => {
+        const aStatus = a.status || "Open";
+        const bStatus = b.status || "Open";
+        return (sortOrder[aStatus] || 99) - (sortOrder[bStatus] || 99) || (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0)
+    }).map((request) => {
         const { primary, alt } = formatRequestName(request);
         const itemId = request.catalogId || request.ItemID;
         const pricing = (itemId ? state.vendorPricing.filter((vp) => vp.catalogId === itemId) : []).sort((a, b) => (parseFloat(a.unitPrice) || Infinity) - (parseFloat(b.unitPrice) || Infinity));
         const pricingHTML = pricing.length ? pricing.map(vp => `<tr><td>${escapeHtml(state.vendorMap.get(vp.vendorId)?.name || vp.vendorId || '')}</td><td>${money(vp.unitPrice)}</td><td>${escapeHtml(vp.vendorItemNo || '')}</td></tr>`).join("") : '<tr><td colspan="3">No pricing info</td></tr>';
+        const status = escapeHtml(request.status || 'Requested');
         return `
-          <tr>
+          <tr data-request-id="${request.id}">
             <td><details><summary>${escapeHtml(primary)} ${alt ? `<span class="muted">${escapeHtml(alt)}</span>` : ''}</summary><table class="vendor-table"><thead><tr><th>Vendor</th><th>Price</th><th>Item#</th></tr></thead><tbody>${pricingHTML}</tbody></table></details></td>
             <td>${escapeHtml(request.qty || '')}</td>
-            <td><strong>${escapeHtml(request.status || 'Requested')}</strong></td>
-            <td>${escapeHtml(request.notes || '')}</td>
+            <td><strong class="status-${status.toLowerCase()}">${status}</strong></td>
+            <td class="notes" data-note="${escapeHtml(request.notes || '')}">${escapeHtml(request.notes || '')}</td>
             <td><button class="btn" data-receive-id="${request.id}">Mark Received</button></td>
           </tr>`;
     }).join("");
@@ -235,6 +244,31 @@
             btn.textContent = 'Mark Received';
         }
       });
+    });
+
+    tbody.querySelectorAll('.notes').forEach((noteCell) => {
+        noteCell.addEventListener('click', (e) => {
+            const currentCell = e.target;
+            const originalNote = currentCell.dataset.note;
+            const requestId = currentCell.parentElement.dataset.requestId;
+
+            currentCell.innerHTML = `
+                <input type="text" value="${originalNote}" style="width: 100%;">
+                <button class="btn save-note">Save</button>
+                <button class="btn cancel-note">Cancel</button>
+            `;
+
+            currentCell.querySelector('.save-note').addEventListener('click', async () => {
+                const newNote = currentCell.querySelector('input').value;
+                await updateDoc(doc(db, "requests", requestId), { notes: newNote });
+                currentCell.innerHTML = escapeHtml(newNote);
+                currentCell.dataset.note = newNote;
+            });
+
+            currentCell.querySelector('.cancel-note').addEventListener('click', () => {
+                currentCell.innerHTML = escapeHtml(originalNote);
+            });
+        }, { once: true });
     });
   }
 
