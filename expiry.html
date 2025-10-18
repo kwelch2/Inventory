@@ -211,7 +211,7 @@
         for (let i = 0; i < unitName.length; i++) {
             hash = unitName.charCodeAt(i) + ((hash << 5) - hash);
         }
-        const color = `hsl(${hash % 360}, 70%, 40%)`;
+        const color = `hsl(${(Math.abs(hash) * 41) % 360}, 70%, 40%)`;
         unitColorCache.set(unitName, color);
         return color;
     }
