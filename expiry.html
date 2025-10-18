@@ -215,10 +215,7 @@
         unitColorCache.set(unitName, color);
         return color;
     }
-        const unit = units.find(u => u.id === item.unitId);
-        const unitName = unit ? unit.name : item.unitId;
-        const unitColor = getColorForUnit(unitName); // This line is crucial
-        
+                
     async function initializeStaticData() {
         try {
             const [unitsSnap, catalogSnap] = await Promise.all([
