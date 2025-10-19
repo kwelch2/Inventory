@@ -47,11 +47,20 @@
     .details-row { display: none; }
     .details-row.visible { display: table-row; background-color: #f9f9f9 !important; }
     .details-cell { padding: 1rem; }
-    /* Status row colors */
-    .status-Open { background-color: #f0f8ff; }
-    .status-Ordered { background-color: #ffffe0; }
-    .status-Backordered { background-color: #fff0e6; }
-    .status-Received, .status-Completed { background-color: #f0fff0; }
+    /* Status Badge colors */
+    .status-badge {
+        display: inline-block;
+        padding: 4px 8px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        border-radius: 6px;
+        color: #000;
+        border: 1px solid #ccc;
+    }
+    .status-Open { background-color: #f0f8ff; border-color: #cce0ff; }
+    .status-Ordered { background-color: #ffffe0; border-color: #f0f0b0; }
+    .status-Backordered { background-color: #fff0e6; border-color: #f0d0c0; }
+    .status-Received, .status-Completed { background-color: #f0fff0; border-color: #c0f0c0; }
   </style>
 </head>
 <body>
@@ -359,15 +368,17 @@ $("loading-container").style.display = "block";
             const prices = (state.pricingMap.get(r.catalogId) || []).sort((a,b) => a.unitPrice - b.unitPrice);
             const bestPrice = prices[0];
             
+            // Fix 2: Show all prices in the details, not just "other" prices.
             const allPricesHtml = prices.map(p => `<div>${escapeHtml(state.vendorMap.get(p.vendorId))}: $${(p.unitPrice || 0).toFixed(2)} (Vendor #: ${escapeHtml(p.vendorItemNo) || 'N/A'})</div>`).join('');
 
             return `
-                <tr data-request-id="${r.id}" class="status-${status.replace(/\s+/g, '-')}">
+                <tr data-request-id="${r.id}">
                     <td>
                         <strong>${escapeHtml(catItem.itemName)}</strong><br>
                         <span class="muted">${escapeHtml(r.requesterEmail) || 'N/A'}</span>
                     </td>
                     <td>${escapeHtml(r.qty)}</td>
+                    <td><span class="status-badge status-${status.replace(/\s+/g, '-')}">${escapeHtml(status)}</span></td>
                     <td>
                         <div class="price-info ${bestPrice ? 'best-price' : ''}">
                             ${bestPrice ? `${escapeHtml(state.vendorMap.get(bestPrice.vendorId))}: $${(bestPrice.unitPrice || 0).toFixed(2)}` : 'No pricing'}
@@ -386,7 +397,7 @@ $("loading-container").style.display = "block";
                     </td>
                 </tr>
                 <tr class="details-row" data-details-for="${r.id}">
-                    <td colspan="5" class="details-cell">
+                    <td colspan="6" class="details-cell">
                         <strong>Vendor Pricing:</strong>
                         ${allPricesHtml || '<div class="muted">No prices found.</div>'}
                         <div style="margin-top: 8px;">
@@ -404,29 +415,41 @@ $("loading-container").style.display = "block";
 
         container.innerHTML = `
             <table>
-                <thead><tr><th>Item/Requester</th><th>Qty</th><th>Vendor (Lowest Price)</th><th>Vendor #</th><th>Actions</th></tr></thead>
-                <tbody>${rows || `<tr><td colspan="5" class="muted">No requests found.</td></tr>`}</tbody>
+                <thead><tr><th>Item/Requester</th><th>Qty</th><th>Status</th><th>Vendor (Lowest Price)</th><th>Vendor #</th><th>Actions</th></tr></thead>
+                <tbody>${rows || `<tr><td colspan="6" class="muted">No requests found.</td></tr>`}</tbody>
             </table>`;
     }
 
     $('ordersTableContainer').addEventListener('click', async e => {
         const target = e.target;
-        const row = target.closest('tr[data-request-id]');
-        if (!row) return;
-        const requestId = row.dataset.requestId;
 
-        if (target.dataset.toggleDetails) {
-            const detailsRow = document.querySelector(`[data-details-for="${requestId}"]`);
+        // Handle Toggle Details Button
+        if (target.dataset.toggleDetails !== undefined) {
+            const row = target.closest('tr[data-request-id]');
+            if (!row) return;
+            const requestId = row.dataset.requestId;
+            const detailsRow = document.querySelector(`tr[data-details-for="${requestId}"]`);
             if (detailsRow) {
                 detailsRow.classList.toggle('visible');
             }
+            return;
         }
 
+        // Handle Status Buttons
         if (target.dataset.status) {
+            const row = target.closest('tr[data-request-id]');
+            if (!row) return;
+            const requestId = row.dataset.requestId;
             await updateRequestStatus(requestId, target.dataset.status);
+            return;
         }
         
-        if (target.dataset.editPrice) {
+        // Handle Price Edit Button (inside details row)
+        if (target.dataset.editPrice !== undefined) {
+            const detailsRow = target.closest('tr.details-row');
+            if (!detailsRow) return;
+            const requestId = detailsRow.dataset.detailsFor;
+            
             const detailsCell = target.closest('.details-cell');
             const priceInput = detailsCell.querySelector('.edit-price-input');
             const vendorSelect = detailsCell.querySelector('.edit-price-vendor-select');
@@ -445,6 +468,7 @@ $("loading-container").style.display = "block";
             } else {
                 alert('No existing price document for this item/vendor combo. Please add it in the "Vendor Pricing" tab.');
             }
+            return;
         }
     });
 
