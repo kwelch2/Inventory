@@ -45,8 +45,13 @@
     .price-info { font-size: 0.8rem; color: #555; }
     .best-price { color: var(--ok); font-weight: bold; }
     .details-row { display: none; }
-    .details-row.visible { display: table-row; }
-    .details-cell { padding: 1rem; background-color: #f9f9f9; }
+    .details-row.visible { display: table-row; background-color: #f9f9f9 !important; }
+    .details-cell { padding: 1rem; }
+    /* Status row colors */
+    .status-Open { background-color: #f0f8ff; }
+    .status-Ordered { background-color: #ffffe0; }
+    .status-Backordered { background-color: #fff0e6; }
+    .status-Received, .status-Completed { background-color: #f0fff0; }
   </style>
 </head>
 <body>
@@ -87,7 +92,8 @@
             <button class="btn primary" id="showAddItemModal">+ Add Item to Order</button>
             <span class="spacer"></span>
             <strong style="margin-left: 2rem;">Filter by Status:</strong>
-            <button class="btn filter-btn active" data-status="Open">Open</button>
+            <button class="btn filter-btn active" data-status="All">All Active</button>
+            <button class="btn filter-btn" data-status="Open">Open</button>
             <button class="btn filter-btn" data-status="Ordered">Ordered</button>
             <button class="btn filter-btn" data-status="Backordered">Backordered</button>
             <label style="margin-left:1rem; font-weight:normal;"><input type="checkbox" id="showHistoryToggle"> Show History</label>
@@ -321,15 +327,26 @@ $("loading-container").style.display = "block";
      function renderOrders() {
         const container = $('ordersTableContainer');
         const showHistory = $('showHistoryToggle').checked;
-        const activeFilter = document.querySelector('.filter-btn.active')?.dataset.status || 'Open';
+        const activeFilter = document.querySelector('.filter-btn.active')?.dataset.status || 'All';
         
         const requestsToShow = state.requests.filter(r => {
             const status = r.status || 'Open';
             if (showHistory) {
+                // History view: only show received/completed
                 return status === 'Received' || status === 'Completed';
             }
-            // User is NOT looking at history, so filter by the active tab
-            return status === activeFilter;
+            
+            // Active view: hide received/completed
+            const isHistoryStatus = status === 'Received' || status === 'Completed';
+            if (isHistoryStatus) {
+                return false; 
+            }
+
+            if (activeFilter === 'All') {
+                return true; // Show all non-history items (Open, Ordered, Backordered)
+            }
+            
+            return status === activeFilter; // Show items matching the specific filter
         });
 
         const escapeHtml = (s = "") => String(s).replace(/[&<>"']/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
@@ -337,21 +354,20 @@ $("loading-container").style.display = "block";
         const rows = requestsToShow.map(r => {
             const catItem = state.catalogMap.get(r.catalogId);
             if (!catItem) return ''; 
-
+            
+            const status = r.status || 'Open';
             const prices = (state.pricingMap.get(r.catalogId) || []).sort((a,b) => a.unitPrice - b.unitPrice);
             const bestPrice = prices[0];
             
-            // Fix 2: Show all prices in the details, not just "other" prices.
             const allPricesHtml = prices.map(p => `<div>${escapeHtml(state.vendorMap.get(p.vendorId))}: $${(p.unitPrice || 0).toFixed(2)} (Vendor #: ${escapeHtml(p.vendorItemNo) || 'N/A'})</div>`).join('');
 
             return `
-                <tr data-request-id="${r.id}">
+                <tr data-request-id="${r.id}" class="status-${status.replace(/\s+/g, '-')}">
                     <td>
                         <strong>${escapeHtml(catItem.itemName)}</strong><br>
                         <span class="muted">${escapeHtml(r.requesterEmail) || 'N/A'}</span>
                     </td>
                     <td>${escapeHtml(r.qty)}</td>
-                    <td><span class="muted">${escapeHtml(r.status) || 'Open'}</span></td>
                     <td>
                         <div class="price-info ${bestPrice ? 'best-price' : ''}">
                             ${bestPrice ? `${escapeHtml(state.vendorMap.get(bestPrice.vendorId))}: $${(bestPrice.unitPrice || 0).toFixed(2)}` : 'No pricing'}
@@ -370,7 +386,7 @@ $("loading-container").style.display = "block";
                     </td>
                 </tr>
                 <tr class="details-row" data-details-for="${r.id}">
-                    <td colspan="6" class="details-cell">
+                    <td colspan="5" class="details-cell">
                         <strong>Vendor Pricing:</strong>
                         ${allPricesHtml || '<div class="muted">No prices found.</div>'}
                         <div style="margin-top: 8px;">
@@ -388,8 +404,8 @@ $("loading-container").style.display = "block";
 
         container.innerHTML = `
             <table>
-                <thead><tr><th>Item/Requester</th><th>Qty</th><th>Status</th><th>Vendor (Lowest Price)</th><th>Vendor #</th><th>Actions</th></tr></thead>
-                <tbody>${rows || `<tr><td colspan="6" class="muted">No requests found.</td></tr>`}</tbody>
+                <thead><tr><th>Item/Requester</th><th>Qty</th><th>Vendor (Lowest Price)</th><th>Vendor #</th><th>Actions</th></tr></thead>
+                <tbody>${rows || `<tr><td colspan="5" class="muted">No requests found.</td></tr>`}</tbody>
             </table>`;
     }
 
