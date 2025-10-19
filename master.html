@@ -121,7 +121,6 @@
   </div>
 </div>
 
-<!-- Modals -->
 <div id="addItemToOrderModal" class="modal">
   <div class="modal-content">
     <div class="modal-header"><h2>Add Item to Order List</h2></div>
@@ -172,7 +171,7 @@
     <div class="modal-body">
       <label>Item <select id="priceItemSelect"></select></label>
       <label>Vendor <select id="priceVendorSelect"></select></label>
-      <label>Vendor SKU <input id="priceSku"></label>
+      <label>Vendor # <input id="priceSku"></label>
       <label>Unit Price <input id="priceUnitPrice" type="number" step="0.01"></label>
     </div>
     <div class="modal-footer">
@@ -329,8 +328,11 @@ $("loading-container").style.display = "block";
             if (showHistory) {
                 return status === 'Received' || status === 'Completed';
             }
+            // User is NOT looking at history, so filter by the active tab
             return status === activeFilter;
         });
+
+        const escapeHtml = (s = "") => String(s).replace(/[&<>"']/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
         
         const rows = requestsToShow.map(r => {
             const catItem = state.catalogMap.get(r.catalogId);
@@ -339,22 +341,24 @@ $("loading-container").style.display = "block";
             const prices = (state.pricingMap.get(r.catalogId) || []).sort((a,b) => a.unitPrice - b.unitPrice);
             const bestPrice = prices[0];
             
-            const otherPricesHtml = prices.slice(1).map(p => `<div>${state.vendorMap.get(p.vendorId)}: $${p.unitPrice.toFixed(2)} (SKU: ${p.vendorItemNo || 'N/A'})</div>`).join('');
+            // Fix 2: Show all prices in the details, not just "other" prices.
+            const allPricesHtml = prices.map(p => `<div>${escapeHtml(state.vendorMap.get(p.vendorId))}: $${(p.unitPrice || 0).toFixed(2)} (Vendor #: ${escapeHtml(p.vendorItemNo) || 'N/A'})</div>`).join('');
 
             return `
                 <tr data-request-id="${r.id}">
                     <td>
-                        <strong>${catItem.itemName}</strong><br>
-                        <span class="muted">${r.requesterEmail || 'N/A'}</span>
+                        <strong>${escapeHtml(catItem.itemName)}</strong><br>
+                        <span class="muted">${escapeHtml(r.requesterEmail) || 'N/A'}</span>
                     </td>
-                    <td>${r.qty}</td>
+                    <td>${escapeHtml(r.qty)}</td>
+                    <td><span class="muted">${escapeHtml(r.status) || 'Open'}</span></td>
                     <td>
                         <div class="price-info ${bestPrice ? 'best-price' : ''}">
-                            ${bestPrice ? `${state.vendorMap.get(bestPrice.vendorId)}: $${bestPrice.unitPrice.toFixed(2)}` : 'No pricing'}
+                            ${bestPrice ? `${escapeHtml(state.vendorMap.get(bestPrice.vendorId))}: $${(bestPrice.unitPrice || 0).toFixed(2)}` : 'No pricing'}
                             <button class="btn" data-toggle-details style="margin-left: 8px; padding: 2px 6px;">▼</button>
                         </div>
                     </td>
-                    <td>${bestPrice?.vendorItemNo || 'N/A'}</td>
+                    <td>${escapeHtml(bestPrice?.vendorItemNo) || 'N/A'}</td>
                     <td>
                         <button class="btn" data-status="Ordered">Ordered</button>
                         <button class="btn" data-status="Received">Received</button>
@@ -366,15 +370,15 @@ $("loading-container").style.display = "block";
                     </td>
                 </tr>
                 <tr class="details-row" data-details-for="${r.id}">
-                    <td colspan="5" class="details-cell">
-                        <strong>All Prices:</strong>
-                        ${otherPricesHtml || '<div class="muted">No other prices found.</div>'}
+                    <td colspan="6" class="details-cell">
+                        <strong>Vendor Pricing:</strong>
+                        ${allPricesHtml || '<div class="muted">No prices found.</div>'}
                         <div style="margin-top: 8px;">
                             <strong>Last Ordered:</strong> <span class="muted">${r.lastOrdered ? new Date(r.lastOrdered.seconds * 1000).toLocaleDateString() : 'N/A'}</span>
                         </div>
                         <div style="margin-top: 8px;">
                             <input type="number" step="0.01" placeholder="New Price" class="edit-price-input" style="width: 100px;"/>
-                            <select class="edit-price-vendor-select">${state.vendors.map(v => `<option value="${v.id}">${v.name}</option>`).join('')}</select>
+                            <select class="edit-price-vendor-select">${state.vendors.map(v => `<option value="${v.id}">${escapeHtml(v.name)}</option>`).join('')}</select>
                             <button class="btn primary" data-edit-price>Update Price</button>
                         </div>
                     </td>
@@ -384,8 +388,8 @@ $("loading-container").style.display = "block";
 
         container.innerHTML = `
             <table>
-                <thead><tr><th>Item/Requester</th><th>Qty</th><th>Vendor (Lowest Price)</th><th>SKU</th><th>Actions</th></tr></thead>
-                <tbody>${rows || `<tr><td colspan="5" class="muted">No requests found.</td></tr>`}</tbody>
+                <thead><tr><th>Item/Requester</th><th>Qty</th><th>Status</th><th>Vendor (Lowest Price)</th><th>Vendor #</th><th>Actions</th></tr></thead>
+                <tbody>${rows || `<tr><td colspan="6" class="muted">No requests found.</td></tr>`}</tbody>
             </table>`;
     }
 
@@ -439,7 +443,7 @@ $("loading-container").style.display = "block";
     function renderPricing() {
         $('kvPricing').textContent = `(${state.pricingAll.length})`;
         const rows = state.pricingAll.map(p => `<tr><td>${state.catalogMap.get(p.catalogId)?.itemName || ''}</td><td>${state.vendorMap.get(p.vendorId) || ''}</td><td>${p.vendorItemNo || ''}</td><td>$${Number(p.unitPrice || 0).toFixed(2)}</td><td><button class="btn" data-edit-price-id="${p.id}">Edit</button></td></tr>`).join('');
-        $('pricingTable').innerHTML = `<table><thead><tr><th>Item</th><th>Vendor</th><th>SKU</th><th>Price</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table>`;
+        $('pricingTable').innerHTML = `<table><thead><tr><th>Item</th><th>Vendor</th><th>Vendor #</th><th>Price</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table>`;
     }
 
     function renderUnits() {
@@ -494,7 +498,7 @@ $("loading-container").style.display = "block";
             const target = e.target;
             if (target.dataset.statusMore) {
                 const newStatus = target.value;
-                const requestId = target.closest('tr').dataset.requestId;
+                const requestId = target.closest('tr[data-request-id]').dataset.requestId;
                 if (newStatus && requestId) {
                     await updateRequestStatus(requestId, newStatus);
                 }
