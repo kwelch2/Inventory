@@ -47,7 +47,28 @@
     .details-row { display: none; }
     .details-row.visible { display: table-row; background-color: #f9f9f9 !important; }
     .details-cell { padding: 1rem; }
-    /* Status Badge colors */
+    
+    /* Status Button styles */
+    .status-buttons {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+    .btn-status.active {
+        background-color: var(--accent);
+        color: #fff;
+        font-weight: bold;
+        border-color: #005fa3;
+    }
+    .btn-status-receive {
+        background-color: #f0fff0;
+        border-color: #c0f0c0;
+    }
+    .btn-status-receive:hover {
+        background-color: #dffde0;
+    }
+
+    /* Status Badge colors (no longer used in this table, but kept for other potential uses) */
     .status-badge {
         display: inline-block;
         padding: 4px 8px;
@@ -368,7 +389,6 @@ $("loading-container").style.display = "block";
             const prices = (state.pricingMap.get(r.catalogId) || []).sort((a,b) => a.unitPrice - b.unitPrice);
             const bestPrice = prices[0];
             
-            // Fix 2: Show all prices in the details, not just "other" prices.
             const allPricesHtml = prices.map(p => `<div>${escapeHtml(state.vendorMap.get(p.vendorId))}: $${(p.unitPrice || 0).toFixed(2)} (Vendor #: ${escapeHtml(p.vendorItemNo) || 'N/A'})</div>`).join('');
 
             return `
@@ -378,7 +398,6 @@ $("loading-container").style.display = "block";
                         <span class="muted">${escapeHtml(r.requesterEmail) || 'N/A'}</span>
                     </td>
                     <td>${escapeHtml(r.qty)}</td>
-                    <td><span class="status-badge status-${status.replace(/\s+/g, '-')}">${escapeHtml(status)}</span></td>
                     <td>
                         <div class="price-info ${bestPrice ? 'best-price' : ''}">
                             ${bestPrice ? `${escapeHtml(state.vendorMap.get(bestPrice.vendorId))}: $${(bestPrice.unitPrice || 0).toFixed(2)}` : 'No pricing'}
@@ -387,17 +406,16 @@ $("loading-container").style.display = "block";
                     </td>
                     <td>${escapeHtml(bestPrice?.vendorItemNo) || 'N/A'}</td>
                     <td>
-                        <button class="btn" data-status="Ordered">Ordered</button>
-                        <button class="btn" data-status="Received">Received</button>
-                        <select data-status-more>
-                            <option value="">More...</option>
-                            <option value="Backordered">Backordered</option>
-                            <option value="Open">Reset to Open</option>
-                        </select>
+                        <div class="status-buttons">
+                            <button class="btn btn-status ${status === 'Open' ? 'active' : ''}" data-status="Open">Open</button>
+                            <button class="btn btn-status ${status === 'Ordered' ? 'active' : ''}" data-status="Ordered">Ordered</button>
+                            <button class="btn btn-status ${status === 'Backordered' ? 'active' : ''}" data-status="Backordered">Backordered</button>
+                            <button class="btn btn-status-receive" data-status="Received">Received</button>
+                        </div>
                     </td>
                 </tr>
                 <tr class="details-row" data-details-for="${r.id}">
-                    <td colspan="6" class="details-cell">
+                    <td colspan="5" class="details-cell">
                         <strong>Vendor Pricing:</strong>
                         ${allPricesHtml || '<div class="muted">No prices found.</div>'}
                         <div style="margin-top: 8px;">
@@ -415,13 +433,10 @@ $("loading-container").style.display = "block";
 
         container.innerHTML = `
             <table>
-                <thead><tr><th>Item/Requester</th><th>Qty</th><th>Status</th><th>Vendor (Lowest Price)</th><th>Vendor #</th><th>Actions</th></tr></thead>
-                <tbody>${rows || `<tr><td colspan="6" class="muted">No requests found.</td></tr>`}</tbody>
+                <thead><tr><th>Item/Requester</th><th>Qty</th><th>Vendor (Lowest Price)</th><th>Vendor #</th><th>Actions</th></tr></thead>
+                <tbody>${rows || `<tr><td colspan="5" class="muted">No requests found.</td></tr>`}</tbody>
             </table>`;
     }
-
-    // THIS LISTENER WAS MOVED - SEE setupAllModalsAndActions
-    // $('ordersTableContainer').addEventListener('click', async e => { ... });
 
     function renderCatalog() {
         const query = $('catSearch').value.toLowerCase();
@@ -485,7 +500,7 @@ $("loading-container").style.display = "block";
 
         $('showHistoryToggle').addEventListener('change', renderOrders);
         
-        // *** FIX: Moved the 'click' listener here for consistency ***
+        // This single click listener now handles all status changes
         $('ordersTableContainer').addEventListener('click', async e => {
             const target = e.target;
 
@@ -501,7 +516,7 @@ $("loading-container").style.display = "block";
                 return;
             }
 
-            // Handle Status Buttons (e.g., "Ordered", "Received")
+            // Handle ALL Status Buttons (Open, Ordered, Backordered, Received)
             if (target.dataset.status) {
                 const row = target.closest('tr[data-request-id]');
                 if (!row) return;
@@ -538,18 +553,7 @@ $("loading-container").style.display = "block";
             }
         });
         
-        // This is the listener for the dropdown ("Backordered", "Open")
-        $('ordersTableContainer').addEventListener('change', async e => {
-            const target = e.target;
-            if (target.dataset.statusMore) {
-                const newStatus = target.value;
-                const requestId = target.closest('tr[data-request-id]').dataset.requestId;
-                if (newStatus && requestId) {
-                    await updateRequestStatus(requestId, newStatus);
-                }
-                target.value = ''; // Reset dropdown
-            }
-        });
+        // *** FIX: Removed the separate 'change' listener for the old dropdown ***
 
         setupUnitActions(); 
         setupCompartmentActions();
