@@ -420,57 +420,8 @@ $("loading-container").style.display = "block";
             </table>`;
     }
 
-    $('ordersTableContainer').addEventListener('click', async e => {
-        const target = e.target;
-
-        // Handle Toggle Details Button
-        if (target.dataset.toggleDetails !== undefined) {
-            const row = target.closest('tr[data-request-id]');
-            if (!row) return;
-            const requestId = row.dataset.requestId;
-            const detailsRow = document.querySelector(`tr[data-details-for="${requestId}"]`);
-            if (detailsRow) {
-                detailsRow.classList.toggle('visible');
-            }
-            return;
-        }
-
-        // Handle Status Buttons
-        if (target.dataset.status) {
-            const row = target.closest('tr[data-request-id]');
-            if (!row) return;
-            const requestId = row.dataset.requestId;
-            await updateRequestStatus(requestId, target.dataset.status);
-            return;
-        }
-        
-        // Handle Price Edit Button (inside details row)
-        if (target.dataset.editPrice !== undefined) {
-            const detailsRow = target.closest('tr.details-row');
-            if (!detailsRow) return;
-            const requestId = detailsRow.dataset.detailsFor;
-            
-            const detailsCell = target.closest('.details-cell');
-            const priceInput = detailsCell.querySelector('.edit-price-input');
-            const vendorSelect = detailsCell.querySelector('.edit-price-vendor-select');
-            const newPrice = parseFloat(priceInput.value);
-            const vendorId = vendorSelect.value;
-            const request = state.requests.find(r => r.id === requestId);
-            
-            if (!request || !vendorId || isNaN(newPrice)) {
-                return alert('Please select a vendor and enter a valid price.');
-            }
-            
-            const pricingDoc = state.pricingAll.find(p => p.catalogId === request.catalogId && p.vendorId === vendorId);
-            if (pricingDoc) {
-                await updateDoc(doc(db, 'vendorPricing', pricingDoc.id), { unitPrice: newPrice });
-                alert('Price updated!');
-            } else {
-                alert('No existing price document for this item/vendor combo. Please add it in the "Vendor Pricing" tab.');
-            }
-            return;
-        }
-    });
+    // THIS LISTENER WAS MOVED - SEE setupAllModalsAndActions
+    // $('ordersTableContainer').addEventListener('click', async e => { ... });
 
     function renderCatalog() {
         const query = $('catSearch').value.toLowerCase();
@@ -534,6 +485,60 @@ $("loading-container").style.display = "block";
 
         $('showHistoryToggle').addEventListener('change', renderOrders);
         
+        // *** FIX: Moved the 'click' listener here for consistency ***
+        $('ordersTableContainer').addEventListener('click', async e => {
+            const target = e.target;
+
+            // Handle Toggle Details Button
+            if (target.dataset.toggleDetails !== undefined) {
+                const row = target.closest('tr[data-request-id]');
+                if (!row) return;
+                const requestId = row.dataset.requestId;
+                const detailsRow = document.querySelector(`tr[data-details-for="${requestId}"]`);
+                if (detailsRow) {
+                    detailsRow.classList.toggle('visible');
+                }
+                return;
+            }
+
+            // Handle Status Buttons (e.g., "Ordered", "Received")
+            if (target.dataset.status) {
+                const row = target.closest('tr[data-request-id]');
+                if (!row) return;
+                const requestId = row.dataset.requestId;
+                await updateRequestStatus(requestId, target.dataset.status);
+                return;
+            }
+            
+            // Handle Price Edit Button (inside details row)
+            if (target.dataset.editPrice !== undefined) {
+                const detailsRow = target.closest('tr.details-row');
+                if (!detailsRow) return;
+                const requestId = detailsRow.dataset.detailsFor;
+                
+                const detailsCell = target.closest('.details-cell');
+                const priceInput = detailsCell.querySelector('.edit-price-input');
+                const vendorSelect = detailsCell.querySelector('.edit-price-vendor-select');
+                const newPrice = parseFloat(priceInput.value);
+                const vendorId = vendorSelect.value;
+                const request = state.requests.find(r => r.id === requestId);
+                
+                if (!request || !vendorId || isNaN(newPrice)) {
+                    return alert('Please select a vendor and enter a valid price.');
+                }
+                
+                const pricingDoc = state.pricingAll.find(p => p.catalogId === request.catalogId && p.vendorId === vendorId);
+                if (pricingDoc) {
+                    await updateDoc(doc(db, 'vendorPricing', pricingDoc.id), { unitPrice: newPrice });
+                    alert('Price updated!');
+                } else {
+                    alert('No existing price document for this item/vendor combo. Please add it in the "Vendor Pricing" tab.');
+                }
+                return;
+            }
+        });
+        
+        // This is the listener for the dropdown ("Backordered", "Open")
         $('ordersTableContainer').addEventListener('change', async e => {
             const target = e.target;
             if (target.dataset.statusMore) {
