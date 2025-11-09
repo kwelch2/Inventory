@@ -385,7 +385,7 @@ $("loading-container").style.display = "block";
             renderCategories();
         } catch(e) {
             console.error("Static Data Load Failed:", e);
-            alert("Could not load static data. Check Firestore rules and collection names.");
+            alert("Static Data Load Failed: " + e.message);
         }
     }
 
@@ -415,7 +415,7 @@ $("loading-container").style.display = "block";
         const preferredPrice = preferredVendorId ? prices.find(p => p.vendorId === preferredVendorId) : null;
         
         // 1. Try Preferred Vendor if in stock
-        if (preferredPrice && preferredPrice.vendorStatus !== 'Out of Stock') {
+        if (preferredPrice && (preferredPrice.vendorStatus === 'In Stock' || !preferredPrice.vendorStatus)) {
             return {
                 vendorId: preferredPrice.vendorId,
                 vendorName: preferredPrice.vendorName,
