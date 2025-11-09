@@ -500,38 +500,45 @@ $("loading-container").style.display = "block";
             container.innerHTML = renderHistoryTable(requestsToProcess);
         } else {
             // Render active orders grouped by vendor
-            const requestsByVendor = new Map();
+            const requestsByGroup = new Map();
             for (const r of requestsToProcess) {
                 const catItem = state.catalogMap.get(r.catalogId);
                 if (!catItem) continue; // Skip items not in catalog
 
-                // Only group 'Open' items. Show 'Ordered'/'Backordered' in their own group.
-                let vendorInfo;
-                if (r.status === 'Open' || !r.status) {
-                    vendorInfo = findBestVendor(r.catalogId, catItem.preferredVendorId);
-                } else {
-                    vendorInfo = { vendorId: r.status, vendorName: r.status, vendorItemNo: 'N/A' };
-                }
+                // --- MODIFIED LOGIC ---
+                // Get vendor info for ALL items, not just 'Open'
+                const vendorInfo = findBestVendor(r.catalogId, catItem.preferredVendorId);
+                const augmentedRequest = { ...r, vendorInfo, catItem };
 
-                if (!requestsByVendor.has(vendorInfo.vendorId)) {
-                    requestsByVendor.set(vendorInfo.vendorId, {
-                        vendorName: vendorInfo.vendorName,
+                // Group by 'Ordered' or 'Backordered' first, otherwise group by assigned vendor
+                let groupId, groupName;
+                if (r.status === 'Open' || !r.status) {
+                    groupId = vendorInfo.vendorId;
+                    groupName = vendorInfo.vendorName;
+                } else {
+                    groupId = r.status;
+                    groupName = r.status;
+                }
+                // --- END MODIFICATION ---
+
+                if (!requestsByGroup.has(groupId)) {
+                    requestsByGroup.set(groupId, {
+                        groupName: groupName,
                         requests: []
                     });
                 }
-                requestsByVendor.get(vendorInfo.vendorId).requests.push({ ...r, vendorInfo, catItem });
+                requestsByGroup.get(groupId).requests.push(augmentedRequest);
             }
             
-            // Render groups: Open, then Ordered, then Backordered
-            renderVendorGroup(container, requestsByVendor.get('Open'));
-            requestsByVendor.forEach((group, vendorId) => {
-                if (vendorId !== 'Open' && vendorId !== 'Ordered' && vendorId !== 'Backordered' && vendorId !== 'unassigned') {
-                    renderVendorGroup(container, group, vendorId);
+            // Render groups: Vendor groups first, then unassigned, then status groups
+            requestsByGroup.forEach((group, groupId) => {
+                if (groupId !== 'unassigned' && groupId !== 'Ordered' && groupId !== 'Backordered' && groupId !== 'Open') {
+                    renderVendorGroup(container, group, groupId);
                 }
             });
-            renderVendorGroup(container, requestsByVendor.get('unassigned'), 'unassigned');
-            renderVendorGroup(container, requestsByVendor.get('Ordered'), 'Ordered');
-            renderVendorGroup(container, requestsByVendor.get('Backordered'), 'Backordered');
+            renderVendorGroup(container, requestsByGroup.get('unassigned'), 'unassigned');
+            renderVendorGroup(container, requestsByGroup.get('Ordered'), 'Ordered');
+            renderVendorGroup(container, requestsByGroup.get('Backordered'), 'Backordered');
 
             if (requestsToProcess.length === 0) {
                  container.innerHTML = `<p class="muted">No active requests found.</p>`;
@@ -566,7 +573,7 @@ $("loading-container").style.display = "block";
         if (!group || group.requests.length === 0) return;
 
         const isOrderableGroup = vendorId && vendorId !== 'Open' && vendorId !== 'Ordered' && vendorId !== 'Backordered' && vendorId !== 'unassigned';
-        const groupTitle = group.vendorName || 'Unknown Group';
+        const groupTitle = group.groupName || 'Unknown Group';
 
         const tableRows = group.requests.map(r => {
             const status = r.status || 'Open';
@@ -672,8 +679,10 @@ $("loading-container").style.display = "block";
                 if (p.vendorId === item.preferredVendorId) classes += ' preferred-price';
                 if (p.vendorId === cheapestPrice?.vendorId) classes += ' best-price';
                 
+                // --- EDIT BUTTON ADDED HERE ---
                 return `<span class="${classes}">
                     ${escapeHtml(p.vendorName)}: $${(p.unitPrice || 0).toFixed(2)}
+                    <button class="btn btn-small" data-edit-price-id="${p.id}" style="margin-left: 8px; padding: 2px 6px; font-size: 0.7rem;">Edit</button>
                 </span>`;
             }).join('') : '<span class="muted">No pricing</span>';
             // --- End Pricing Info Logic ---
@@ -685,7 +694,7 @@ $("loading-container").style.display = "block";
                     <td>${escapeHtml(item.parLevel || 0)}</td>
                     <td>${pricesHtml}</td>
                     <td>
-                        <button class="btn btn-small" data-edit-item-id="${item.id}">Edit</button>
+                        <button class="btn btn-small" data-edit-item-id="${item.id}">Edit Item</button>
                         <button class="btn primary btn-small" data-add-price-for-id="${item.id}">+ Add Price</button>
                     </td>
                 </tr>
@@ -699,7 +708,7 @@ $("loading-container").style.display = "block";
                         <th>Name</th>
                         <th>Category</th>
                         <th>PAR</th>
-                        <th style="width: 30%;">Vendor Pricing</th>
+                        <th style="width: 35%;">Vendor Pricing</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
@@ -873,6 +882,13 @@ $("loading-container").style.display = "block";
             // + Add Price button
             if (target.dataset.addPriceForId) {
                 openPricingModal(null, target.dataset.addPriceForId);
+                return;
+            }
+
+            // --- ADDED THIS LISTENER BACK ---
+            // Edit Price button (in price list)
+            if (target.dataset.editPriceId) {
+                openPricingModal(target.dataset.editPriceId);
                 return;
             }
         });
