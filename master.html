@@ -23,7 +23,7 @@
     .tab.active{background:var(--card);color:#000;border-bottom:1px solid var(--card)}
     .panel{display:none;background:var(--card);border:1px solid var(--b);border-radius:0 12px 12px 12px;padding:16px;margin-top:-1px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
     .panel.active{display:block}
-    h1,h2{margin:0 0 10px}
+    h1,h2,h3{margin:0 0 10px}
     .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap; margin-bottom: 1rem;}
     .btn{padding:8px 10px;border:1px solid var(--b);border-radius:10px;background:#fff;cursor:pointer; font-size: 0.9rem;}
     .btn:disabled { background: #eee; cursor: not-allowed; }
@@ -33,16 +33,15 @@
     table{width:100%;border-collapse:collapse;font-size:14px}
     th,td{padding:8px;border-top:1px solid var(--b);text-align:left;vertical-align:top}
     th{background:#fafafa}
-    tr.catalog-row { cursor: pointer; }
     tr.catalog-row:hover { background-color: #f9f9f9; }
-    input,select{padding:8px;border:1px solid var(--b);border-radius:8px; font-size: 1rem;}
+    input,select{padding:8px;border:1px solid var(--b);border-radius:8px; font-size: 1rem; background: #fff;}
     .kvd{font-size:12px;color:#555}
     .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.4); align-items: center; justify-content: center;}
     .modal-content { background-color: #fefefe; padding: 20px; border: 1px solid #888; width: 80%; max-width: 700px; border-radius: 12px; }
     .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
     .modal-body { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem; }
     .modal-footer { margin-top: 1.5rem; text-align: right; }
-    .barcode-item { display: flex; justify-content: space-between; align-items: center; background: #f0f0f0; padding: 4px 8px; border-radius: 6px; margin-bottom: 4px; }
+    .list-item { display: flex; justify-content: space-between; align-items: center; background: #f0f0f0; padding: 4px 8px; border-radius: 6px; margin-bottom: 4px; }
     .viewport { position: relative; }
     .viewport video, .viewport .drawingBuffer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
     .price-info { font-size: 0.8rem; color: #555; }
@@ -53,25 +52,23 @@
     .details-cell h4 { margin: 0 0 8px; }
     .details-cell .price-table { font-size: 0.9rem; margin-bottom: 1rem; }
     .details-cell .price-table th, .details-cell .price-table td { padding: 4px 6px; }
-    
-    /* Status Button styles */
-    .status-buttons {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-    }
-    .btn-status.active {
-        background-color: var(--accent);
-        color: #fff;
-        font-weight: bold;
-        border-color: #005fa3;
-    }
-    .btn-status-receive {
-        background-color: #f0fff0;
-        border-color: #c0f0c0;
-    }
-    .btn-status-receive:hover {
-        background-color: #dffde0;
+    .status-buttons { display: flex; flex-wrap: wrap; gap: 6px; }
+    .btn-status.active { background-color: var(--accent); color: #fff; font-weight: bold; border-color: #005fa3; }
+    .btn-status-receive { background-color: #f0fff0; border-color: #c0f0c0; }
+    .btn-status-receive:hover { background-color: #dffde0; }
+    .vendor-group { margin-bottom: 1.5rem; border: 1px solid var(--b); border-radius: 12px; background: var(--card); }
+    .vendor-group-header { background: #fafafa; padding: 12px 16px; border-bottom: 1px solid var(--b); display: flex; justify-content: space-between; align-items: center; border-radius: 12px 12px 0 0;}
+    .vendor-group-header h3 { margin: 0; }
+    .vendor-group-table { margin: 0; }
+    .vendor-group-table tr:last-child td { border-bottom: none; }
+    .close-btn { font-size: 28px; font-weight: bold; cursor: pointer; color: #888; }
+    .close-btn:hover { color: #000; }
+    #printOrderModal table { font-size: 12px; }
+    #printOrderModal th, #printOrderModal td { padding: 6px 8px; border: 1px solid #ccc; }
+    @media print {
+      body, .modal-content { margin: 0; padding: 0; box-shadow: none; border: none; }
+      .modal-header button, .modal-footer { display: none; }
+      #printOrderModal { display: block !important; position: static; width: 100%; height: auto; overflow: visible; background: #fff; }
     }
   </style>
 </head>
@@ -112,7 +109,7 @@
         <div class="row">
             <button class="btn primary" id="showAddItemModal">+ Add Item to Order</button>
             <button class="btn" id="showBulkAddModal">+ Bulk Add Items</button>
-            <span class="spacer"></span>
+            <span class="spacer" style="flex: 1;"></span>
             <strong style="margin-left: 2rem;">Filter by Status:</strong>
             <button class="btn filter-btn active" data-status="All">All Active</button>
             <button class="btn filter-btn" data-status="Open">Open</button>
@@ -120,13 +117,13 @@
             <button class="btn filter-btn" data-status="Backordered">Backordered</button>
             <label style="margin-left:1rem; font-weight:normal;"><input type="checkbox" id="showHistoryToggle"> Show History</label>
         </div>
-        <div id="ordersTableContainer"></div>
+        <div id="ordersGroupContainer"></div>
       </section>
       
       <section id="panel-catalog" class="panel">
         <h2>Catalog Manager <span class="kvd" id="kvCatalog"></span></h2>
         <div class="row"><button class="btn" id="refreshCatalog">Refresh</button><button class="btn primary" id="showCatalogModal">Add New Item</button><span style="flex: 1;"></span><input id="catSearch" placeholder="Search..."/></div>
-        <div id="catalogTable"></div>
+        <div id="catalogTableContainer"></div>
       </section>
       
       <section id="panel-units" class="panel">
@@ -140,65 +137,25 @@
         <div class="row"><button class="btn" id="refreshCompartments">Refresh</button></div>
         <div id="compartmentsTable"></div>
       </section>
+
+      <section id="panel-categories" class="panel">
+        <h2>Category Management <span class="kvd" id="kvCategories"></span></h2>
+        <div class="row"><button class="btn" id="refreshCategories">Refresh</button></div>
+        <div id="categoriesTable"></div>
+      </section>
   </div>
 </div>
 
 <div id="addItemToOrderModal" class="modal">
   <div class="modal-content">
-    <div class="modal-header"><h2>Add Item to Order List</h2></div>
+    <div class="modal-header"><h2>Add Item to Order List</h2><span class="close-btn" data-close-modal="addItemToOrderModal">&times;</span></div>
     <div class="modal-body">
       <label>Item <select id="addItemSelect"></select></label>
       <label>Quantity <input id="addItemQty" type="text" placeholder="e.g., 1 Box or 5"></label>
     </div>
     <div class="modal-footer">
-      <button class="btn" id="cancelAddItemBtn">Cancel</button>
+      <button class="btn" data-close-modal="addItemToOrderModal">Cancel</button>
       <button class="btn primary" id="saveAddItemBtn">Add Item</button>
-    </div>
-  </div>
-</div>
-
-<div id="catalogModal" class="modal">
-  <div class="modal-content">
-    <div class="modal-header"><h2 id="catalogModalTitle">Edit Catalog Item</h2></div>
-    <div class="modal-body">
-      <label>Item Name <input id="editItemName"></label>
-      <label>Alt Names <input id="editItemNameAlt"></label>
-      <label>Category <input id="editCategory"></label>
-      <label>Item Ref # <input id="editItemRef"></label>
-      <label>Unit <input id="editUnit"></label>
-      <label>Pack Size <input id="editPackSize" type="number" min="1"></label>
-      <label style="display: flex; align-items: center; gap: 8px;"><input id="editIsActive" type="checkbox"> Is Active</label>
-      <div style="grid-column: 1 / -1;">
-        <label>Barcodes</label>
-        <div id="barcodeList" style="margin-bottom: 8px; max-height: 120px; overflow-y: auto; border: 1px solid #ccc; padding: 5px; border-radius: 8px;"></div>
-        <div class="row" style="margin-bottom: 0;">
-          <input id="newBarcode" placeholder="Add new barcode..." style="flex: 1;">
-          <button id="scanNewBarcodeBtn" class="btn">Scan</button>
-          <button id="addNewBarcodeBtn" class="btn primary">Add</button>
-        </div>
-        <div id="barcodeScannerViewport" class="viewport" style="display:none; width:100%; height:240px; border:1px solid #ccc; background:#000; margin-top:1rem;"></div>
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn" id="cancelCatalogEdit">Cancel</button>
-      <button class="btn danger" id="inactivateCatalogItem" style="float: left;">Inactivate</button>
-      <button class="btn primary" id="saveCatalogEdit">Save Changes</button>
-    </div>
-  </div>
-</div>
-
-<div id="pricingModal" class="modal">
-  <div class="modal-content">
-    <div class="modal-header"><h2 id="pricingModalTitle">Add/Edit Vendor Price</h2></div>
-    <div class="modal-body">
-      <label>Item <select id="priceItemSelect"></select></label>
-      <label>Vendor <select id="priceVendorSelect"></select></label>
-      <label>Vendor # <input id="priceSku"></label>
-      <label>Unit Price <input id="priceUnitPrice" type="number" step="0.01"></label>
-    </div>
-    <div class="modal-footer">
-      <button class="btn" id="cancelPricingEdit">Cancel</button>
-      <button class="btn primary" id="savePricingEdit">Save Price</button>
     </div>
   </div>
 </div>
@@ -207,7 +164,7 @@
   <div class="modal-content" style="max-width: 800px;">
     <div class="modal-header">
       <h2>Bulk Add to Order List</h2>
-      <span class="close-btn" id="closeBulkAddBtn" style="font-size: 28px; cursor: pointer;">&times;</span>
+      <span class="close-btn" id="closeBulkAddBtn">&times;</span>
     </div>
     <div class="modal-body" id="bulkAddForm" style="grid-template-columns: 1fr; max-height: 60vh; overflow-y: auto; display: block;">
       </div>
@@ -221,6 +178,89 @@
     </div>
   </div>
 </div>
+
+<div id="catalogModal" class="modal">
+  <div class="modal-content" style="max-width: 800px;">
+    <div class="modal-header"><h2 id="catalogModalTitle">Edit Catalog Item</h2><span class="close-btn" data-close-modal="catalogModal">&times;</span></div>
+    <div class="modal-body" style="grid-template-columns: 1fr 1fr;">
+      <label>Item Name <input id="editItemName"></label>
+      <label>Category <select id="editCategorySelect"><option value="">Loading...</option></select></label>
+      <label>Item Ref # <input id="editItemRef"></label>
+      <label>PAR Level <input id="editParLevel" type="number" min="0" value="0"></label>
+      <label>Unit <input id="editUnit"></label>
+      <label>Pack Size <input id="editPackSize" type="number" min="1"></label>
+      <label>Preferred Vendor <select id="editPreferredVendorSelect"><option value="">None</option></select></label>
+      <label style="display: flex; align-items: center; gap: 8px;"><input id="editIsActive" type="checkbox"> Is Active</label>
+      
+      <div style="grid-column: 1 / -1;">
+        <label>Alt Names</label>
+        <div id="altNameList" class="list-container"></div>
+        <div class="row" style="margin-bottom: 0;">
+          <input id="newAltName" placeholder="Add alternate name..." style="flex: 1;">
+          <button id="addNewAltNameBtn" class="btn primary">Add</button>
+        </div>
+      </div>
+      
+      <div style="grid-column: 1 / -1;">
+        <label>Barcodes</label>
+        <div id="barcodeList" class="list-container" style="max-height: 120px; overflow-y: auto; border: 1px solid #ccc; padding: 5px; border-radius: 8px;"></div>
+        <div class="row" style="margin-bottom: 0;">
+          <input id="newBarcode" placeholder="Add new barcode..." style="flex: 1;">
+          <button id="scanNewBarcodeBtn" class="btn">Scan</button>
+          <button id="addNewBarcodeBtn" class="btn primary">Add</button>
+        </div>
+        <div id="barcodeScannerViewport" class="viewport" style="display:none; width:100%; height:240px; border:1px solid #ccc; background:#000; margin-top:1rem;"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" data-close-modal="catalogModal">Cancel</button>
+      <button class="btn danger" id="inactivateCatalogItem" style="float: left;">Inactivate</button>
+      <button class="btn primary" id="saveCatalogEdit">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<div id="pricingModal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header"><h2 id="pricingModalTitle">Add/Edit Vendor Price</h2><span class="close-btn" data-close-modal="pricingModal">&times;</span></div>
+    <div class="modal-body">
+      <label>Item <select id="priceItemSelect"></select></label>
+      <label>Vendor <select id="priceVendorSelect"></select></label>
+      <label>Vendor # <input id="priceSku"></label>
+      <label>Unit Price <input id="priceUnitPrice" type="number" step="0.01"></label>
+      <label>Vendor Status
+        <select id="priceVendorStatus">
+          <option value="In Stock">In Stock</option>
+          <option value="Backordered">Backordered</option>
+          <option value="Out of Stock">Out of Stock</option>
+        </select>
+      </label>
+      <label style="display: flex; align-items: center; gap: 8px;">
+        <input id="priceSetPreferred" type="checkbox" style="width: auto;"> Set as Preferred Vendor for this Item
+      </label>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" data-close-modal="pricingModal">Cancel</button>
+      <button class="btn primary" id="savePricingEdit">Save Price</button>
+    </div>
+  </div>
+</div>
+
+<div id="printOrderModal" class="modal">
+  <div class="modal-content" style="max-width: 800px;">
+    <div class="modal-header">
+      <h2 id="printOrderTitle">Order List</h2>
+      <span class="close-btn" data-close-modal="printOrderModal">&times;</span>
+    </div>
+    <div class="modal-body" style="display: block;" id="printOrderBody">
+      </div>
+    <div class="modal-footer">
+      <button class="btn" data-close-modal="printOrderModal">Close</button>
+      <button class="btn primary" id="printOrderBtn">Print</button>
+    </div>
+  </div>
+</div>
+
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
@@ -241,15 +281,13 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 
-// ✅ Modern Firestore initialization (replaces deprecated enableMultiTabIndexedDbPersistence)
 const db = initializeFirestore(app, {
   localCache: persistentLocalCache({
     tabManager: persistentMultipleTabManager(),
   }),
 });
 
-// Rest of your logic (unchanged)
-let state = { user: null, userRole: null, catalog: [], vendors: [], pricingAll: [], requests: [], units: [], compartments: [], catalogMap: new Map(), vendorMap: new Map(), pricingMap: new Map() };
+let state = { user: null, userRole: null, catalog: [], vendors: [], categories: [], pricingAll: [], requests: [], units: [], compartments: [], catalogMap: new Map(), vendorMap: new Map(), categoryMap: new Map(), pricingMap: new Map() };
 let addItemChoices;
 let bulkChoicesInstances = [];
 const catalogOptionsForBulk = () => state.catalog
@@ -323,24 +361,28 @@ $("loading-container").style.display = "block";
 
     async function initializeStaticData() {
         try {
-            const [catSnap, venSnap, unitSnap, compSnap] = await Promise.all([
+            const [catSnap, venSnap, unitSnap, compSnap, catMgmtSnap] = await Promise.all([
                 getDocs(collection(db, "catalog")),
                 getDocs(collection(db, "vendors")),
                 getDocs(collection(db, "units")),
-                getDocs(collection(db, "compartments"))
+                getDocs(collection(db, "compartments")),
+                getDocs(collection(db, "categories"))
             ]);
             
             state.catalog = catSnap.docs.map(d => ({ id: d.id, ...d.data() }));
             state.vendors = venSnap.docs.map(d => ({ id: d.id, ...d.data() }));
             state.units = unitSnap.docs.map(d => ({ id: d.id, ...d.data() }));
             state.compartments = compSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+            state.categories = catMgmtSnap.docs.map(d => ({ id: d.id, ...d.data() }));
             
             state.catalogMap = new Map(state.catalog.map(c => [c.id, c]));
             state.vendorMap = new Map(state.vendors.map(v => [v.id, v.name]));
+            state.categoryMap = new Map(state.categories.map(c => [c.id, c.name]));
             
             renderCatalog();
             renderUnits();
             renderCompartments();
+            renderCategories();
         } catch(e) {
             console.error("Static Data Load Failed:", e);
             alert("Could not load static data. Check Firestore rules and collection names.");
@@ -360,23 +402,80 @@ $("loading-container").style.display = "block";
                 if (!state.pricingMap.has(p.catalogId)) state.pricingMap.set(p.catalogId, []);
                 state.pricingMap.get(p.catalogId).push(p);
             });
-            // Re-render both tabs that depend on pricing
             renderOrders(); 
             renderCatalog();
         });
     }
+
+    function findBestVendor(catalogId, preferredVendorId) {
+        const prices = (state.pricingMap.get(catalogId) || [])
+            .map(p => ({...p, vendorName: state.vendorMap.get(p.vendorId) || 'Unknown Vendor' }))
+            .sort((a,b) => (a.unitPrice || Infinity) - (b.unitPrice || Infinity));
+        
+        const preferredPrice = preferredVendorId ? prices.find(p => p.vendorId === preferredVendorId) : null;
+        
+        // 1. Try Preferred Vendor if in stock
+        if (preferredPrice && preferredPrice.vendorStatus !== 'Out of Stock') {
+            return {
+                vendorId: preferredPrice.vendorId,
+                vendorName: preferredPrice.vendorName,
+                vendorItemNo: preferredPrice.vendorItemNo || 'N/A',
+                unitPrice: preferredPrice.unitPrice,
+                status: 'Preferred'
+            };
+        }
+        
+        // 2. Find cheapest vendor that is "In Stock"
+        const cheapestInStock = prices.find(p => p.vendorStatus === 'In Stock' || !p.vendorStatus);
+        if (cheapestInStock) {
+            return {
+                vendorId: cheapestInStock.vendorId,
+                vendorName: cheapestInStock.vendorName,
+                vendorItemNo: cheapestInStock.vendorItemNo || 'N/A',
+                unitPrice: cheapestInStock.unitPrice,
+                status: 'Cheapest'
+            };
+        }
+
+        // 3. Fallback: Use preferred vendor (even if backordered)
+        if (preferredPrice) {
+            return {
+                vendorId: preferredPrice.vendorId,
+                vendorName: preferredPrice.vendorName,
+                vendorItemNo: preferredPrice.vendorItemNo || 'N/A',
+                unitPrice: preferredPrice.unitPrice,
+                status: `Preferred (${preferredPrice.vendorStatus || 'N/A'})`
+            };
+        }
+        
+        // 4. Fallback: Use cheapest vendor (even if backordered/out of stock)
+        const cheapestOverall = prices[0];
+        if (cheapestOverall) {
+            return {
+                vendorId: cheapestOverall.vendorId,
+                vendorName: cheapestOverall.vendorName,
+                vendorItemNo: cheapestOverall.vendorItemNo || 'N/A',
+                unitPrice: cheapestOverall.unitPrice,
+                status: `Cheapest (${cheapestOverall.vendorStatus || 'N/A'})`
+            };
+        }
+
+        // 5. No pricing info
+        return { vendorId: 'unassigned', vendorName: 'Unassigned / No Pricing', vendorItemNo: 'N/A', unitPrice: 0, status: 'No Pricing' };
+    }
     
-     function renderOrders() {
-        const container = $('ordersTableContainer');
+    function renderOrders() {
+        const container = $('ordersGroupContainer');
+        container.innerHTML = ''; // Clear container
         const showHistory = $('showHistoryToggle').checked;
         const activeFilter = document.querySelector('.filter-btn.active')?.dataset.status || 'All';
         
-        const requestsToShow = state.requests.filter(r => {
+        const requestsToProcess = state.requests.filter(r => {
             const status = r.status || 'Open';
-            if (showHistory) {
-                return status === 'Received' || status === 'Completed';
-            }
             const isHistoryStatus = status === 'Received' || status === 'Completed';
+            if (showHistory) {
+                return isHistoryStatus;
+            }
             if (isHistoryStatus) {
                 return false; 
             }
@@ -386,39 +485,98 @@ $("loading-container").style.display = "block";
             return status === activeFilter;
         });
 
-        // --- NEW SORTING LOGIC ADDED HERE ---
         const sortOrder = { "Open": 1, "Backordered": 2, "Pending": 2, "Ordered": 3 };
-        requestsToShow.sort((a, b) => {
+        requestsToProcess.sort((a, b) => {
             const aStatus = a.status || "Open";
             const bStatus = b.status || "Open";
             return (sortOrder[aStatus] || 99) - (sortOrder[bStatus] || 99) || (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0);
         });
-        // --- END OF NEW SORTING LOGIC ---
+        
+        if (showHistory) {
+            // Render history as a single simple table
+            container.innerHTML = renderHistoryTable(requestsToProcess);
+        } else {
+            // Render active orders grouped by vendor
+            const requestsByVendor = new Map();
+            for (const r of requestsToProcess) {
+                const catItem = state.catalogMap.get(r.catalogId);
+                if (!catItem) continue; // Skip items not in catalog
 
-        const rows = requestsToShow.map(r => {
+                // Only group 'Open' items. Show 'Ordered'/'Backordered' in their own group.
+                let vendorInfo;
+                if (r.status === 'Open' || !r.status) {
+                    vendorInfo = findBestVendor(r.catalogId, catItem.preferredVendorId);
+                } else {
+                    vendorInfo = { vendorId: r.status, vendorName: r.status, vendorItemNo: 'N/A' };
+                }
+
+                if (!requestsByVendor.has(vendorInfo.vendorId)) {
+                    requestsByVendor.set(vendorInfo.vendorId, {
+                        vendorName: vendorInfo.vendorName,
+                        requests: []
+                    });
+                }
+                requestsByVendor.get(vendorInfo.vendorId).requests.push({ ...r, vendorInfo, catItem });
+            }
+            
+            // Render groups: Open, then Ordered, then Backordered
+            renderVendorGroup(container, requestsByVendor.get('Open'));
+            requestsByVendor.forEach((group, vendorId) => {
+                if (vendorId !== 'Open' && vendorId !== 'Ordered' && vendorId !== 'Backordered' && vendorId !== 'unassigned') {
+                    renderVendorGroup(container, group, vendorId);
+                }
+            });
+            renderVendorGroup(container, requestsByVendor.get('unassigned'), 'unassigned');
+            renderVendorGroup(container, requestsByVendor.get('Ordered'), 'Ordered');
+            renderVendorGroup(container, requestsByVendor.get('Backordered'), 'Backordered');
+
+            if (requestsToProcess.length === 0) {
+                 container.innerHTML = `<p class="muted">No active requests found.</p>`;
+            }
+        }
+    }
+
+    function renderHistoryTable(requests) {
+        if (requests.length === 0) return `<p class="muted">No history found.</p>`;
+        
+        const rows = requests.map(r => {
             const catItem = state.catalogMap.get(r.catalogId);
-            if (!catItem) return ''; 
-            
-            const status = r.status || 'Open';
-            const prices = (state.pricingMap.get(r.catalogId) || []).sort((a,b) => a.unitPrice - b.unitPrice);
-            const bestPrice = prices[0];
-            
-            const allPricesHtml = prices.map(p => `<div>${escapeHtml(state.vendorMap.get(p.vendorId))}: $${(p.unitPrice || 0).toFixed(2)} (Vendor #: ${escapeHtml(p.vendorItemNo) || 'N/A'})</div>`).join('');
+            const itemName = catItem ? catItem.itemName : (r.otherItemName || 'Unknown');
+            const receivedDate = r.receivedAt ? new Date(r.receivedAt.seconds * 1000).toLocaleDateString() : 'N/A';
+            return `
+                <tr>
+                    <td><strong>${escapeHtml(itemName)}</strong><br><span class="muted">${escapeHtml(r.requesterEmail)}</span></td>
+                    <td>${escapeHtml(r.qty)}</td>
+                    <td>${escapeHtml(r.status)}</td>
+                    <td>${receivedDate}</td>
+                </tr>`;
+        }).join('');
+        
+        return `
+            <table>
+                <thead><tr><th>Item/Requester</th><th>Qty</th><th>Status</th><th>Date Received</th></tr></thead>
+                <tbody>${rows}</tbody>
+            </table>`;
+    }
 
+    function renderVendorGroup(container, group, vendorId) {
+        if (!group || group.requests.length === 0) return;
+
+        const isOrderableGroup = vendorId && vendorId !== 'Open' && vendorId !== 'Ordered' && vendorId !== 'Backordered' && vendorId !== 'unassigned';
+        const groupTitle = group.vendorName || 'Unknown Group';
+
+        const rows = group.requests.map(r => {
+            const status = r.status || 'Open';
             return `
                 <tr data-request-id="${r.id}">
+                    ${isOrderableGroup ? `<td><input type="checkbox" class="order-item-checkbox" data-request-id="${r.id}"></td>` : ''}
                     <td>
-                        <strong>${escapeHtml(catItem.itemName)}</strong><br>
+                        <strong>${escapeHtml(r.catItem.itemName)}</strong><br>
                         <span class="muted">${escapeHtml(r.requesterEmail) || 'N/A'}</span>
                     </td>
                     <td>${escapeHtml(r.qty)}</td>
-                    <td>
-                        <div class="price-info ${bestPrice ? 'best-price' : ''}">
-                            ${bestPrice ? `${escapeHtml(state.vendorMap.get(bestPrice.vendorId))}: $${(bestPrice.unitPrice || 0).toFixed(2)}` : 'No pricing'}
-                            <button class="btn" data-toggle-details style="margin-left: 8px; padding: 2px 6px;">▼</button>
-                        </div>
-                    </td>
-                    <td>${escapeHtml(bestPrice?.vendorItemNo) || 'N/A'}</td>
+                    <td>${escapeHtml(r.vendorInfo.vendorItemNo || 'N/A')}</td>
+                    <td>${r.vendorInfo.unitPrice ? `$${r.vendorInfo.unitPrice.toFixed(2)}` : 'N/A'}</td>
                     <td>
                         <div class="status-buttons">
                             <button class="btn btn-status ${status === 'Open' ? 'active' : ''}" data-status="Open">Open</button>
@@ -427,19 +585,63 @@ $("loading-container").style.display = "block";
                             <button class="btn btn-status-receive" data-status="Received">Received</button>
                         </div>
                     </td>
-                </tr>
-                <tr class="details-row" data-details-for="${r.id}">
-                    <td colspan="5" class="details-cell">
-                        <h4>Vendor Pricing:</h4>
-                        ${allPricesHtml || '<div class="muted">No prices found.</div>'}
-                        <div style="margin-top: 8px;">
-                            <strong>Last Ordered:</strong> <span class="muted">${r.lastOrdered ? new Date(r.lastOrdered.seconds * 1000).toLocaleDateString() : 'N/A'}</span>
-                        </div>
-                        <div style="margin-top: 8px;">
-                            <input type="number" step="0.01" placeholder="New Price" class="edit-price-input" style="width: 100px;"/>
-                            <select class="edit-price-vendor-select">${state.vendors.map(v => `<option value="${v.id}">${escapeHtml(v.name)}</option>`).join('')}</select>
-                            <button class="btn primary" data-edit-price>Update Price</button>
-                        </div>
+                </tr>`;
+        }).join('');
+
+        const headerActions = isOrderableGroup ? `
+            <div class="row" style="margin-bottom: 0;">
+                <label style="font-weight: normal; font-size: 0.9rem; margin-right: 1rem;">
+                    <input type="checkbox" class="vendor-select-all" data-vendor-id="${vendorId}"> Select All
+                </label>
+                <button class="btn primary btn-small generate-order-btn" data-vendor-id="${vendorId}" data-vendor-name="${escapeHtml(groupTitle)}">Generate Order for ${escapeHtml(groupTitle)}</button>
+            </div>` : '';
+
+        container.innerHTML += `
+            <div class="vendor-group" data-group-vendor-id="${vendorId}">
+                <div class="vendor-group-header">
+                    <h3>${escapeHtml(groupTitle)} (${group.requests.length})</h3>
+                    ${headerActions}
+                </div>
+                <table class="vendor-group-table">
+                    <thead>
+                        <tr>
+                            ${isOrderableGroup ? `<th><input type="checkbox" class="vendor-select-all" data-vendor-id="${vendorId}"></th>` : ''}
+                            <th>Item/Requester</th>
+                            <th>Qty</th>
+                            <th>Vendor #</th>
+                            <th>Price</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>`;
+    }
+
+    function renderCatalog() {
+        const container = $('catalogTableContainer');
+        const query = $('catSearch').value.toLowerCase();
+        const filtered = state.catalog.filter(i => 
+            (i.itemName || '').toLowerCase().includes(query) || 
+            (Array.isArray(i.itemNameAlt) ? i.itemNameAlt.join(' ') : (i.itemNameAlt || '')).toLowerCase().includes(query)
+        );
+        $('kvCatalog').textContent = `(${filtered.length})`;
+
+        const rows = filtered.map(item => {
+            const categoryName = state.categoryMap.get(item.category) || item.category || 'N/A';
+            const preferredVendorName = state.vendorMap.get(item.preferredVendorId) || 'None';
+            
+            return `
+                <tr class="catalog-row" data-catalog-id="${item.id}" style="${item.isActive === false ? 'opacity: 0.5; text-decoration: line-through;' : ''}">
+                    <td><strong>${escapeHtml(item.itemName)}</strong></td>
+                    <td>${escapeHtml(Array.isArray(item.itemNameAlt) ? item.itemNameAlt.join(', ') : (item.itemNameAlt || ''))}</td>
+                    <td>${escapeHtml(categoryName)}</td>
+                    <td>${escapeHtml(item.itemRef)}</td>
+                    <td>${escapeHtml(item.parLevel || 0)}</td>
+                    <td>${escapeHtml(preferredVendorName)}</td>
+                    <td>
+                        <button class="btn btn-small" data-edit-item-id="${item.id}">Edit Details</button>
+                        <button class="btn primary btn-small" data-add-price-for-id="${item.id}">+ Add Price</button>
                     </td>
                 </tr>
             `;
@@ -447,57 +649,20 @@ $("loading-container").style.display = "block";
 
         container.innerHTML = `
             <table>
-                <thead><tr><th>Item/Requester</th><th>Qty</th><th>Vendor (Lowest Price)</th><th>Vendor #</th><th>Actions</th></tr></thead>
-                <tbody>${rows || `<tr><td colspan="5" class="muted">No requests found.</td></tr>`}</tbody>
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Alt Names</th>
+                        <th>Category</th>
+                        <th>Ref #</th>
+                        <th>PAR</th>
+                        <th>Preferred Vendor</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>${rows}</tbody>
             </table>`;
     }
-
-    function renderCatalog() {
-        const query = $('catSearch').value.toLowerCase();
-        const filtered = state.catalog.filter(i => (i.itemName || '').toLowerCase().includes(query) || (i.itemNameAlt || '').toLowerCase().includes(query));
-        $('kvCatalog').textContent = `(${filtered.length})`;
-
-        const rows = filtered.map(item => {
-            const itemPrices = (state.pricingMap.get(item.id) || []).sort((a,b) => a.unitPrice - b.unitPrice);
-            const priceRows = itemPrices.map(p => `
-                <tr>
-                    <td>${escapeHtml(state.vendorMap.get(p.vendorId)) || 'N/A'}</td>
-                    <td>${escapeHtml(p.vendorItemNo) || 'N/A'}</td>
-                    <td>$${Number(p.unitPrice || 0).toFixed(2)}</td>
-                    <td>
-                        <button class="btn btn-small" data-edit-price-id="${p.id}">Edit</button>
-                    </td>
-                </tr>
-            `).join('');
-
-            return `
-                <tr class="catalog-row" data-toggle-catalog-details data-catalog-id="${item.id}" style="${item.isActive === false ? 'opacity: 0.5; text-decoration: line-through;' : ''}">
-                    <td>${escapeHtml(item.itemName)}</td>
-                    <td>${escapeHtml(item.itemNameAlt)}</td>
-                    <td>${escapeHtml(item.category)}</td>
-                    <td>${escapeHtml(item.itemRef)}</td>
-                </tr>
-                <tr class="details-row" data-details-for="${item.id}">
-                    <td colspan="4" class="details-cell">
-                        <h4>Vendor Pricing</h4>
-                        <table class="price-table">
-                            <thead><tr><th>Vendor</th><th>Vendor #</th><th>Price</th><th>Action</th></tr></thead>
-                            <tbody>
-                                ${priceRows || '<tr><td colspan="4" class="muted">No prices set for this item.</td></tr>'}
-                            </tbody>
-                        </table>
-                        <button class="btn primary btn-small" data-add-price-for-id="${item.id}">+ Add Price</button>
-                        <button class="btn btn-small" data-edit-item-id="${item.id}" style="margin-left: 8px;">Edit Item Details</button>
-                    </td>
-                </tr>
-            `;
-        }).join('');
-
-        $('catalogTable').innerHTML = `<table><thead><tr><th>Name</th><th>Alt Name</th><th>Category</th><th>Ref #</th></tr></thead><tbody>${rows}</tbody></table>`;
-    }
-    
-    // This function is no longer needed
-    // function renderPricing() { ... }
 
     function renderUnits() {
         $('kvUnits').textContent = `(${state.units.length})`;
@@ -509,6 +674,12 @@ $("loading-container").style.display = "block";
         $('kvCompartments').textContent = `(${state.compartments.length})`;
         const rows = state.compartments.map(c => `<tr><td>${c.name}</td><td><button class="btn danger" data-delete-comp-id="${c.id}">Delete</button></td></tr>`).join('');
         $('compartmentsTable').innerHTML = `<div class="row"><input id="newCompName" placeholder="New Compartment Name"><button id="addCompBtn" class="btn primary">Add Compartment</button></div><table><thead><tr><th>Name</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table>`;
+    }
+
+    function renderCategories() {
+        $('kvCategories').textContent = `(${state.categories.length})`;
+        const rows = state.categories.map(c => `<tr><td>${c.name}</td><td><button class="btn danger" data-delete-category-id="${c.id}">Delete</button></td></tr>`).join('');
+        $('categoriesTable').innerHTML = `<div class="row"><input id="newCategoryName" placeholder="New Category Name"><button id="addCategoryBtn" class="btn primary">Add Category</button></div><table><thead><tr><th>Name</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table>`;
     }
 
     function startScanner(targetInput, viewportElement) {
@@ -531,11 +702,59 @@ $("loading-container").style.display = "block";
             if (result && result.codeResult) targetInput.value = result.codeResult.code;
         });
     }
+
+    function showPrintModal(vendorName, selectedRequests) {
+        const modal = $('printOrderModal');
+        $('printOrderTitle').textContent = `Order List for ${vendorName}`;
+        
+        const rows = selectedRequests.map(r => {
+            const catItem = state.catalogMap.get(r.catalogId);
+            const vendorInfo = findBestVendor(r.catalogId, catItem.preferredVendorId);
+            return `
+                <tr>
+                    <td>${escapeHtml(catItem.itemName)}</td>
+                    <td>${escapeHtml(vendorInfo.vendorItemNo || 'N/A')}</td>
+                    <td>${escapeHtml(r.qty)}</td>
+                </tr>
+            `;
+        }).join('');
+
+        $('printOrderBody').innerHTML = `
+            <p><strong>Vendor:</strong> ${escapeHtml(vendorName)}</p>
+            <p><strong>Date:</strong> ${new Date().toLocaleDateString()}</p>
+            <p><strong>Requested By:</strong> ${escapeHtml(state.user.email)}</p>
+            <table style="width: 100%; border-collapse: collapse; margin-top: 1rem;">
+                <thead>
+                    <tr style="background-color: #f0f0f0;">
+                        <th>Item Name</th>
+                        <th>Vendor Item #</th>
+                        <th>Quantity Needed</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${rows}
+                </tbody>
+            </table>`;
+        
+        modal.style.display = 'flex';
+    }
     
     function setupAllModalsAndActions() {
         setupCatalogModal(); 
         setupPricingModal(); 
         setupAddItemToOrderModal();
+        setupBulkAddModal();
+
+        // Close modal buttons
+        document.querySelectorAll('[data-close-modal]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const modalId = btn.dataset.closeModal;
+                if(modalId === 'catalogModal') closeCatalogModal();
+                else if (modalId) $(modalId).style.display = 'none';
+            });
+        });
+
+        $('printOrderBtn').addEventListener('click', () => window.print());
 
         // Listener for Order filtering
         document.querySelector('#panel-orders .row').addEventListener('click', e => {
@@ -547,57 +766,50 @@ $("loading-container").style.display = "block";
         });
         $('showHistoryToggle').addEventListener('change', renderOrders);
         
-        // Single click listener for Orders panel (status changes, price edits, details)
-        $('ordersTableContainer').addEventListener('click', async e => {
+        // Event delegation for Orders panel (status changes, order generation)
+        $('ordersGroupContainer').addEventListener('click', async e => {
             const target = e.target;
-            if (target.dataset.toggleDetails !== undefined) {
-                const row = target.closest('tr[data-request-id]');
-                if (!row) return;
-                const requestId = row.dataset.requestId;
-                const detailsRow = document.querySelector(`tr[data-details-for="${requestId}"]`);
-                if (detailsRow) detailsRow.classList.toggle('visible');
-                return;
-            }
+            
+            // Status update buttons
             if (target.dataset.status) {
                 const row = target.closest('tr[data-request-id]');
                 if (!row) return;
                 await updateRequestStatus(row.dataset.requestId, target.dataset.status);
                 return;
             }
-            if (target.dataset.editPrice !== undefined) {
-                const detailsRow = target.closest('tr.details-row');
-                if (!detailsRow) return;
-                const requestId = detailsRow.dataset.detailsFor;
-                const detailsCell = target.closest('.details-cell');
-                const priceInput = detailsCell.querySelector('.edit-price-input');
-                const vendorSelect = detailsCell.querySelector('.edit-price-vendor-select');
-                const newPrice = parseFloat(priceInput.value);
-                const vendorId = vendorSelect.value;
-                const request = state.requests.find(r => r.id === requestId);
-                if (!request || !vendorId || isNaN(newPrice)) return alert('Please select a vendor and enter a valid price.');
-                const pricingDoc = state.pricingAll.find(p => p.catalogId === request.catalogId && p.vendorId === vendorId);
-                if (pricingDoc) {
-                    await updateDoc(doc(db, 'vendorPricing', pricingDoc.id), { unitPrice: newPrice });
-                    alert('Price updated!');
-                } else {
-                    alert('No existing price document. Please add it in the "Catalog" tab.');
+
+            // "Select All" checkbox
+            if (target.classList.contains('vendor-select-all')) {
+                const vendorId = target.dataset.vendorId;
+                const groupContainer = target.closest('.vendor-group');
+                const isChecked = target.checked;
+                groupContainer.querySelectorAll('.order-item-checkbox').forEach(cb => cb.checked = isChecked);
+                return;
+            }
+
+            // "Generate Order" button
+            if (target.classList.contains('generate-order-btn')) {
+                const vendorId = target.dataset.vendorId;
+                const vendorName = target.dataset.vendorName;
+                const groupContainer = target.closest('.vendor-group');
+                
+                const selectedCheckboxes = groupContainer.querySelectorAll('.order-item-checkbox:checked');
+                if (selectedCheckboxes.length === 0) {
+                    alert("Please select at least one item to order.");
+                    return;
                 }
+                
+                const selectedRequestIds = Array.from(selectedCheckboxes).map(cb => cb.dataset.requestId);
+                const selectedRequests = state.requests.filter(r => selectedRequestIds.includes(r.id));
+                
+                showPrintModal(vendorName, selectedRequests);
                 return;
             }
         });
 
-        // Click listener for Catalog panel (details toggle, edit item, add/edit price)
-        $('catalogTable').addEventListener('click', e => {
+        // Click listener for Catalog panel (edit item, add price)
+        $('catalogTableContainer').addEventListener('click', e => {
             const target = e.target;
-            
-            // Toggle details row
-            if (target.closest('[data-toggle-catalog-details]')) {
-                const row = target.closest('tr[data-catalog-id]');
-                if (!row) return;
-                const detailsRow = row.nextElementSibling;
-                if (detailsRow) detailsRow.classList.toggle('visible');
-                return;
-            }
             
             // Edit Item Details button
             if (target.dataset.editItemId) {
@@ -610,16 +822,11 @@ $("loading-container").style.display = "block";
                 openPricingModal(null, target.dataset.addPriceForId);
                 return;
             }
-
-            // Edit Price button (in details row)
-            if (target.dataset.editPriceId) {
-                openPricingModal(target.dataset.editPriceId);
-                return;
-            }
         });
 
         setupUnitActions(); 
         setupCompartmentActions();
+        setupCategoryActions();
     }
 
     async function updateRequestStatus(requestId, newStatus) {
@@ -643,23 +850,21 @@ $("loading-container").style.display = "block";
         addItemChoices = new Choices(itemElement, { 
             searchEnabled: true, 
             placeholderValue: 'Select an item to add...',
-            searchResultLimit: 100 // Search limit fix
+            searchResultLimit: 100 
         });
 
         $('showAddItemModal').addEventListener('click', () => {
-            // This filter is key for the "inactive" item workflow
             const options = state.catalog.filter(c=>c.isActive !== false).map(c=>({value: c.id, label: c.itemName}));
             addItemChoices.setChoices(options, 'value', 'label', true);
             modal.style.display = 'flex';
         });
 
-        $('cancelAddItemBtn').addEventListener('click', () => modal.style.display = 'none');
         $('saveAddItemBtn').addEventListener('click', async () => {
             const catalogId = addItemChoices.getValue(true);
             const qty = $('addItemQty').value;
             if (!catalogId || !qty) return alert('Please select an item and quantity.');
             if (!state.user || !state.user.email) return alert('Cannot add item: user is not properly logged in.');
-            const payload = { catalogId, qty, status: 'Open', createdAt: serverTimestamp(), requesterEmail: state.user.email };
+            const payload = { catalogId, qty, status: 'Open', createdAt: serverTimestamp(), updatedAt: serverTimestamp(), requesterEmail: state.user.email };
             await addDoc(collection(db, 'requests'), payload);
             modal.style.display = 'none';
             $('addItemQty').value = '';
@@ -684,20 +889,21 @@ $("loading-container").style.display = "block";
         const choices = new Choices(select, {
             searchEnabled: true,
             placeholderValue: 'Select an item...',
-            searchResultLimit: 100, // Search limit fix
+            searchResultLimit: 100,
             choices: catalogOptionsForBulk()
         });
         bulkChoicesInstances.push({ id: rowId, choices: choices });
+        applyPermissions(state.userRole);
     }
 
     function setupBulkAddModal() {
         const modal = $('bulkAddModal');
         
         $('showBulkAddModal').addEventListener('click', () => {
-            $('bulkAddForm').innerHTML = ''; // Clear existing rows
+            $('bulkAddForm').innerHTML = ''; 
             bulkChoicesInstances.forEach(inst => inst.choices.destroy());
             bulkChoicesInstances = [];
-            createBulkAddRow(); // Add one starting row
+            createBulkAddRow(); 
             $('bulkAddStatus').textContent = '';
             modal.style.display = 'flex';
         });
@@ -729,10 +935,7 @@ $("loading-container").style.display = "block";
             const rows = $('bulkAddForm').querySelectorAll('.row');
             const statusEl = $('bulkAddStatus');
             if (rows.length === 0) return closeModal();
-            
-            if (!state.user || !state.user.email) {
-                return alert('Cannot add items: user is not properly logged in.');
-            }
+            if (!state.user || !state.user.email) return alert('Cannot add items: user is not properly logged in.');
 
             const batch = writeBatch(db);
             let itemsAdded = 0;
@@ -744,24 +947,13 @@ $("loading-container").style.display = "block";
                 const qty = row.querySelector('input').value.trim();
                 
                 if (catalogId && qty) {
-                    const payload = {
-                        catalogId: catalogId,
-                        qty: qty,
-                        status: 'Open',
-                        createdAt: serverTimestamp(),
-                        updatedAt: serverTimestamp(),
-                        requesterEmail: state.user.email
-                    };
+                    const payload = { catalogId, qty, status: 'Open', createdAt: serverTimestamp(), updatedAt: serverTimestamp(), requesterEmail: state.user.email };
                     const newReqRef = doc(collection(db, "requests"));
                     batch.set(newReqRef, payload);
                     itemsAdded++;
                 }
             }
-            
-            if (itemsAdded === 0) {
-                statusEl.textContent = 'No valid items to add.';
-                return;
-            }
+            if (itemsAdded === 0) { statusEl.textContent = 'No valid items to add.'; return; }
 
             $('saveBulkAddBtn').disabled = true;
             statusEl.textContent = `Adding ${itemsAdded} item(s)...`;
@@ -770,78 +962,100 @@ $("loading-container").style.display = "block";
                 await batch.commit();
                 statusEl.textContent = `Successfully added ${itemsAdded} item(s)!`;
                 setTimeout(closeModal, 1000);
-            } catch (e) {
-                console.error("Bulk add failed:", e);
-                statusEl.textContent = 'Error saving. See console.';
-            } finally {
-                $('saveBulkAddBtn').disabled = false;
-            }
+            } catch (e) { console.error("Bulk add failed:", e); statusEl.textContent = 'Error saving. See console.'; } 
+            finally { $('saveBulkAddBtn').disabled = false; }
         });
     }
     
+    // --- Helper for list items (Barcodes, Alt Names) ---
+    function setupListInput(listContainerEl, inputEl, addBtnEl, listArray) {
+        listContainerEl.innerHTML = '';
+        (listArray || []).forEach(item => addListItem(listContainerEl, item));
+        
+        addBtnEl.onclick = () => { // Use onclick to replace any existing
+            const value = inputEl.value.trim();
+            if (value) {
+                addListItem(listContainerEl, value);
+                inputEl.value = '';
+            }
+        };
+        
+        listContainerEl.onclick = (e) => { // Use onclick to replace any existing
+            if (e.target.tagName === 'BUTTON') e.target.parentElement.remove();
+        };
+    }
+    
+    function addListItem(listContainerEl, value) {
+        const el = document.createElement('div');
+        el.className = 'list-item';
+        el.innerHTML = `<span class="list-item-text">${escapeHtml(value)}</span><button type="button" class="btn danger" style="padding: 2px 6px;">&times;</button>`;
+        listContainerEl.appendChild(el);
+        applyPermissions(state.userRole);
+    }
+
+    function getListItems(listContainerEl) {
+        return Array.from(listContainerEl.querySelectorAll('.list-item-text')).map(el => el.textContent);
+    }
+    // --- End Helper ---
+
     let currentCatalogItemId = null;
     function openCatalogModal(itemId = null) {
         currentCatalogItemId = itemId; 
         const item = itemId ? state.catalog.find(i => i.id === itemId) : {};
+        
         $('catalogModalTitle').textContent = itemId ? 'Edit Catalog Item' : 'Add New Catalog Item';
         $('editItemName').value = item.itemName || ''; 
-        $('editItemNameAlt').value = item.itemNameAlt || '';
-        $('editCategory').value = item.category || ''; 
         $('editItemRef').value = item.itemRef || '';
         $('editUnit').value = item.unit || ''; 
         $('editPackSize').value = item.packSize || 1;
+        $('editParLevel').value = item.parLevel || 0;
         $('editIsActive').checked = item.isActive !== false;
         $('inactivateCatalogItem').style.display = itemId ? 'inline-block' : 'none';
         
-        const barcodeList = $('barcodeList');
-        barcodeList.innerHTML = ''; 
+        // Populate Categories Dropdown
+        const catSelect = $('editCategorySelect');
+        catSelect.innerHTML = '<option value="">-- Select Category --</option>' + state.categories.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+        catSelect.value = item.category || '';
+        
+        // Populate Preferred Vendor Dropdown
+        const vendSelect = $('editPreferredVendorSelect');
+        vendSelect.innerHTML = '<option value="">-- Select Vendor --</option>' + state.vendors.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
+        vendSelect.value = item.preferredVendorId || '';
+        
+        // Setup Alt Names
+        const altNameArray = Array.isArray(item.itemNameAlt) ? item.itemNameAlt : (item.itemNameAlt ? [item.itemNameAlt] : []);
+        setupListInput($('altNameList'), $('newAltName'), $('addNewAltNameBtn'), altNameArray);
+        
+        // Setup Barcodes
         const barcodeArray = Array.isArray(item.barcode) ? item.barcode : (item.barcode ? [item.barcode] : []);
-        barcodeArray.forEach(code => {
-            const el = document.createElement('div'); el.className = 'barcode-item';
-            el.innerHTML = `<span class="barcode-item-text">${escapeHtml(code)}</span><button class="btn danger" style="padding: 2px 6px;">&times;</button>`;
-            barcodeList.appendChild(el);
-        });
+        setupListInput($('barcodeList'), $('newBarcode'), $('addNewBarcodeBtn'), barcodeArray);
         
         applyPermissions(state.userRole);
         $('catalogModal').style.display = 'flex';
     }
 
+    function closeCatalogModal() {
+        if (isScannerActive) Quagga.stop(); 
+        isScannerActive = false; 
+        $('barcodeScannerViewport').style.display = 'none'; 
+        $('catalogModal').style.display = 'none'; 
+    }
+
     function setupCatalogModal() {
-        $('showCatalogModal').addEventListener('click', () => openCatalogModal()); // For "Add New Item"
-        $('cancelCatalogEdit').addEventListener('click', () => { 
-            if (isScannerActive) Quagga.stop(); 
-            isScannerActive = false; 
-            $('barcodeScannerViewport').style.display = 'none'; 
-            $('catalogModal').style.display = 'none'; 
-        });
-        
-        $('addNewBarcodeBtn').addEventListener('click', () => {
-            const newCode = $('newBarcode').value.trim();
-            if (newCode) { 
-                const item = document.createElement('div'); 
-                item.className = 'barcode-item'; 
-                item.innerHTML = `<span class="barcode-item-text">${escapeHtml(newCode)}</span><button class="btn danger" style="padding: 2px 6px;">&times;</button>`; 
-                $('barcodeList').appendChild(item); 
-                $('newBarcode').value = ''; 
-            }
-        });
-        
-        $('barcodeList').addEventListener('click', (e) => { 
-            if (e.target.tagName === 'BUTTON') e.target.parentElement.remove(); 
-        });
-        
+        $('showCatalogModal').addEventListener('click', () => openCatalogModal());
         $('scanNewBarcodeBtn').addEventListener('click', () => startScanner($('newBarcode'), $('barcodeScannerViewport')));
         
         $('saveCatalogEdit').addEventListener('click', async () => {
-            const barcodes = Array.from(document.querySelectorAll('#barcodeList .barcode-item-text')).map(el => el.textContent);
             const data = { 
                 itemName: $('editItemName').value, 
-                itemNameAlt: $('editItemNameAlt').value, 
-                category: $('editCategory').value, 
                 itemRef: $('editItemRef').value, 
                 unit: $('editUnit').value, 
                 packSize: Number($('editPackSize').value) || 1, 
-                barcode: barcodes, 
+                parLevel: Number($('editParLevel').value) || 0,
+                category: $('editCategorySelect').value,
+                preferredVendorId: $('editPreferredVendorSelect').value,
+                itemNameAlt: getListItems($('altNameList')), 
+                barcode: getListItems($('barcodeList')), 
                 isActive: $('editIsActive').checked, 
                 updatedAt: serverTimestamp() 
             };
@@ -849,25 +1063,28 @@ $("loading-container").style.display = "block";
             if (currentCatalogItemId) { 
                 await updateDoc(doc(db, "catalog", currentCatalogItemId), data); 
             } else { 
+                data.createdAt = serverTimestamp();
                 await addDoc(collection(db, "catalog"), data); 
             }
             
-            $('catalogModal').style.display = 'none'; 
+            closeCatalogModal();
             await initializeStaticData(); // Refresh data
         });
         
         $('inactivateCatalogItem').addEventListener('click', async () => {
             if (currentCatalogItemId && confirm('Are you sure you want to mark this item as inactive?')) {
                 await updateDoc(doc(db, "catalog", currentCatalogItemId), { isActive: false });
-                $('catalogModal').style.display = 'none';
+                closeCatalogModal();
                 await initializeStaticData();
             }
         });
     }
 
     let currentPriceId = null;
+    let currentCatalogIdForPricing = null;
     function openPricingModal(priceId = null, catalogId = null) {
         currentPriceId = priceId; 
+        currentCatalogIdForPricing = catalogId; // Used for "Set as Preferred"
         const price = priceId ? state.pricingAll.find(p => p.id === priceId) : {};
         
         const itemSelect = $('priceItemSelect');
@@ -877,11 +1094,13 @@ $("loading-container").style.display = "block";
         vendorSelect.innerHTML = state.vendors.map(v => `<option value="${v.id}">${escapeHtml(v.name)}</option>`).join('');
         
         if (priceId) { // Editing existing price
+            currentCatalogIdForPricing = price.catalogId;
             itemSelect.value = price.catalogId;
             itemSelect.disabled = false;
             vendorSelect.value = price.vendorId;
             $('priceSku').value = price.vendorItemNo || ''; 
             $('priceUnitPrice').value = price.unitPrice || '';
+            $('priceVendorStatus').value = price.vendorStatus || 'In Stock';
             $('pricingModalTitle').textContent = 'Edit Vendor Price';
         } else if (catalogId) { // Adding new price for a specific item
             itemSelect.value = catalogId;
@@ -889,56 +1108,88 @@ $("loading-container").style.display = "block";
             vendorSelect.value = '';
             $('priceSku').value = ''; 
             $('priceUnitPrice').value = '';
+            $('priceVendorStatus').value = 'In Stock';
             $('pricingModalTitle').textContent = 'Add New Price';
         }
         
+        $('priceSetPreferred').checked = false; // Always reset this
         $('pricingModal').style.display = 'flex';
     }
 
     function setupPricingModal() {
-        // "Add New Price" button is now in renderCatalog, listener is in setupAllModalsAndActions
-        // "Edit Price" button is also in renderCatalog
-        
-        $('cancelPricingEdit').addEventListener('click', () => $('pricingModal').style.display = 'none');
-        
         $('savePricingEdit').addEventListener('click', async () => {
             const itemSelect = $('priceItemSelect');
+            const vendorId = $('priceVendorSelect').value;
+            const catalogId = itemSelect.value;
+            const setAsPreferred = $('priceSetPreferred').checked;
+            
             const data = { 
-                catalogId: itemSelect.value, 
-                vendorId: $('priceVendorSelect').value, 
+                catalogId: catalogId, 
+                vendorId: vendorId, 
                 vendorItemNo: $('priceSku').value, 
-                unitPrice: Number($('priceUnitPrice').value) || 0 
+                unitPrice: Number($('priceUnitPrice').value) || 0,
+                vendorStatus: $('priceVendorStatus').value
             };
             
             if (!data.catalogId || !data.vendorId) {
                 return alert("Please select an item and vendor.");
             }
 
-            if (currentPriceId) { 
-                await updateDoc(doc(db, "vendorPricing", currentPriceId), data); 
-            } else { 
-                await addDoc(collection(db, "vendorPricing"), data); 
+            try {
+                if (currentPriceId) { 
+                    await updateDoc(doc(db, "vendorPricing", currentPriceId), data); 
+                } else { 
+                    await addDoc(collection(db, "vendorPricing"), data); 
+                }
+                
+                // After saving price, check if we need to update the catalog item
+                if (setAsPreferred && currentCatalogIdForPricing) {
+                    await updateDoc(doc(db, "catalog", currentCatalogIdForPricing), {
+                        preferredVendorId: vendorId,
+                        updatedAt: serverTimestamp()
+                    });
+                }
+                
+                $('pricingModal').style.display = 'none';
+                itemSelect.disabled = false; // Always re-enable on close
+            } catch (e) {
+                console.error("Error saving price/preferred vendor:", e);
+                alert("Error saving. See console.");
             }
-            
-            $('pricingModal').style.display = 'none';
-            itemSelect.disabled = false; // Always re-enable on close
         });
     }
     
-    function setupUnitActions() {
-        $('unitsTable').addEventListener('click', async e => {
-            if (e.target.id === 'addUnitBtn') { const name = $('newUnitName').value.trim(); if (name) { await addDoc(collection(db, "units"), { name }); $('newUnitName').value = ''; await initializeStaticData(); }}
+    // Generic setup for Units, Compartments, Categories
+    function setupSimpleMgmt(tabName) {
+        const plural = tabName;
+        const singular = tabName.slice(0, -1);
+        
+        $(`${plural}Table`).addEventListener('click', async e => {
+            const target = e.target;
+            if (target.id === `add${singular.charAt(0).toUpperCase() + singular.slice(1)}Btn`) { 
+                const name = $(`new${singular.charAt(0).toUpperCase() + singular.slice(1)}Name`).value.trim(); 
+                if (name) { 
+                    await addDoc(collection(db, plural), { name }); 
+                    $(`new${singular.charAt(0).toUpperCase() + singular.slice(1)}Name`).value = ''; 
+                    await initializeStaticData(); 
+                }
+            }
+            if (target.dataset[`delete-${singular}-id`]) {
+                const id = target.dataset[`delete-${singular}-id`];
+                if (id && confirm(`Are you sure you want to delete this ${singular}?`)) {
+                    await deleteDoc(doc(db, plural, id));
+                    await initializeStaticData();
+                }
+            }
         });
     }
-    function setupCompartmentActions() {
-        $('compartmentsTable').addEventListener('click', async e => {
-            if (e.g.target.id === 'addCompBtn') { const name = $('newCompName').value.trim(); if (name) { await addDoc(collection(db, "compartments"), { name }); $('newCompName').value = ''; await initializeStaticData(); }}
-        });
-    }
+
+    function setupUnitActions() { setupSimpleMgmt('units'); }
+    function setupCompartmentActions() { setupSimpleMgmt('compartments'); }
+    function setupCategoryActions() { setupSimpleMgmt('categories'); }
     
     function mountTabs() {
-        // Removed 'Pricing' from this list
-        const TABS = ['Orders', 'Catalog', 'Units', 'Compartments'];
+        const TABS = ['Orders', 'Catalog', 'Units', 'Compartments', 'Categories'];
         $('tabs').innerHTML = TABS.map(t => `<button class="tab" data-tab="${t.toLowerCase().replace(' ', '_')}">${t}</button>`).join('');
         $('tabs').addEventListener('click', (ev) => {
             const tabId = ev.target.dataset.tab; if (!tabId) return;
@@ -947,13 +1198,12 @@ $("loading-container").style.display = "block";
         });
         $('tabs').querySelector('[data-tab="orders"]').click();
     }
+
     async function boot() {
         mountTabs();
         setupAllModalsAndActions();
-        setupBulkAddModal();
         
-        // Removed 'refreshPricing'
-        ['refreshCatalog', 'refreshUnits', 'refreshCompartments'].forEach(id => {
+        ['refreshCatalog', 'refreshUnits', 'refreshCompartments', 'refreshCategories'].forEach(id => {
             const btn = $(id); if (btn) btn.addEventListener('click', initializeStaticData);
         });
 
