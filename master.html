@@ -514,9 +514,7 @@ $("loading-container").style.display = "block";
                     groupId = vendorInfo.vendorId;
                     groupName = vendorInfo.vendorName;
                 } else {
-                    // This is the fix. Group "Ordered" and "Backordered" items...
-                    // ...but use their *actual* vendor info, not just the status.
-                    groupId = r.status;
+                    groupId = r.status; // "Ordered" or "Backordered"
                     groupName = r.status;
                 }
 
@@ -849,6 +847,36 @@ $("loading-container").style.display = "block";
         // Event delegation for Orders panel
         $('ordersGroupContainer').addEventListener('click', async e => {
             const target = e.target;
+            
+            // "Select All" checkbox
+            if (target.classList.contains('vendor-select-all')) {
+                const vendorId = target.dataset.vendorId;
+                const groupContainer = target.closest('.vendor-group');
+                const isChecked = target.checked;
+                groupContainer.querySelectorAll('.order-item-checkbox').forEach(cb => cb.checked = isChecked);
+                return;
+            }
+
+            // "Generate Order" button
+            if (target.classList.contains('generate-order-btn')) {
+                const vendorId = target.dataset.vendorId;
+                const vendorName = target.dataset.vendorName;
+                const groupContainer = target.closest('.vendor-group');
+                
+                const selectedCheckboxes = groupContainer.querySelectorAll('.order-item-checkbox:checked');
+                if (selectedCheckboxes.length === 0) {
+                    alert("Please select at least one item to order.");
+                    return;
+                }
+                
+                const selectedRequestIds = Array.from(selectedCheckboxes).map(cb => cb.dataset.requestId);
+                const selectedRequests = state.requests.filter(r => selectedRequestIds.includes(r.id));
+                
+                showPrintModal(vendorName, selectedRequests);
+                return;
+            }
+            
+            // Check for clicks inside a table row
             const tr = target.closest('tr[data-request-id]');
             if (!tr) return; // Exit if the click wasn't on a row-related element
             
@@ -899,34 +927,6 @@ $("loading-container").style.display = "block";
                     console.error("Failed to update quantity:", e);
                     alert("Error saving quantity.");
                 }
-                return;
-            }
-
-            // "Select All" checkbox
-            if (target.classList.contains('vendor-select-all')) {
-                const vendorId = target.dataset.vendorId;
-                const groupContainer = target.closest('.vendor-group');
-                const isChecked = target.checked;
-                groupContainer.querySelectorAll('.order-item-checkbox').forEach(cb => cb.checked = isChecked);
-                return;
-            }
-
-            // "Generate Order" button
-            if (target.classList.contains('generate-order-btn')) {
-                const vendorId = target.dataset.vendorId;
-                const vendorName = target.dataset.vendorName;
-                const groupContainer = target.closest('.vendor-group');
-                
-                const selectedCheckboxes = groupContainer.querySelectorAll('.order-item-checkbox:checked');
-                if (selectedCheckboxes.length === 0) {
-                    alert("Please select at least one item to order.");
-                    return;
-                }
-                
-                const selectedRequestIds = Array.from(selectedCheckboxes).map(cb => cb.dataset.requestId);
-                const selectedRequests = state.requests.filter(r => selectedRequestIds.includes(r.id));
-                
-                showPrintModal(vendorName, selectedRequests);
                 return;
             }
         });
@@ -1045,7 +1045,7 @@ $("loading-container").style.display = "block";
             $('bulkAddForm').innerHTML = '';
         };
 
-fs
+        // This is the line that had the typo. It is now fixed.
         $('cancelBulkAddBtn').addEventListener('click', closeModal);
         $('closeBulkAddBtn').addEventListener('click', closeModal);
         $('addBulkItemRow').addEventListener('click', createBulkAddRow);
