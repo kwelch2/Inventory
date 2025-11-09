@@ -45,7 +45,9 @@
     .viewport { position: relative; }
     .viewport video, .viewport .drawingBuffer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
     .price-info { font-size: 0.8rem; color: #555; }
-    .best-price { color: var(--ok); font-weight: bold; }
+    .price-tag { display: block; white-space: nowrap; margin-bottom: 2px; font-size: 0.9rem; }
+    .price-tag.best-price { font-weight: bold; color: var(--ok); }
+    .price-tag.preferred-price { font-weight: bold; color: var(--accent); }
     .details-row { display: none; }
     .details-row.visible { display: table-row; background-color: #f9f9f9 !important; }
     .details-cell { padding: 1rem; }
@@ -61,6 +63,7 @@
     .vendor-group-header h3 { margin: 0; }
     .vendor-group-table { margin: 0; }
     .vendor-group-table tr:last-child td { border-bottom: none; }
+    .vendor-group-table .details-row td { border-top: 1px dashed var(--b); }
     .close-btn { font-size: 28px; font-weight: bold; cursor: pointer; color: #888; }
     .close-btn:hover { color: #000; }
     #printOrderModal table { font-size: 12px; }
@@ -565,13 +568,34 @@ $("loading-container").style.display = "block";
         const isOrderableGroup = vendorId && vendorId !== 'Open' && vendorId !== 'Ordered' && vendorId !== 'Backordered' && vendorId !== 'unassigned';
         const groupTitle = group.vendorName || 'Unknown Group';
 
-        const rows = group.requests.map(r => {
+        const tableRows = group.requests.map(r => {
             const status = r.status || 'Open';
+            const catItem = r.catItem;
+            
+            // --- Logic for Price Comparison Details ---
+            const allPrices = (state.pricingMap.get(catItem.id) || [])
+                .map(p => ({...p, vendorName: state.vendorMap.get(p.vendorId) || 'N/A'}))
+                .sort((a,b) => (a.unitPrice || Infinity) - (b.unitPrice || Infinity));
+            const cheapestPrice = allPrices[0];
+            
+            const allPricesHtml = allPrices.length > 0 ? allPrices.map(p => {
+                let classes = 'price-tag';
+                if (p.vendorId === catItem.preferredVendorId) classes += ' preferred-price';
+                if (p.vendorId === cheapestPrice?.vendorId) classes += ' best-price';
+                
+                return `<div class="${classes}">
+                    ${escapeHtml(p.vendorName)}: $${(p.unitPrice || 0).toFixed(2)} (#${escapeHtml(p.vendorItemNo)}) - <em>${escapeHtml(p.vendorStatus || 'In Stock')}</em>
+                </div>`;
+            }).join('') : '<div class="muted">No prices found.</div>';
+            // --- End Details Logic ---
+            
             return `
                 <tr data-request-id="${r.id}">
                     ${isOrderableGroup ? `<td><input type="checkbox" class="order-item-checkbox" data-request-id="${r.id}"></td>` : ''}
                     <td>
-                        <strong>${escapeHtml(r.catItem.itemName)}</strong><br>
+                        <strong>${escapeHtml(r.catItem.itemName)}</strong>
+                        <button class="btn" data-toggle-details style="margin-left: 8px; padding: 2px 6px;">▼</button>
+                        <br>
                         <span class="muted">${escapeHtml(r.requesterEmail) || 'N/A'}</span>
                     </td>
                     <td>${escapeHtml(r.qty)}</td>
@@ -584,6 +608,12 @@ $("loading-container").style.display = "block";
                             <button class="btn btn-status ${status === 'Backordered' ? 'active' : ''}" data-status="Backordered">Backordered</button>
                             <button class="btn btn-status-receive" data-status="Received">Received</button>
                         </div>
+                    </td>
+                </tr>
+                <tr class="details-row" data-details-for="${r.id}">
+                    <td colspan="${isOrderableGroup ? 6 : 5}" class="details-cell">
+                        <h4>All Vendor Pricing for ${escapeHtml(r.catItem.itemName)}</h4>
+                        ${allPricesHtml}
                     </td>
                 </tr>`;
         }).join('');
@@ -613,7 +643,7 @@ $("loading-container").style.display = "block";
                             <th>Actions</th>
                         </tr>
                     </thead>
-                    <tbody>${rows}</tbody>
+                    <tbody>${tableRows}</tbody>
                 </table>
             </div>`;
     }
@@ -629,18 +659,33 @@ $("loading-container").style.display = "block";
 
         const rows = filtered.map(item => {
             const categoryName = state.categoryMap.get(item.category) || item.category || 'N/A';
-            const preferredVendorName = state.vendorMap.get(item.preferredVendorId) || 'None';
+            
+            // --- Pricing Info Logic ---
+            const allPrices = (state.pricingMap.get(item.id) || [])
+                .map(p => ({...p, vendorName: state.vendorMap.get(p.vendorId) || 'N/A'}))
+                .sort((a,b) => (a.unitPrice || Infinity) - (b.unitPrice || Infinity));
+            
+            const cheapestPrice = allPrices[0];
+            
+            const pricesHtml = allPrices.length > 0 ? allPrices.map(p => {
+                let classes = 'price-tag';
+                if (p.vendorId === item.preferredVendorId) classes += ' preferred-price';
+                if (p.vendorId === cheapestPrice?.vendorId) classes += ' best-price';
+                
+                return `<span class="${classes}">
+                    ${escapeHtml(p.vendorName)}: $${(p.unitPrice || 0).toFixed(2)}
+                </span>`;
+            }).join('') : '<span class="muted">No pricing</span>';
+            // --- End Pricing Info Logic ---
             
             return `
                 <tr class="catalog-row" data-catalog-id="${item.id}" style="${item.isActive === false ? 'opacity: 0.5; text-decoration: line-through;' : ''}">
                     <td><strong>${escapeHtml(item.itemName)}</strong></td>
-                    <td>${escapeHtml(Array.isArray(item.itemNameAlt) ? item.itemNameAlt.join(', ') : (item.itemNameAlt || ''))}</td>
                     <td>${escapeHtml(categoryName)}</td>
-                    <td>${escapeHtml(item.itemRef)}</td>
                     <td>${escapeHtml(item.parLevel || 0)}</td>
-                    <td>${escapeHtml(preferredVendorName)}</td>
+                    <td>${pricesHtml}</td>
                     <td>
-                        <button class="btn btn-small" data-edit-item-id="${item.id}">Edit Details</button>
+                        <button class="btn btn-small" data-edit-item-id="${item.id}">Edit</button>
                         <button class="btn primary btn-small" data-add-price-for-id="${item.id}">+ Add Price</button>
                     </td>
                 </tr>
@@ -652,11 +697,9 @@ $("loading-container").style.display = "block";
                 <thead>
                     <tr>
                         <th>Name</th>
-                        <th>Alt Names</th>
                         <th>Category</th>
-                        <th>Ref #</th>
                         <th>PAR</th>
-                        <th>Preferred Vendor</th>
+                        <th style="width: 30%;">Vendor Pricing</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
@@ -770,6 +813,16 @@ $("loading-container").style.display = "block";
         $('ordersGroupContainer').addEventListener('click', async e => {
             const target = e.target;
             
+            // --- NEW: Listener for Price Comparison Details Toggle ---
+            if (target.dataset.toggleDetails !== undefined) {
+                const row = target.closest('tr[data-request-id]');
+                if (!row) return;
+                const requestId = row.dataset.requestId;
+                const detailsRow = document.querySelector(`tr[data-details-for="${requestId}"]`);
+                if (detailsRow) detailsRow.classList.toggle('visible');
+                return;
+            }
+
             // Status update buttons
             if (target.dataset.status) {
                 const row = target.closest('tr[data-request-id]');
