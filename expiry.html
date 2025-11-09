@@ -542,7 +542,7 @@
             itemSelectChoices.clearStore();
             itemSelectChoices.setChoices(catalogOptions, 'value', 'label', true);
         } else {
-            itemSelectChoices = new Choices('#addItemSelect', { searchEnabled: true, placeholderValue: 'Select an item...', choices: catalogOptions });
+            itemSelectChoices = new Choices('#addItemSelect', { searchEnabled: true, placeholderValue: 'Select an item...', choices: catalogOptions, searchResultLimit: 100 });
         }
     }
 

@@ -111,6 +111,7 @@
         <h2>Orders & Requests</h2>
         <div class="row">
             <button class="btn primary" id="showAddItemModal">+ Add Item to Order</button>
+            <button class="btn" id="showBulkAddModal">+ Bulk Add Items</button>
             <span class="spacer"></span>
             <strong style="margin-left: 2rem;">Filter by Status:</strong>
             <button class="btn filter-btn active" data-status="All">All Active</button>
@@ -202,6 +203,25 @@
   </div>
 </div>
 
+<div id="bulkAddModal" class="modal">
+  <div class="modal-content" style="max-width: 800px;">
+    <div class="modal-header">
+      <h2>Bulk Add to Order List</h2>
+      <span class="close-btn" id="closeBulkAddBtn" style="font-size: 28px; cursor: pointer;">&times;</span>
+    </div>
+    <div class="modal-body" id="bulkAddForm" style="grid-template-columns: 1fr; max-height: 60vh; overflow-y: auto; display: block;">
+      </div>
+    <div style="margin-top: 1rem;">
+      <button class="btn" id="addBulkItemRow">+ Add Row</button>
+    </div>
+    <div class="modal-footer">
+      <span id="bulkAddStatus" class="muted" style="float: left; margin-top: 8px;"></span>
+      <button class="btn" id="cancelBulkAddBtn">Cancel</button>
+      <button class="btn primary" id="saveBulkAddBtn">Add All Items to Order</button>
+    </div>
+  </div>
+</div>
+
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
 import { getAuth, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
@@ -231,6 +251,10 @@ const db = initializeFirestore(app, {
 // Rest of your logic (unchanged)
 let state = { user: null, userRole: null, catalog: [], vendors: [], pricingAll: [], requests: [], units: [], compartments: [], catalogMap: new Map(), vendorMap: new Map(), pricingMap: new Map() };
 let addItemChoices;
+let bulkChoicesInstances = [];
+const catalogOptionsForBulk = () => state.catalog
+    .filter(c => c.isActive !== false)
+    .map(c => ({ value: c.id, label: c.itemName }));
 const $ = id => document.getElementById(id);
 let appInitialized = false;
 let isScannerActive = false;
@@ -607,7 +631,10 @@ $("loading-container").style.display = "block";
         const modal = $('addItemToOrderModal');
         const itemElement = $('addItemSelect');
         if (addItemChoices) addItemChoices.destroy();
-        addItemChoices = new Choices(itemElement, { searchEnabled: true, placeholderValue: 'Select an item to add...' });
+        addItemChoices = new Choices(itemElement, { 
+            searchEnabled: true, 
+            placeholderValue: 'Select an item to add...' 
+        });
 
         $('showAddItemModal').addEventListener('click', () => {
             // This filter is key for the "inactive" item workflow
@@ -626,6 +653,119 @@ $("loading-container").style.display = "block";
             await addDoc(collection(db, 'requests'), payload);
             modal.style.display = 'none';
             $('addItemQty').value = '';
+        });
+    }
+
+    function createBulkAddRow() {
+        const rowId = `bulk-row-${Date.now()}`;
+        const row = document.createElement('div');
+        row.className = 'row';
+        row.id = rowId;
+        row.style.marginBottom = '8px';
+        row.innerHTML = `
+            <select style="flex: 2; min-width: 200px;"></select>
+            <input type="text" placeholder="Qty (e.g., 1 Box)" style="flex: 1;">
+            <button class="btn danger" data-remove-row="${rowId}" style="flex-shrink: 0;">&times;</button>
+        `;
+        
+        $('bulkAddForm').appendChild(row);
+        
+        const select = row.querySelector('select');
+        const choices = new Choices(select, {
+            searchEnabled: true,
+            placeholderValue: 'Select an item...',
+            searchResultLimit: 100, // Search limit fix
+            choices: catalogOptionsForBulk()
+        });
+        bulkChoicesInstances.push({ id: rowId, choices: choices });
+    }
+
+    function setupBulkAddModal() {
+        const modal = $('bulkAddModal');
+        
+        $('showBulkAddModal').addEventListener('click', () => {
+            $('bulkAddForm').innerHTML = ''; // Clear existing rows
+            bulkChoicesInstances.forEach(inst => inst.choices.destroy());
+            bulkChoicesInstances = [];
+            createBulkAddRow(); // Add one starting row
+            $('bulkAddStatus').textContent = '';
+            modal.style.display = 'flex';
+        });
+
+        const closeModal = () => {
+            modal.style.display = 'none';
+            bulkChoicesInstances.forEach(inst => inst.choices.destroy());
+            bulkChoicesInstances = [];
+            $('bulkAddForm').innerHTML = '';
+        };
+
+        $('cancelBulkAddBtn').addEventListener('click', closeModal);
+        $('closeBulkAddBtn').addEventListener('click', closeModal);
+        $('addBulkItemRow').addEventListener('click', createBulkAddRow);
+
+        $('bulkAddForm').addEventListener('click', e => {
+            if (e.target.dataset.removeRow) {
+                const rowId = e.target.dataset.removeRow;
+                document.getElementById(rowId)?.remove();
+                const choiceIndex = bulkChoicesInstances.findIndex(inst => inst.id === rowId);
+                if (choiceIndex > -1) {
+                    bulkChoicesInstances[choiceIndex].choices.destroy();
+                    bulkChoicesInstances.splice(choiceIntex, 1);
+                }
+            }
+        });
+
+        $('saveBulkAddBtn').addEventListener('click', async () => {
+            const rows = $('bulkAddForm').querySelectorAll('.row');
+            const statusEl = $('bulkAddStatus');
+            if (rows.length === 0) return closeModal();
+            
+            if (!state.user || !state.user.email) {
+                return alert('Cannot add items: user is not properly logged in.');
+            }
+
+            const batch = writeBatch(db);
+            let itemsAdded = 0;
+            
+            for (let i = 0; i < rows.length; i++) {
+                const row = rows[i];
+                const choiceInstance = bulkChoicesInstances.find(inst => inst.id === row.id);
+                const catalogId = choiceInstance?.choices.getValue(true);
+                const qty = row.querySelector('input').value.trim();
+                
+                if (catalogId && qty) {
+                    const payload = {
+                        catalogId: catalogId,
+                        qty: qty,
+                        status: 'Open',
+                        createdAt: serverTimestamp(),
+                        updatedAt: serverTimestamp(),
+                        requesterEmail: state.user.email
+                    };
+                    const newReqRef = doc(collection(db, "requests"));
+                    batch.set(newReqRef, payload);
+                    itemsAdded++;
+                }
+            }
+            
+            if (itemsAdded === 0) {
+                statusEl.textContent = 'No valid items to add.';
+                return;
+            }
+
+            $('saveBulkAddBtn').disabled = true;
+            statusEl.textContent = `Adding ${itemsAdded} item(s)...`;
+            
+            try {
+                await batch.commit();
+                statusEl.textContent = `Successfully added ${itemsAdded} item(s)!`;
+                setTimeout(closeModal, 1000);
+            } catch (e) {
+                console.error("Bulk add failed:", e);
+                statusEl.textContent = 'Error saving. See console.';
+            } finally {
+                $('saveBulkAddBtn').disabled = false;
+            }
         });
     }
     
@@ -800,6 +940,7 @@ $("loading-container").style.display = "block";
     async function boot() {
         mountTabs();
         setupAllModalsAndActions();
+        setupBulkAddModal();
         
         // Removed 'refreshPricing'
         ['refreshCatalog', 'refreshUnits', 'refreshCompartments'].forEach(id => {
