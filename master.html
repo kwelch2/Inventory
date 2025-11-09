@@ -386,6 +386,15 @@ $("loading-container").style.display = "block";
             return status === activeFilter;
         });
 
+        // --- NEW SORTING LOGIC ADDED HERE ---
+        const sortOrder = { "Open": 1, "Backordered": 2, "Pending": 2, "Ordered": 3 };
+        requestsToShow.sort((a, b) => {
+            const aStatus = a.status || "Open";
+            const bStatus = b.status || "Open";
+            return (sortOrder[aStatus] || 99) - (sortOrder[bStatus] || 99) || (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0);
+        });
+        // --- END OF NEW SORTING LOGIC ---
+
         const rows = requestsToShow.map(r => {
             const catItem = state.catalogMap.get(r.catalogId);
             if (!catItem) return ''; 
@@ -633,7 +642,8 @@ $("loading-container").style.display = "block";
         if (addItemChoices) addItemChoices.destroy();
         addItemChoices = new Choices(itemElement, { 
             searchEnabled: true, 
-            placeholderValue: 'Select an item to add...' 
+            placeholderValue: 'Select an item to add...',
+            searchResultLimit: 100 // Search limit fix
         });
 
         $('showAddItemModal').addEventListener('click', () => {
@@ -710,7 +720,7 @@ $("loading-container").style.display = "block";
                 const choiceIndex = bulkChoicesInstances.findIndex(inst => inst.id === rowId);
                 if (choiceIndex > -1) {
                     bulkChoicesInstances[choiceIndex].choices.destroy();
-                    bulkChoicesInstances.splice(choiceIntex, 1);
+                    bulkChoicesInstances.splice(choiceIndex, 1);
                 }
             }
         });
@@ -922,7 +932,7 @@ $("loading-container").style.display = "block";
     }
     function setupCompartmentActions() {
         $('compartmentsTable').addEventListener('click', async e => {
-            if (e.target.id === 'addCompBtn') { const name = $('newCompName').value.trim(); if (name) { await addDoc(collection(db, "compartments"), { name }); $('newCompName').value = ''; await initializeStaticData(); }}
+            if (e.g.target.id === 'addCompBtn') { const name = $('newCompName').value.trim(); if (name) { await addDoc(collection(db, "compartments"), { name }); $('newCompName').value = ''; await initializeStaticData(); }}
         });
     }
     
