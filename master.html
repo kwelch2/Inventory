@@ -55,6 +55,7 @@
     .details-cell .price-table { font-size: 0.9rem; margin-bottom: 1rem; }
     .details-cell .price-table th, .details-cell .price-table td { padding: 4px 6px; }
     .status-buttons { display: flex; flex-wrap: wrap; gap: 6px; }
+    .edit-buttons { display: flex; flex-wrap: wrap; gap: 6px; }
     .btn-status.active { background-color: var(--accent); color: #fff; font-weight: bold; border-color: #005fa3; }
     .btn-status-receive { background-color: #f0fff0; border-color: #c0f0c0; }
     .btn-status-receive:hover { background-color: #dffde0; }
@@ -505,21 +506,19 @@ $("loading-container").style.display = "block";
                 const catItem = state.catalogMap.get(r.catalogId);
                 if (!catItem) continue; // Skip items not in catalog
 
-                // --- MODIFIED LOGIC ---
-                // Get vendor info for ALL items, not just 'Open'
                 const vendorInfo = findBestVendor(r.catalogId, catItem.preferredVendorId);
                 const augmentedRequest = { ...r, vendorInfo, catItem };
 
-                // Group by 'Ordered' or 'Backordered' first, otherwise group by assigned vendor
                 let groupId, groupName;
                 if (r.status === 'Open' || !r.status) {
                     groupId = vendorInfo.vendorId;
                     groupName = vendorInfo.vendorName;
                 } else {
+                    // This is the fix. Group "Ordered" and "Backordered" items...
+                    // ...but use their *actual* vendor info, not just the status.
                     groupId = r.status;
                     groupName = r.status;
                 }
-                // --- END MODIFICATION ---
 
                 if (!requestsByGroup.has(groupId)) {
                     requestsByGroup.set(groupId, {
@@ -532,6 +531,7 @@ $("loading-container").style.display = "block";
             
             // Render groups: Vendor groups first, then unassigned, then status groups
             requestsByGroup.forEach((group, groupId) => {
+                // This will render groups like "Valor Health", "Henry Schein", etc.
                 if (groupId !== 'unassigned' && groupId !== 'Ordered' && groupId !== 'Backordered' && groupId !== 'Open') {
                     renderVendorGroup(container, group, groupId);
                 }
@@ -603,9 +603,12 @@ $("loading-container").style.display = "block";
                         <strong>${escapeHtml(r.catItem.itemName)}</strong>
                         <button class="btn" data-toggle-details style="margin-left: 8px; padding: 2px 6px;">▼</button>
                         <br>
-                        <span class="muted">${escapeHtml(r.requesterEmail) || 'N/A'}</span>
+                        <span class="muted">${escapeHtml(r.vendorInfo.vendorName)} (${escapeHtml(r.vendorInfo.status)})</span>
                     </td>
-                    <td>${escapeHtml(r.qty)}</td>
+                    <td>
+                        <span class="qty-display">${escapeHtml(r.qty)}</span>
+                        <input class="qty-edit" type="text" value="${escapeHtml(r.qty)}" style="display:none; width: 80px;">
+                    </td>
                     <td>${escapeHtml(r.vendorInfo.vendorItemNo || 'N/A')}</td>
                     <td>${r.vendorInfo.unitPrice ? `$${r.vendorInfo.unitPrice.toFixed(2)}` : 'N/A'}</td>
                     <td>
@@ -614,6 +617,11 @@ $("loading-container").style.display = "block";
                             <button class="btn btn-status ${status === 'Ordered' ? 'active' : ''}" data-status="Ordered">Ordered</button>
                             <button class="btn btn-status ${status === 'Backordered' ? 'active' : ''}" data-status="Backordered">Backordered</button>
                             <button class="btn btn-status-receive" data-status="Received">Received</button>
+                        </div>
+                        <div class="edit-buttons" style="margin-top: 4px;">
+                            <button class="btn btn-small" data-edit-request-id="${r.id}">Edit Qty</button>
+                            <button class="btn btn-small primary" data-save-request-id="${r.id}" style="display:none;">Save</button>
+                            <button class="btn btn-small" data-cancel-request-id="${r.id}" style="display:none;">Cancel</button>
                         </div>
                     </td>
                 </tr>
@@ -643,7 +651,7 @@ $("loading-container").style.display = "block";
                     <thead>
                         <tr>
                             ${isOrderableGroup ? `<th><input type="checkbox" class="vendor-select-all" data-vendor-id="${vendorId}"></th>` : ''}
-                            <th>Item/Requester</th>
+                            <th>Item/Vendor</th>
                             <th>Qty</th>
                             <th>Vendor #</th>
                             <th>Price</th>
@@ -679,7 +687,6 @@ $("loading-container").style.display = "block";
                 if (p.vendorId === item.preferredVendorId) classes += ' preferred-price';
                 if (p.vendorId === cheapestPrice?.vendorId) classes += ' best-price';
                 
-                // --- EDIT BUTTON ADDED HERE ---
                 return `<span class="${classes}">
                     ${escapeHtml(p.vendorName)}: $${(p.unitPrice || 0).toFixed(2)}
                     <button class="btn btn-small" data-edit-price-id="${p.id}" style="margin-left: 8px; padding: 2px 6px; font-size: 0.7rem;">Edit</button>
@@ -799,8 +806,8 @@ $("loading-container").style.display = "block";
 
         // Close modal buttons
         document.querySelectorAll('[data-close-modal]').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const modalId = btn.dataset.closeModal;
+            btn.addEventListener('click', (e) => {
+                const modalId = e.currentTarget.dataset.closeModal;
                 if(modalId === 'catalogModal') closeCatalogModal();
                 else if (modalId) $(modalId).style.display = 'none';
             });
@@ -818,25 +825,80 @@ $("loading-container").style.display = "block";
         });
         $('showHistoryToggle').addEventListener('change', renderOrders);
         
-        // Event delegation for Orders panel (status changes, order generation)
+        // --- NEW EVENT LISTENERS for Qty Edit ---
+        function toggleQtyEdit(tr, isEditing) {
+            const qtyDisplay = tr.querySelector('.qty-display');
+            const qtyEdit = tr.querySelector('.qty-edit');
+            const editBtn = tr.querySelector('[data-edit-request-id]');
+            const saveBtn = tr.querySelector('[data-save-request-id]');
+            const cancelBtn = tr.querySelector('[data-cancel-request-id]');
+
+            qtyDisplay.style.display = isEditing ? 'none' : 'inline';
+            qtyEdit.style.display = isEditing ? 'inline' : 'none';
+            editBtn.style.display = isEditing ? 'none' : 'inline';
+            saveBtn.style.display = isEditing ? 'inline' : 'none';
+            cancelBtn.style.display = isEditing ? 'inline' : 'none';
+
+            if (!isEditing) {
+                // Reset value on cancel
+                qtyEdit.value = qtyDisplay.textContent;
+            }
+        }
+        // --- END NEW LISTENERS ---
+
+        // Event delegation for Orders panel
         $('ordersGroupContainer').addEventListener('click', async e => {
             const target = e.target;
+            const tr = target.closest('tr[data-request-id]');
+            if (!tr) return; // Exit if the click wasn't on a row-related element
             
-            // --- NEW: Listener for Price Comparison Details Toggle ---
+            const requestId = tr.dataset.requestId;
+
+            // Price Comparison Details Toggle
             if (target.dataset.toggleDetails !== undefined) {
-                const row = target.closest('tr[data-request-id]');
-                if (!row) return;
-                const requestId = row.dataset.requestId;
-                const detailsRow = document.querySelector(`tr[data-details-for="${requestId}"]`);
-                if (detailsRow) detailsRow.classList.toggle('visible');
+                const detailsRow = tr.nextElementSibling;
+                if (detailsRow && detailsRow.dataset.detailsFor === requestId) {
+                    detailsRow.classList.toggle('visible');
+                }
                 return;
             }
 
             // Status update buttons
             if (target.dataset.status) {
-                const row = target.closest('tr[data-request-id]');
-                if (!row) return;
-                await updateRequestStatus(row.dataset.requestId, target.dataset.status);
+                await updateRequestStatus(requestId, target.dataset.status);
+                return;
+            }
+            
+            // --- NEW: Qty Edit Button ---
+            if (target.dataset.editRequestId) {
+                toggleQtyEdit(tr, true);
+                return;
+            }
+            
+            // --- NEW: Qty Cancel Button ---
+            if (target.dataset.cancelRequestId) {
+                toggleQtyEdit(tr, false);
+                return;
+            }
+            
+            // --- NEW: Qty Save Button ---
+            if (target.dataset.saveRequestId) {
+                const newQty = tr.querySelector('.qty-edit').value.trim();
+                if (!newQty) {
+                    alert("Quantity cannot be empty.");
+                    return;
+                }
+                try {
+                    await updateDoc(doc(db, 'requests', requestId), {
+                        qty: newQty,
+                        updatedAt: serverTimestamp()
+                    });
+                    tr.querySelector('.qty-display').textContent = newQty; // Update display
+                    toggleQtyEdit(tr, false); // Toggle back
+                } catch (e) {
+                    console.error("Failed to update quantity:", e);
+                    alert("Error saving quantity.");
+                }
                 return;
             }
 
@@ -869,7 +931,7 @@ $("loading-container").style.display = "block";
             }
         });
 
-        // Click listener for Catalog panel (edit item, add price)
+        // Click listener for Catalog panel (edit item, add/edit price)
         $('catalogTableContainer').addEventListener('click', e => {
             const target = e.target;
             
@@ -885,7 +947,6 @@ $("loading-container").style.display = "block";
                 return;
             }
 
-            // --- ADDED THIS LISTENER BACK ---
             // Edit Price button (in price list)
             if (target.dataset.editPriceId) {
                 openPricingModal(target.dataset.editPriceId);
@@ -984,6 +1045,7 @@ $("loading-container").style.display = "block";
             $('bulkAddForm').innerHTML = '';
         };
 
+fs
         $('cancelBulkAddBtn').addEventListener('click', closeModal);
         $('closeBulkAddBtn').addEventListener('click', closeModal);
         $('addBulkItemRow').addEventListener('click', createBulkAddRow);
