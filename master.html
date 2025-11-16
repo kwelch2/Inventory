@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css"/>
   <script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
   <style>
-    :root{--bg:#f7f7f7;--card:#fff;--b:#ddd;--muted:#666;--ink:#111;--accent:#0a66ff;--bad:#b00020;--ok:#137333; --ok-light: #e7f7ee;}
+    :root{--bg:#f7f7ff;--card:#fff;--b:#ddd;--muted:#666;--ink:#111;--accent:#0a66ff;--bad:#b00020;--ok:#137333; --ok-light: #e7f7ee;}
     *{box-sizing:border-box}
     body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:var(--bg);color:var(--ink)}
     .wrap{max-width:1400px;margin:0 auto;padding:16px}
@@ -89,13 +89,29 @@
         background-color: #fdecea;
         border-color: var(--bad);
     }
+
+    #printOrderModal .print-header { display: none; }
     
-    #printOrderModal table { font-size: 12px; }
-    #printOrderModal th, #printOrderModal td { padding: 6px 8px; border: 1px solid #ccc; }
     @media print {
-      body, .modal-content { margin: 0; padding: 0; box-shadow: none; border: none; }
-      .modal-header button, .modal-footer { display: none; }
-      #printOrderModal { display: block !important; position: static; width: 100%; height: auto; overflow: visible; background: #fff; }
+      body, .modal, .modal-content { margin: 0; padding: 0; box-shadow: none; border: none; }
+      .modal-header button, .modal-footer, .no-print { display: none !important; }
+      #printOrderModal { display: block !important; position: static; width: 100% !important; height: auto; overflow: visible; background: #fff; }
+      #printOrderModal .modal-content { width: 100% !important; max-width: 100% !important; border: none; }
+      #printOrderModal .print-header { 
+          display: flex; 
+          align-items: center; 
+          gap: 20px; 
+          margin-bottom: 20px; 
+          border-bottom: 2px solid #000; 
+          padding-bottom: 10px;
+      }
+      #printOrderModal .print-header img { max-width: 100px; }
+      #printOrderModal .print-header .address { font-size: 10pt; line-height: 1.4; }
+      #printOrderModal .modal-body { display: block !important; }
+      #printOrderModal h2, #printOrderModal h3 { margin-top: 1.5rem; margin-bottom: 0.5rem; }
+      #printOrderModal table { font-size: 10pt; margin-top: 0; }
+      #printOrderModal th, #printOrderModal td { padding: 4px 6px; border: 1px solid #ccc; }
+      #printOrderModal th { background-color: #eee; }
     }
   </style>
 </head>
@@ -135,6 +151,7 @@
         <h2>Orders & Requests</h2>
         <div class="row">
             <button class="btn primary" id="showAddItemModal">+ Add Item to Order</button>
+            <button class="btn primary" id="generateItemOrderBtn" style="display: none;">Generate Order from Selected</button>
             <span class="spacer" style="flex: 1;"></span>
             <div class="view-toggle-wrap" style="margin-left: 1rem;">
                 <button class="btn view-btn active" data-view="vendor">View by Vendor</button>
@@ -206,7 +223,7 @@
             <option value="Box">Box</option>
             <option value="Each">Each</option>
             <option value="Case">Case</option>
-            <option value-"Kit">Kit</option>
+            <option value="Kit">Kit</option>
         </select>
       </label>
       <label>Qty per Unit <input id="editPackSize" type="number" min="1"></label>
@@ -289,13 +306,24 @@
 
 <div id="printOrderModal" class="modal">
   <div class="modal-content" style="max-width: 800px;">
-    <div class="modal-header">
+    <div class="modal-header no-print">
       <h2 id="printOrderTitle">Order List</h2>
-      <span class="close-btn" data-close-modal="printOrderModal">&times;</span>
+      <span class="close-btn no-print" data-close-modal="printOrderModal">&times;</span>
     </div>
+    
+    <div class="print-header" id="printOrderHeader">
+        <img src="Logo-1.jpg" alt="Logo" style="max-height: 100px; max-width: 100px;" />
+        <div class="address">
+            <strong>Gem County FIRE-EMS</strong><br>
+            Station 4: 330 E. Main st<br>
+            Emmett, Idaho 83617<br>
+            Phone: 208-365-3684
+        </div>
+    </div>
+    
     <div class="modal-body" style="display: block;" id="printOrderBody">
       </div>
-    <div class="modal-footer">
+    <div class="modal-footer no-print">
       <button class="btn" data-close-modal="printOrderModal">Close</button>
       <button class="btn primary" id="printOrderBtn">Print</button>
     </div>
@@ -562,8 +590,10 @@ $("loading-container").style.display = "block";
     // Main render function, decides which view to show
     function renderOrders() {
         if (state.orderViewMode === 'vendor') {
+            $('generateItemOrderBtn').style.display = 'none';
             renderOrdersByVendor();
         } else {
+            $('generateItemOrderBtn').style.display = 'inline-block';
             renderOrdersByItem();
         }
     }
@@ -629,8 +659,11 @@ $("loading-container").style.display = "block";
                 </div>`;
             }).join('') : '<div class="muted">No prices found.</div>';
             
+            const isQtyEditable = status === 'Open' || status === 'Backordered';
+
             return `
                 <tr data-request-id="${r.id}">
+                    <td><input type="checkbox" class="item-order-checkbox" data-request-id="${r.id}"></td>
                     <td>
                         <strong>${escapeHtml(catItem.itemName)}</strong>
                         <button class="btn" data-toggle-details style="margin-left: 8px; padding: 2px 6px;">▼</button>
@@ -639,6 +672,7 @@ $("loading-container").style.display = "block";
                     </td>
                     <td>
                         <input class="quick-qty-edit" type="text" value="${escapeHtml(r.qty)}" 
+                               ${isQtyEditable ? '' : 'disabled'}
                                data-request-id="${r.id}" 
                                data-original-value="${escapeHtml(r.qty)}" 
                                style="width: 70px; text-align: right; padding-right: 5px;">
@@ -659,7 +693,7 @@ $("loading-container").style.display = "block";
                     </td>
                 </tr>
                 <tr class="details-row" data-details-for="${r.id}">
-                    <td colspan="5" class="details-cell">
+                    <td colspan="6" class="details-cell">
                         <h4>All Vendor Pricing for ${escapeHtml(catItem.itemName)}</h4>
                         ${allPricesHtml}
                     </td>
@@ -670,6 +704,7 @@ $("loading-container").style.display = "block";
             <table class="vendor-group-table">
                 <thead>
                     <tr>
+                        <th><input type="checkbox" class="item-select-all"></th>
                         <th>Item/Vendor</th>
                         <th>Qty</th>
                         <th>Vendor #</th>
@@ -702,16 +737,20 @@ $("loading-container").style.display = "block";
             const catItem = state.catalogMap.get(r.catalogId);
             if (!catItem) continue; // Skip items not in catalog
 
-            // Pass overrideVendorId to findBestVendor
             const vendorInfo = findBestVendor(r.catalogId, catItem.preferredVendorId, r.overrideVendorId);
             const augmentedRequest = { ...r, vendorInfo, catItem };
 
             let groupId, groupName;
             
-            // If status is 'Open', group by vendor. Otherwise, group by status.
             if (r.status === 'Open' || !r.status) {
-                groupId = vendorInfo.vendorId;
-                groupName = vendorInfo.vendorName;
+                // *** FIX HERE: Use overrideId for grouping if it exists ***
+                if (r.overrideVendorId) {
+                    groupId = r.overrideVendorId;
+                    groupName = state.vendorMap.get(r.overrideVendorId) || 'Unknown Vendor';
+                } else {
+                    groupId = vendorInfo.vendorId;
+                    groupName = vendorInfo.vendorName;
+                }
             } else {
                 groupId = r.status; // "Ordered" or "Backordered"
                 groupName = r.status;
@@ -755,7 +794,7 @@ $("loading-container").style.display = "block";
             return `
                 <tr>
                     <td><strong>${escapeHtml(itemName)}</strong><br><span class="muted">${escapeHtml(r.requesterEmail)}</span></td>
-                    <td>${escapeHtml(r.qty)}</td>
+                    <td>${escapeHtml(r.qty)} ${escapeHtml(catItem?.unit || '')}</td>
                     <td>${escapeHtml(r.status)}</td>
                     <td>${receivedDate}</td>
                 </tr>`;
@@ -795,6 +834,8 @@ $("loading-container").style.display = "block";
             }).join('') : '<div class="muted">No prices found.</div>';
             // --- End Details Logic ---
             
+            const isQtyEditable = status === 'Open' || status === 'Backordered';
+
             return `
                 <tr data-request-id="${r.id}">
                     ${isOrderableGroup ? `<td><input type="checkbox" class="order-item-checkbox" data-request-id="${r.id}"></td>` : ''}
@@ -806,6 +847,7 @@ $("loading-container").style.display = "block";
                     </td>
                     <td>
                         <input class="quick-qty-edit" type="text" value="${escapeHtml(r.qty)}" 
+                               ${isQtyEditable ? '' : 'disabled'}
                                data-request-id="${r.id}" 
                                data-original-value="${escapeHtml(r.qty)}" 
                                style="width: 70px; text-align: right; padding-right: 5px;">
@@ -962,11 +1004,10 @@ $("loading-container").style.display = "block";
         });
     }
 
-    function showPrintModal(vendorName, selectedRequests) {
-        const modal = $('printOrderModal');
-        $('printOrderTitle').textContent = `Order List for ${vendorName}`;
-        
-        const rows = selectedRequests.map(r => {
+    // This function now generates HTML for ONE vendor.
+    // It's re-used by the "master order" function.
+    function generateVendorOrderHtml(vendorName, requests) {
+         const rows = requests.map(r => {
             const catItem = state.catalogMap.get(r.catalogId);
             const vendorInfo = findBestVendor(r.catalogId, catItem.preferredVendorId, r.overrideVendorId);
             return `
@@ -978,11 +1019,9 @@ $("loading-container").style.display = "block";
             `;
         }).join('');
 
-        $('printOrderBody').innerHTML = `
-            <p><strong>Vendor:</strong> ${escapeHtml(vendorName)}</p>
-            <p><strong>Date:</strong> ${new Date().toLocaleDateString()}</p>
-            <p><strong>Requested By:</strong> ${escapeHtml(state.user.email)}</p>
-            <table style="width: 100%; border-collapse: collapse; margin-top: 1rem;">
+        return `
+            <h3>Order for: ${escapeHtml(vendorName)}</h3>
+            <table style="width: 100%; border-collapse: collapse; margin-top: 1rem; margin-bottom: 2rem;">
                 <thead>
                     <tr style="background-color: #f0f0f0;">
                         <th>Item Name</th>
@@ -994,8 +1033,79 @@ $("loading-container").style.display = "block";
                     ${rows}
                 </tbody>
             </table>`;
+    }
+    
+    // This function prepares the print modal for a single vendor order
+    function showPrintModal(vendorName, selectedRequests) {
+        const modal = $('printOrderModal');
+        $('printOrderTitle').textContent = `Order List for ${vendorName}`;
         
+        const headerHtml = `
+            <p><strong>Vendor:</strong> ${escapeHtml(vendorName)}</p>
+            <p><strong>Date:</strong> ${new Date().toLocaleDateString()}</p>
+            <p><strong>Requested By:</strong> ${escapeHtml(state.user.email)}</p>
+        `;
+        
+        const tableHtml = generateVendorOrderHtml(vendorName, selectedRequests);
+        $('printOrderBody').innerHTML = headerHtml + tableHtml;
         modal.style.display = 'flex';
+    }
+
+    // This function prepares the print modal for a MASTER order (multiple vendors)
+    function showMasterOrderModal(groupedRequests) {
+        const modal = $('printOrderModal');
+        $('printOrderTitle').textContent = `Master Order List`;
+        
+        let finalHtml = `
+            <p><strong>Date:</strong> ${new Date().toLocaleDateString()}</p>
+            <p><strong>Requested By:</strong> ${escapeHtml(state.user.email)}</p>
+        `;
+
+        groupedRequests.forEach((requests, vendorId) => {
+            const vendorName = state.vendorMap.get(vendorId) || 'Unassigned';
+            finalHtml += generateVendorOrderHtml(vendorName, requests);
+        });
+
+        $('printOrderBody').innerHTML = finalHtml;
+        modal.style.display = 'flex';
+    }
+
+    // New print function that uses a new window
+    function handlePrint() {
+        const modal = $('printOrderModal');
+        const title = $('printOrderTitle').textContent;
+        const header = $('printOrderHeader').innerHTML;
+        const body = $('printOrderBody').innerHTML;
+
+        const printWindow = window.open('', '', 'height=800,width=800');
+        printWindow.document.write('<html><head><title>Print Order</title>');
+        // Inject styles
+        printWindow.document.write(`
+            <style>
+                body { font-family: system-ui, -apple-system, sans-serif; }
+                table { width: 100%; border-collapse: collapse; font-size: 10pt; margin-top: 0; }
+                th, td { padding: 4px 6px; border: 1px solid #ccc; text-align: left; }
+                th { background-color: #eee; }
+                h2, h3 { margin-top: 1.5rem; margin-bottom: 0.5rem; }
+                .print-header { display: flex; align-items: center; gap: 20px; margin-bottom: 20px; border-bottom: 2px solid #000; padding-bottom: 10px; }
+                .print-header img { max-width: 100px; }
+                .print-header .address { font-size: 10pt; line-height: 1.4; }
+                @page { size: auto; margin: 0.5in; }
+            </style>
+        `);
+        printWindow.document.write('</head><body>');
+        printWindow.document.write(`<h2>${escapeHtml(title)}</h2>`);
+        printWindow.document.write(`<div class="print-header">${header}</div>`);
+        printWindow.document.write(body);
+        printWindow.document.write('</body></html>');
+        printWindow.document.close();
+        printWindow.focus();
+        
+        // Timeout allows images to load before print dialog
+        setTimeout(() => {
+            printWindow.print();
+            printWindow.close();
+        }, 250);
     }
     
     function setupAllModalsAndActions() {
@@ -1013,7 +1123,8 @@ $("loading-container").style.display = "block";
             });
         });
 
-        $('printOrderBtn').addEventListener('click', () => window.print());
+        // Updated Print Button
+        $('printOrderBtn').addEventListener('click', handlePrint);
 
         // Listener for Order filtering
         document.querySelector('#panel-orders .row').addEventListener('click', e => {
@@ -1031,14 +1142,46 @@ $("loading-container").style.display = "block";
         });
         $('showHistoryToggle').addEventListener('change', renderOrders);
         
+        // Generate Order from "View by Item"
+        $('generateItemOrderBtn').addEventListener('click', () => {
+            const selectedCheckboxes = document.querySelectorAll('.item-order-checkbox:checked');
+            if (selectedCheckboxes.length === 0) {
+                alert("Please select items to include in the order.");
+                return;
+            }
+
+            const selectedRequestIds = Array.from(selectedCheckboxes).map(cb => cb.dataset.requestId);
+            const selectedRequests = state.requests
+                .filter(r => selectedRequestIds.includes(r.id))
+                .map(r => {
+                    const catItem = state.catalogMap.get(r.catalogId);
+                    const vendorInfo = findBestVendor(r.catalogId, catItem?.preferredVendorId, r.overrideVendorId);
+                    return { ...r, catItem, vendorInfo };
+                });
+
+            // Group the selected items by their *final* vendorId
+            const groupedRequests = new Map();
+            for (const r of selectedRequests) {
+                const vendorId = r.vendorInfo.vendorId;
+                if (!groupedRequests.has(vendorId)) {
+                    groupedRequests.set(vendorId, []);
+                }
+                groupedRequests.get(vendorId).push(r);
+            }
+            
+            showMasterOrderModal(groupedRequests);
+        });
+
+
         // Event delegation for Orders panel CLICK actions
         $('ordersGroupContainer').addEventListener('click', async e => {
             const target = e.target;
             
-            if (target.classList.contains('vendor-select-all')) {
-                const groupContainer = target.closest('.vendor-group');
+            if (target.classList.contains('vendor-select-all') || target.classList.contains('item-select-all')) {
+                const groupContainer = target.closest('.vendor-group, .vendor-group-table');
                 const isChecked = target.checked;
-                groupContainer.querySelectorAll('.order-item-checkbox').forEach(cb => cb.checked = isChecked);
+                const checkboxClass = state.orderViewMode === 'vendor' ? '.order-item-checkbox' : '.item-order-checkbox';
+                groupContainer.querySelectorAll(checkboxClass).forEach(cb => cb.checked = isChecked);
                 return;
             }
 
@@ -1404,7 +1547,7 @@ $("loading-container").style.display = "block";
         const vendorSelect = $('priceVendorSelect');
         
         itemSelect.innerHTML = state.catalog.map(i => `<option value="${i.id}">${escapeHtml(i.itemName)}</option>`).join('');
-        vendorSelect.innerHTML = state.vendors.map(v => `<option value="${v.id}">${escapeHtml(v.name)}</option>`).join('');
+        vendorSelect.innerHTML = state.vendors.map(v => `<option value="${v.id}">${escapeHtml(v.name)}</option>').join('');
         
         if (priceId) { // Editing existing price
             itemSelect.value = price.catalogId;
@@ -1548,7 +1691,7 @@ $("loading-container").style.display = "block";
                 }
             }
             if (e.target.dataset.deleteCategoryId && confirm('Are you sure you want to delete this category?')) {
-                await deleteDoc(doc(db, 'categories', e.target.dataset.deleteCategoryId)); 
+                await deleteDoc(doc(db, 'categories', e.g.dataset.deleteCategoryId)); 
                 await initializeStaticData();
             }
         });
