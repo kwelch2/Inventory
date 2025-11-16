@@ -1680,7 +1680,7 @@ $("loading-container").style.display = "block";
             }
         });
     }
-   function setupCategoryActions() {
+    function setupCategoryActions() {
         $('categoriesTable').addEventListener('click', async e => {
             if (e.target.id === 'addCategoryBtn') {
                 const name = $('newCategoryName').value.trim();
@@ -1691,7 +1691,7 @@ $("loading-container").style.display = "block";
                 }
             }
             if (e.target.dataset.deleteCategoryId && confirm('Are you sure you want to delete this category?')) {
-                // The fix is here: e.g has been changed to e.target
+                // ** THIS IS THE JAVASCRIPT FIX **
                 await deleteDoc(doc(db, 'categories', e.target.dataset.deleteCategoryId)); 
                 await initializeStaticData();
             }
