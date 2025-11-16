@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css"/>
   <script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
   <style>
-    :root{--bg:#f7f7f7;--card:#fff;--b:#ddd;--muted:#666;--ink:#111;--accent:#0a66ff;--bad:#b00020;--ok:#137333}
+    :root{--bg:#f7f7f7;--card:#fff;--b:#ddd;--muted:#666;--ink:#111;--accent:#0a66ff;--bad:#b00020;--ok:#137333; --ok-light: #e7f7ee;}
     *{box-sizing:border-box}
     body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:var(--bg);color:var(--ink)}
     .wrap{max-width:1400px;margin:0 auto;padding:16px}
@@ -29,6 +29,7 @@
     .btn:disabled { background: #eee; cursor: not-allowed; }
     .btn.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
     .btn.danger{background:var(--bad); color: white; border-color: var(--bad);}
+    .btn.ok { background-color: var(--ok-light); border-color: var(--ok); color: var(--ok); }
     .btn-small { padding: 4px 8px; font-size: 0.8rem; }
     table{width:100%;border-collapse:collapse;font-size:14px}
     th,td{padding:8px;border-top:1px solid var(--b);text-align:left;vertical-align:top}
@@ -38,8 +39,8 @@
     .kvd{font-size:12px;color:#555}
     /* Stack modals correctly */
     .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.4); align-items: center; justify-content: center;}
-    /* Pricing modal needs to be higher than Catalog modal */
     #pricingModal { z-index: 1010; } 
+    #changeVendorModal { z-index: 1010; }
     
     .modal-content { background-color: #fefefe; padding: 20px; border: 1px solid #888; width: 80%; max-width: 700px; border-radius: 12px; }
     .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
@@ -71,6 +72,24 @@
     .vendor-group-table .details-row td { border-top: 1px dashed var(--b); }
     .close-btn { font-size: 28px; font-weight: bold; cursor: pointer; color: #888; }
     .close-btn:hover { color: #000; }
+    
+    .view-toggle-wrap .btn { border-radius: 0; border-right-width: 0; }
+    .view-toggle-wrap .btn:first-child { border-radius: 10px 0 0 10px; }
+    .view-toggle-wrap .btn:last-child { border-radius: 0 10px 10px 0; border-right-width: 1px; }
+    .view-toggle-wrap .btn.active { background: var(--accent); color: white; }
+    
+    .quick-qty-edit {
+        transition: background-color 0.2s, border-color 0.2s;
+    }
+    .quick-qty-edit.success { 
+        background-color: var(--ok-light); 
+        border-color: var(--ok); 
+    }
+    .quick-qty-edit.error {
+        background-color: #fdecea;
+        border-color: var(--bad);
+    }
+    
     #printOrderModal table { font-size: 12px; }
     #printOrderModal th, #printOrderModal td { padding: 6px 8px; border: 1px solid #ccc; }
     @media print {
@@ -116,8 +135,11 @@
         <h2>Orders & Requests</h2>
         <div class="row">
             <button class="btn primary" id="showAddItemModal">+ Add Item to Order</button>
-            <button class="btn" id="showBulkAddModal">+ Bulk Add Items</button>
             <span class="spacer" style="flex: 1;"></span>
+            <div class="view-toggle-wrap" style="margin-left: 1rem;">
+                <button class="btn view-btn active" data-view="vendor">View by Vendor</button>
+                <button class="btn view-btn" data-view="item">View by Item</button>
+            </div>
             <strong style="margin-left: 2rem;">Filter by Status:</strong>
             <button class="btn filter-btn active" data-status="All">All Active</button>
             <button class="btn filter-btn" data-status="Open">Open</button>
@@ -168,40 +190,31 @@
   </div>
 </div>
 
-<div id="bulkAddModal" class="modal">
-  <div class="modal-content" style="max-width: 800px;">
-    <div class="modal-header">
-      <h2>Bulk Add to Order List</h2>
-      <span class="close-btn" id="closeBulkAddBtn">&times;</span>
-    </div>
-    <div class="modal-body" id="bulkAddForm" style="grid-template-columns: 1fr; max-height: 60vh; overflow-y: auto; display: block;">
-      </div>
-    <div style="margin-top: 1rem;">
-      <button class="btn" id="addBulkItemRow">+ Add Row</button>
-    </div>
-    <div class="modal-footer">
-      <span id="bulkAddStatus" class="muted" style="float: left; margin-top: 8px;"></span>
-      <button class="btn" id="cancelBulkAddBtn">Cancel</button>
-      <button class="btn primary" id="saveBulkAddBtn">Add All Items to Order</button>
-    </div>
-  </div>
-</div>
-
 <div id="catalogModal" class="modal">
   <div class="modal-content" style="max-width: 800px;">
     <div class="modal-header"><h2 id="catalogModalTitle">Edit Catalog Item</h2><span class="close-btn" data-close-modal="catalogModal">&times;</span></div>
-    <div class="modal-body" style="grid-template-columns: 1fr 1fr;">
-      <label>Item Name <input id="editItemName"></label>
+    <div class="modal-body" style="grid-template-columns: 2fr 1fr;">
+      
+      <label style="grid-column: 1 / -1;">Item Name <input id="editItemName"></label>
+      
       <label>Category <select id="editCategorySelect"><option value="">Loading...</option></select></label>
       <label>Item Ref # <input id="editItemRef"></label>
-      <label>PAR Level <input id="editParLevel" type="number" min="0" value="0"></label>
-      <label>Unit <input id="editUnit"></label>
-      <label>Pack Size <input id="editPackSize" type="number" min="1"></label>
-      <label>Preferred Vendor <select id="editPreferredVendorSelect"><option value="">None</option></select></label>
-      <label style="display: flex; align-items: center; gap: 8px;"><input id="editIsActive" type="checkbox"> Is Active</label>
       
-      <div style="grid-column: 1 / -1;">
-        <label>Alt Names</label>
+      <label>Unit (e.g., Box, Each)
+        <select id="editUnit">
+            <option value="">-- Select Unit --</option>
+            <option value="Box">Box</option>
+            <option value="Each">Each</option>
+            <option value="Case">Case</option>
+            <option value-"Kit">Kit</option>
+        </select>
+      </label>
+      <label>Qty per Unit <input id="editPackSize" type="number" min="1"></label>
+
+      <label>PAR Level <input id="editParLevel" type="number" min="0" value="0"></label>
+      
+      <div style="grid-column: 1 / -1; margin-top: 1rem;">
+        <label>Alt Names (for search)</label>
         <div id="altNameList" class="list-container"></div>
         <div class="row" style="margin-bottom: 0;">
           <input id="newAltName" placeholder="Add alternate name..." style="flex: 1;">
@@ -222,14 +235,14 @@
 
       <div style="grid-column: 1 / -1; margin-top: 1rem; border-top: 1px solid #eee; padding-top: 1rem;">
         <h3 style="margin-bottom: 8px;">Vendor Pricing</h3>
-        <div id="catalogItemPricingTable" style="background:#f9f9f9; padding:10px; border-radius:8px; margin-bottom:8px;"></div>
+        <div id="catalogItemPricingTable" style="background:#f9f9f9; padding:10px; border-radius:8px; margin-bottom:8px; max-height: 200px; overflow-y: auto;"></div>
         <button id="addPriceInModalBtn" class="btn primary btn-small">+ Add Vendor Price</button>
       </div>
 
     </div>
     <div class="modal-footer">
       <button class="btn" data-close-modal="catalogModal">Cancel</button>
-      <button class="btn danger" id="inactivateCatalogItem" style="float: left;">Inactivate</button>
+      <button class="btn" id="toggleActiveBtn" style="float: left;">Inactivate</button>
       <button class="btn primary" id="saveCatalogEdit">Save Changes</button>
     </div>
   </div>
@@ -241,7 +254,7 @@
     <div class="modal-body">
       <label>Item <select id="priceItemSelect"></select></label>
       <label>Vendor <select id="priceVendorSelect"></select></label>
-      <label>Vendor # <input id="priceSku"></label>
+      <label>Vendor Order # <input id="priceSku"></label>
       <label>Unit Price <input id="priceUnitPrice" type="number" step="0.01"></label>
       <label>Vendor Status
         <select id="priceVendorStatus">
@@ -250,13 +263,26 @@
           <option value="Out of Stock">Out of Stock</option>
         </select>
       </label>
-      <label style="display: flex; align-items: center; gap: 8px;">
-        <input id="priceSetPreferred" type="checkbox" style="width: auto;"> Set as Preferred Vendor for this Item
-      </label>
     </div>
     <div class="modal-footer">
       <button class="btn" data-close-modal="pricingModal">Cancel</button>
       <button class="btn primary" id="savePricingEdit">Save Price</button>
+    </div>
+  </div>
+</div>
+
+<div id="changeVendorModal" class="modal">
+  <div class="modal-content" style="max-width: 500px;">
+    <div class="modal-header"><h2 id="changeVendorTitle">Override Vendor</h2><span class="close-btn" data-close-modal="changeVendorModal">&times;</span></div>
+    <div class="modal-body" style="grid-template-columns: 1fr;">
+      <p>Move request for <strong id="changeVendorItemName">...</strong> to a different vendor for this order.</p>
+      <label>New Vendor
+        <select id="changeVendorSelect"></select>
+      </label>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" data-close-modal="changeVendorModal">Cancel</button>
+      <button class="btn primary" id="saveVendorOverrideBtn">Save</button>
     </div>
   </div>
 </div>
@@ -284,7 +310,7 @@ import {
   initializeFirestore, 
   collection, getDocs, doc, setDoc, getDoc, addDoc, updateDoc, deleteDoc, 
   writeBatch, serverTimestamp, query, where, orderBy, onSnapshot,
-  persistentLocalCache, persistentMultipleTabManager 
+  persistentLocalCache, persistentMultipleTabManager, deleteField
 } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -304,7 +330,8 @@ function resetInactivityTimer() {
     clearTimeout(inactivityTimeout);
     if (state.user) {
         inactivityTimeout = setTimeout(() => {
-            alert("Session expired due to inactivity.");
+            console.log("Inactivity timeout. Logging out.");
+            alert("Session expired due to inactivity. Please log in again.");
             signOut(auth);
         }, INACTIVITY_LIMIT);
     }
@@ -317,15 +344,28 @@ const db = initializeFirestore(app, {
   }),
 });
 
-let state = { user: null, userRole: null, catalog: [], vendors: [], categories: [], pricingAll: [], requests: [], units: [], compartments: [], catalogMap: new Map(), vendorMap: new Map(), categoryMap: new Map(), pricingMap: new Map() };
+let state = { 
+    user: null, 
+    userRole: null, 
+    catalog: [], 
+    vendors: [], 
+    categories: [], 
+    pricingAll: [], 
+    requests: [], 
+    units: [], 
+    compartments: [], 
+    catalogMap: new Map(), 
+    vendorMap: new Map(), 
+    categoryMap: new Map(), 
+    pricingMap: new Map(),
+    orderViewMode: 'vendor' // 'vendor' or 'item'
+};
 let addItemChoices;
-let bulkChoicesInstances = [];
-const catalogOptionsForBulk = () => state.catalog
-    .filter(c => c.isActive !== false)
-    .map(c => ({ value: c.id, label: c.itemName }));
 const $ = id => document.getElementById(id);
 let appInitialized = false;
 let isScannerActive = false;
+let currentRequestIdToChange = null; // For vendor override modal
+
 $("loading-container").style.display = "block";
 
     const escapeHtml = (s = "") => String(s).replace(/[&<>"']/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
@@ -439,14 +479,37 @@ $("loading-container").style.display = "block";
         });
     }
 
-    function findBestVendor(catalogId, preferredVendorId) {
+    // This function now respects `overrideVendorId` first
+    function findBestVendor(catalogId, preferredVendorId, overrideVendorId) {
         const prices = (state.pricingMap.get(catalogId) || [])
             .map(p => ({...p, vendorName: state.vendorMap.get(p.vendorId) || 'Unknown Vendor' }))
             .sort((a,b) => (a.unitPrice || Infinity) - (b.unitPrice || Infinity));
+
+        // 1. Check for manual override
+        if (overrideVendorId) {
+            const overridePrice = prices.find(p => p.vendorId === overrideVendorId);
+            if (overridePrice) {
+                 return {
+                    vendorId: overridePrice.vendorId,
+                    vendorName: overridePrice.vendorName,
+                    vendorItemNo: overridePrice.vendorItemNo || 'N/A',
+                    unitPrice: overridePrice.unitPrice,
+                    status: 'Manual Override'
+                };
+            }
+            // Fallback if override vendor has no price info (but still use it)
+            return {
+                vendorId: overrideVendorId,
+                vendorName: state.vendorMap.get(overrideVendorId) || 'Unknown Vendor',
+                vendorItemNo: 'N/A',
+                unitPrice: 0,
+                status: 'Manual Override'
+            };
+        }
         
         const preferredPrice = preferredVendorId ? prices.find(p => p.vendorId === preferredVendorId) : null;
         
-        // 1. Try Preferred Vendor if in stock
+        // 2. Try Preferred Vendor if in stock
         if (preferredPrice && (preferredPrice.vendorStatus === 'In Stock' || !preferredPrice.vendorStatus)) {
             return {
                 vendorId: preferredPrice.vendorId,
@@ -457,7 +520,7 @@ $("loading-container").style.display = "block";
             };
         }
         
-        // 2. Find cheapest vendor that is "In Stock"
+        // 3. Find cheapest vendor that is "In Stock"
         const cheapestInStock = prices.find(p => p.vendorStatus === 'In Stock' || !p.vendorStatus);
         if (cheapestInStock) {
             return {
@@ -469,7 +532,7 @@ $("loading-container").style.display = "block";
             };
         }
 
-        // 3. Fallback: Use preferred vendor (even if backordered)
+        // 4. Fallback: Use preferred vendor (even if backordered)
         if (preferredPrice) {
             return {
                 vendorId: preferredPrice.vendorId,
@@ -480,7 +543,7 @@ $("loading-container").style.display = "block";
             };
         }
         
-        // 4. Fallback: Use cheapest vendor (even if backordered/out of stock)
+        // 5. Fallback: Use cheapest vendor (even if backordered/out of stock)
         const cheapestOverall = prices[0];
         if (cheapestOverall) {
             return {
@@ -492,30 +555,135 @@ $("loading-container").style.display = "block";
             };
         }
 
-        // 5. No pricing info
+        // 6. No pricing info
         return { vendorId: 'unassigned', vendorName: 'Unassigned / No Pricing', vendorItemNo: 'N/A', unitPrice: 0, status: 'No Pricing' };
     }
     
+    // Main render function, decides which view to show
     function renderOrders() {
-        const container = $('ordersGroupContainer');
-        container.innerHTML = ''; // Clear container
+        if (state.orderViewMode === 'vendor') {
+            renderOrdersByVendor();
+        } else {
+            renderOrdersByItem();
+        }
+    }
+
+    function getFilteredRequests() {
         const showHistory = $('showHistoryToggle').checked;
         const activeFilter = document.querySelector('.filter-btn.active')?.dataset.status || 'All';
         
-        const requestsToProcess = state.requests.filter(r => {
+        return state.requests.filter(r => {
             const status = r.status || 'Open';
-            const isHistoryStatus = status === 'Received' || status === 'Completed';
-            if (showHistory) {
-                return isHistoryStatus;
-            }
-            if (isHistoryStatus) {
-                return false; 
-            }
-            if (activeFilter === 'All') {
-                return true;
-            }
+            const isHistoryStatus = ['Received', 'Completed', 'Closed'].includes(status);
+            
+            if (showHistory) return isHistoryStatus;
+            if (isHistoryStatus) return false; 
+            if (activeFilter === 'All') return true;
             return status === activeFilter;
         });
+    }
+
+    function renderOrdersByItem() {
+        const container = $('ordersGroupContainer');
+        const requestsToProcess = getFilteredRequests();
+        
+        const sortOrder = { "Open": 1, "Backordered": 2, "Pending": 2, "Ordered": 3 };
+        requestsToProcess.sort((a, b) => {
+            const itemA = (state.catalogMap.get(a.catalogId)?.itemName || a.otherItemName || 'Z').toLowerCase();
+            const itemB = (state.catalogMap.get(b.catalogId)?.itemName || b.otherItemName || 'Z').toLowerCase();
+            if (itemA !== itemB) return itemA.localeCompare(itemB);
+            const aStatus = a.status || "Open";
+            const bStatus = b.status || "Open";
+            return (sortOrder[aStatus] || 99) - (sortOrder[bStatus] || 99);
+        });
+
+        if (requestsToProcess.length === 0) {
+            const msg = $('showHistoryToggle').checked ? 'No history found.' : 'No active requests found.';
+            container.innerHTML = `<p class="muted">${msg}</p>`;
+            return;
+        }
+
+        if ($('showHistoryToggle').checked) {
+             container.innerHTML = renderHistoryTable(requestsToProcess);
+             return;
+        }
+        
+        const tableRows = requestsToProcess.map(r => {
+            const status = r.status || 'Open';
+            const catItem = state.catalogMap.get(r.catalogId);
+            if (!catItem) return ''; // Skip items not in catalog
+
+            const vendorInfo = findBestVendor(r.catalogId, catItem.preferredVendorId, r.overrideVendorId);
+            const allPrices = (state.pricingMap.get(catItem.id) || [])
+                .map(p => ({...p, vendorName: state.vendorMap.get(p.vendorId) || 'N/A'}))
+                .sort((a,b) => (a.unitPrice || Infinity) - (b.unitPrice || Infinity));
+            const cheapestPrice = allPrices[0];
+            
+            const allPricesHtml = allPrices.length > 0 ? allPrices.map(p => {
+                let classes = 'price-tag';
+                if (p.vendorId === catItem.preferredVendorId) classes += ' preferred-price';
+                if (p.vendorId === cheapestPrice?.vendorId) classes += ' best-price';
+                
+                return `<div class="${classes}">
+                    ${escapeHtml(p.vendorName)}: $${(p.unitPrice || 0).toFixed(2)} (#${escapeHtml(p.vendorItemNo)}) - <em>${escapeHtml(p.vendorStatus || 'In Stock')}</em>
+                </div>`;
+            }).join('') : '<div class="muted">No prices found.</div>';
+            
+            return `
+                <tr data-request-id="${r.id}">
+                    <td>
+                        <strong>${escapeHtml(catItem.itemName)}</strong>
+                        <button class="btn" data-toggle-details style="margin-left: 8px; padding: 2px 6px;">▼</button>
+                        <br>
+                        <span class="muted">${escapeHtml(vendorInfo.vendorName)} (${escapeHtml(vendorInfo.status)})</span>
+                    </td>
+                    <td>
+                        <input class="quick-qty-edit" type="text" value="${escapeHtml(r.qty)}" 
+                               data-request-id="${r.id}" 
+                               data-original-value="${escapeHtml(r.qty)}" 
+                               style="width: 70px; text-align: right; padding-right: 5px;">
+                        <span class="muted" style="margin-left: 5px;">${escapeHtml(catItem.unit || 'Each')}</span>
+                    </td>
+                    <td>${vendorInfo.vendorItemNo || 'N/A'}</td>
+                    <td>${vendorInfo.unitPrice ? `$${vendorInfo.unitPrice.toFixed(2)}` : 'N/A'}</td>
+                    <td>
+                        <div class="status-buttons">
+                            <button class="btn btn-status ${status === 'Open' ? 'active' : ''}" data-status="Open">Open</button>
+                            <button class="btn btn-status ${status === 'Ordered' ? 'active' : ''}" data-status="Ordered">Ordered</button>
+                            <button class="btn btn-status ${status === 'Backordered' ? 'active' : ''}" data-status="Backordered">Backordered</button>
+                            <button class="btn btn-status-receive" data-status="Received">Received</button>
+                        </div>
+                        <div class="edit-buttons" style="margin-top: 4px;">
+                            ${status === 'Open' ? `<button class="btn btn-small" data-change-vendor-id="${r.id}">Change Vendor</button>` : ''}
+                        </div>
+                    </td>
+                </tr>
+                <tr class="details-row" data-details-for="${r.id}">
+                    <td colspan="5" class="details-cell">
+                        <h4>All Vendor Pricing for ${escapeHtml(catItem.itemName)}</h4>
+                        ${allPricesHtml}
+                    </td>
+                </tr>`;
+        }).join('');
+
+        container.innerHTML = `
+            <table class="vendor-group-table">
+                <thead>
+                    <tr>
+                        <th>Item/Vendor</th>
+                        <th>Qty</th>
+                        <th>Vendor #</th>
+                        <th>Price</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>${tableRows}</tbody>
+            </table>`;
+    }
+
+    function renderOrdersByVendor() {
+        const container = $('ordersGroupContainer');
+        const requestsToProcess = getFilteredRequests();
 
         const sortOrder = { "Open": 1, "Backordered": 2, "Pending": 2, "Ordered": 3 };
         requestsToProcess.sort((a, b) => {
@@ -524,61 +692,66 @@ $("loading-container").style.display = "block";
             return (sortOrder[aStatus] || 99) - (sortOrder[bStatus] || 99) || (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0);
         });
         
-        if (showHistory) {
-            // Render history as a single simple table
+        if ($('showHistoryToggle').checked) {
             container.innerHTML = renderHistoryTable(requestsToProcess);
-        } else {
-            // Render active orders grouped by vendor
-            const requestsByGroup = new Map();
-            for (const r of requestsToProcess) {
-                const catItem = state.catalogMap.get(r.catalogId);
-                if (!catItem) continue; // Skip items not in catalog
+            return;
+        }
 
-                const vendorInfo = findBestVendor(r.catalogId, catItem.preferredVendorId);
-                const augmentedRequest = { ...r, vendorInfo, catItem };
+        const requestsByGroup = new Map();
+        for (const r of requestsToProcess) {
+            const catItem = state.catalogMap.get(r.catalogId);
+            if (!catItem) continue; // Skip items not in catalog
 
-                let groupId, groupName;
-                if (r.status === 'Open' || !r.status) {
-                    groupId = vendorInfo.vendorId;
-                    groupName = vendorInfo.vendorName;
-                } else {
-                    groupId = r.status; // "Ordered" or "Backordered"
-                    groupName = r.status;
-                }
+            // Pass overrideVendorId to findBestVendor
+            const vendorInfo = findBestVendor(r.catalogId, catItem.preferredVendorId, r.overrideVendorId);
+            const augmentedRequest = { ...r, vendorInfo, catItem };
 
-                if (!requestsByGroup.has(groupId)) {
-                    requestsByGroup.set(groupId, {
-                        groupName: groupName,
-                        requests: []
-                    });
-                }
-                requestsByGroup.get(groupId).requests.push(augmentedRequest);
-            }
+            let groupId, groupName;
             
-            // Render groups: Vendor groups first, then unassigned, then status groups
-            requestsByGroup.forEach((group, groupId) => {
-                // This will render groups like "Valor Health", "Henry Schein", etc.
-                if (groupId !== 'unassigned' && groupId !== 'Ordered' && groupId !== 'Backordered' && groupId !== 'Open') {
-                    renderVendorGroup(container, group, groupId);
-                }
-            });
-            renderVendorGroup(container, requestsByGroup.get('unassigned'), 'unassigned');
-            renderVendorGroup(container, requestsByGroup.get('Ordered'), 'Ordered');
-            renderVendorGroup(container, requestsByGroup.get('Backordered'), 'Backordered');
-
-            if (requestsToProcess.length === 0) {
-                 container.innerHTML = `<p class="muted">No active requests found.</p>`;
+            // If status is 'Open', group by vendor. Otherwise, group by status.
+            if (r.status === 'Open' || !r.status) {
+                groupId = vendorInfo.vendorId;
+                groupName = vendorInfo.vendorName;
+            } else {
+                groupId = r.status; // "Ordered" or "Backordered"
+                groupName = r.status;
             }
+
+            if (!requestsByGroup.has(groupId)) {
+                requestsByGroup.set(groupId, {
+                    groupName: groupName,
+                    requests: []
+                });
+            }
+            requestsByGroup.get(groupId).requests.push(augmentedRequest);
+        }
+        
+        container.innerHTML = ''; // Clear container
+        
+        // Render groups: Vendor groups first, then unassigned, then status groups
+        requestsByGroup.forEach((group, groupId) => {
+            if (groupId !== 'unassigned' && groupId !== 'Ordered' && groupId !== 'Backordered' && groupId !== 'Open') {
+                renderVendorGroup(container, group, groupId);
+            }
+        });
+        renderVendorGroup(container, requestsByGroup.get('unassigned'), 'unassigned');
+        renderVendorGroup(container, requestsByGroup.get('Ordered'), 'Ordered');
+        renderVendorGroup(container, requestsByGroup.get('Backordered'), 'Backordered');
+
+        if (requestsToProcess.length === 0) {
+             container.innerHTML = `<p class="muted">No active requests found.</p>`;
         }
     }
 
     function renderHistoryTable(requests) {
         if (requests.length === 0) return `<p class="muted">No history found.</p>`;
         
+        requests.sort((a,b) => (b.receivedAt?.seconds || b.updatedAt?.seconds || 0) - (a.receivedAt?.seconds || a.updatedAt?.seconds || 0));
+
         const rows = requests.map(r => {
             const catItem = state.catalogMap.get(r.catalogId);
             const itemName = catItem ? catItem.itemName : (r.otherItemName || 'Unknown');
-            const receivedDate = r.receivedAt ? new Date(r.receivedAt.seconds * 1000).toLocaleDateString() : 'N/A';
+            const receivedDate = r.receivedAt ? new Date(r.receivedAt.seconds * 1000).toLocaleDateString() : (r.updatedAt ? new Date(r.updatedAt.seconds * 1000).toLocaleDateString() : 'N/A');
             return `
                 <tr>
                     <td><strong>${escapeHtml(itemName)}</strong><br><span class="muted">${escapeHtml(r.requesterEmail)}</span></td>
@@ -632,8 +805,11 @@ $("loading-container").style.display = "block";
                         <span class="muted">${escapeHtml(r.vendorInfo.vendorName)} (${escapeHtml(r.vendorInfo.status)})</span>
                     </td>
                     <td>
-                        <span class="qty-display">${escapeHtml(r.qty)}</span>
-                        <input class="qty-edit" type="text" value="${escapeHtml(r.qty)}" style="display:none; width: 80px;">
+                        <input class="quick-qty-edit" type="text" value="${escapeHtml(r.qty)}" 
+                               data-request-id="${r.id}" 
+                               data-original-value="${escapeHtml(r.qty)}" 
+                               style="width: 70px; text-align: right; padding-right: 5px;">
+                        <span class="muted" style="margin-left: 5px;">${escapeHtml(catItem.unit || 'Each')}</span>
                     </td>
                     <td>${escapeHtml(r.vendorInfo.vendorItemNo || 'N/A')}</td>
                     <td>${r.vendorInfo.unitPrice ? `$${r.vendorInfo.unitPrice.toFixed(2)}` : 'N/A'}</td>
@@ -645,14 +821,12 @@ $("loading-container").style.display = "block";
                             <button class="btn btn-status-receive" data-status="Received">Received</button>
                         </div>
                         <div class="edit-buttons" style="margin-top: 4px;">
-                            <button class="btn btn-small" data-edit-request-id="${r.id}">Edit Qty</button>
-                            <button class="btn btn-small primary" data-save-request-id="${r.id}" style="display:none;">Save</button>
-                            <button class="btn btn-small" data-cancel-request-id="${r.id}" style="display:none;">Cancel</button>
+                            ${status === 'Open' ? `<button class="btn btn-small" data-change-vendor-id="${r.id}">Change Vendor</button>` : ''}
                         </div>
                     </td>
                 </tr>
                 <tr class="details-row" data-details-for="${r.id}">
-                    <td colspan="${isOrderableGroup ? 6 : 5}" class="details-cell">
+                    <td colspan="${isOrderableGroup ? 7 : 6}" class="details-cell">
                         <h4>All Vendor Pricing for ${escapeHtml(r.catItem.itemName)}</h4>
                         ${allPricesHtml}
                     </td>
@@ -764,7 +938,6 @@ $("loading-container").style.display = "block";
     function renderCategories() {
         $('kvCategories').textContent = `(${state.categories.length})`;
         const rows = state.categories.map(c => `<tr><td>${c.name}</td><td><button class="btn danger" data-delete-category-id="${c.id}">Delete</button></td></tr>`).join('');
-        // NOTE: The ID used here (addCategoryBtn) must match the listener setup in setupCategoryActions
         $('categoriesTable').innerHTML = `<div class="row"><input id="newCategoryName" placeholder="New Category Name"><button id="addCategoryBtn" class="btn primary">Add Category</button></div><table><thead><tr><th>Name</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table>`;
     }
 
@@ -795,12 +968,12 @@ $("loading-container").style.display = "block";
         
         const rows = selectedRequests.map(r => {
             const catItem = state.catalogMap.get(r.catalogId);
-            const vendorInfo = findBestVendor(r.catalogId, catItem.preferredVendorId);
+            const vendorInfo = findBestVendor(r.catalogId, catItem.preferredVendorId, r.overrideVendorId);
             return `
                 <tr>
                     <td>${escapeHtml(catItem.itemName)}</td>
                     <td>${escapeHtml(vendorInfo.vendorItemNo || 'N/A')}</td>
-                    <td>${escapeHtml(r.qty)}</td>
+                    <td>${escapeHtml(r.qty)} ${escapeHtml(catItem.unit || 'Each')}</td>
                 </tr>
             `;
         }).join('');
@@ -829,7 +1002,7 @@ $("loading-container").style.display = "block";
         setupCatalogModal(); 
         setupPricingModal(); 
         setupAddItemToOrderModal();
-        setupBulkAddModal();
+        setupChangeVendorModal();
 
         // Close modal buttons
         document.querySelectorAll('[data-close-modal]').forEach(btn => {
@@ -849,46 +1022,27 @@ $("loading-container").style.display = "block";
                 e.target.classList.add('active');
                 renderOrders();
             }
+            if (e.target.classList.contains('view-btn')) {
+                document.querySelectorAll('.view-btn').forEach(btn => btn.classList.remove('active'));
+                e.target.classList.add('active');
+                state.orderViewMode = e.target.dataset.view;
+                renderOrders();
+            }
         });
         $('showHistoryToggle').addEventListener('change', renderOrders);
         
-        // --- NEW EVENT LISTENERS for Qty Edit ---
-        function toggleQtyEdit(tr, isEditing) {
-            const qtyDisplay = tr.querySelector('.qty-display');
-            const qtyEdit = tr.querySelector('.qty-edit');
-            const editBtn = tr.querySelector('[data-edit-request-id]');
-            const saveBtn = tr.querySelector('[data-save-request-id]');
-            const cancelBtn = tr.querySelector('[data-cancel-request-id]');
-
-            qtyDisplay.style.display = isEditing ? 'none' : 'inline';
-            qtyEdit.style.display = isEditing ? 'inline' : 'none';
-            editBtn.style.display = isEditing ? 'none' : 'inline';
-            saveBtn.style.display = isEditing ? 'inline' : 'none';
-            cancelBtn.style.display = isEditing ? 'inline' : 'none';
-
-            if (!isEditing) {
-                // Reset value on cancel
-                qtyEdit.value = qtyDisplay.textContent;
-            }
-        }
-        // --- END NEW LISTENERS ---
-
-        // Event delegation for Orders panel
+        // Event delegation for Orders panel CLICK actions
         $('ordersGroupContainer').addEventListener('click', async e => {
             const target = e.target;
             
-            // "Select All" checkbox
             if (target.classList.contains('vendor-select-all')) {
-                const vendorId = target.dataset.vendorId;
                 const groupContainer = target.closest('.vendor-group');
                 const isChecked = target.checked;
                 groupContainer.querySelectorAll('.order-item-checkbox').forEach(cb => cb.checked = isChecked);
                 return;
             }
 
-            // "Generate Order" button
             if (target.classList.contains('generate-order-btn')) {
-                const vendorId = target.dataset.vendorId;
                 const vendorName = target.dataset.vendorName;
                 const groupContainer = target.closest('.vendor-group');
                 
@@ -905,13 +1059,11 @@ $("loading-container").style.display = "block";
                 return;
             }
             
-            // Check for clicks inside a table row
             const tr = target.closest('tr[data-request-id]');
-            if (!tr) return; // Exit if the click wasn't on a row-related element
+            if (!tr) return; 
             
             const requestId = tr.dataset.requestId;
 
-            // Price Comparison Details Toggle
             if (target.dataset.toggleDetails !== undefined) {
                 const detailsRow = tr.nextElementSibling;
                 if (detailsRow && detailsRow.dataset.detailsFor === requestId) {
@@ -920,63 +1072,83 @@ $("loading-container").style.display = "block";
                 return;
             }
 
-            // Status update buttons
             if (target.dataset.status) {
                 await updateRequestStatus(requestId, target.dataset.status);
                 return;
             }
             
-            // --- NEW: Qty Edit Button ---
-            if (target.dataset.editRequestId) {
-                toggleQtyEdit(tr, true);
-                return;
-            }
-            
-            // --- NEW: Qty Cancel Button ---
-            if (target.dataset.cancelRequestId) {
-                toggleQtyEdit(tr, false);
-                return;
-            }
-            
-            // --- NEW: Qty Save Button ---
-            if (target.dataset.saveRequestId) {
-                const newQty = tr.querySelector('.qty-edit').value.trim();
-                if (!newQty) {
-                    alert("Quantity cannot be empty.");
-                    return;
-                }
-                try {
-                    await updateDoc(doc(db, 'requests', requestId), {
-                        qty: newQty,
-                        updatedAt: serverTimestamp()
-                    });
-                    tr.querySelector('.qty-display').textContent = newQty; // Update display
-                    toggleQtyEdit(tr, false); // Toggle back
-                } catch (e) {
-                    console.error("Failed to update quantity:", e);
-                    alert("Error saving quantity.");
-                }
+            // Vendor Override Button
+            if (target.dataset.changeVendorId) {
+                openChangeVendorModal(requestId);
                 return;
             }
         });
+
+        // NEW listener for Qty changes (blur)
+        $('ordersGroupContainer').addEventListener('blur', e => {
+            if (e.target.classList.contains('quick-qty-edit')) {
+                handleQuickQtyUpdate(e.target);
+            }
+        }, true); // Use capture phase to catch blur
+
+        // NEW listener for Qty changes (Enter key)
+        $('ordersGroupContainer').addEventListener('keydown', e => {
+            if (e.key === 'Enter' && e.target.classList.contains('quick-qty-edit')) {
+                handleQuickQtyUpdate(e.target);
+                e.target.blur(); // Unfocus the input
+            }
+        });
+
+        // NEW function to handle the update
+        async function handleQuickQtyUpdate(target) {
+            const requestId = target.dataset.requestId;
+            const newQty = target.value.trim();
+            const originalQty = target.dataset.originalValue;
+
+            if (!newQty) {
+                target.classList.add('error');
+                alert("Quantity cannot be empty.");
+                target.value = originalQty; // Reset to original
+                setTimeout(() => target.classList.remove('error'), 1000);
+                return;
+            }
+
+            if (newQty === originalQty) {
+                return; // No change
+            }
+
+            try {
+                await updateDoc(doc(db, 'requests', requestId), {
+                    qty: newQty,
+                    updatedAt: serverTimestamp()
+                });
+                target.dataset.originalValue = newQty; // Set new original value
+                target.classList.add('success');
+                setTimeout(() => target.classList.remove('success'), 1500);
+            } catch (e) {
+                console.error("Failed to update quantity:", e);
+                target.classList.add('error');
+                alert("Error saving quantity.");
+                target.value = originalQty; // Reset to original
+                setTimeout(() => target.classList.remove('error'), 1500);
+            }
+        }
+
 
         // Click listener for Catalog panel (edit item, add/edit price)
         $('catalogTableContainer').addEventListener('click', e => {
             const target = e.target;
             
-            // Edit Item Details button
             if (target.dataset.editItemId) {
                 openCatalogModal(target.dataset.editItemId);
                 return;
             }
             
-            // + Add Price button
             if (target.dataset.addPriceForId) {
                 openPricingModal(null, target.dataset.addPriceForId);
                 return;
             }
 
-            // Edit Price button (in price list)
             if (target.dataset.editPriceId) {
                 openPricingModal(target.dataset.editPriceId);
                 return;
@@ -990,9 +1162,19 @@ $("loading-container").style.display = "block";
 
     async function updateRequestStatus(requestId, newStatus) {
         if (!requestId || !newStatus) return;
+        
         const updatePayload = { status: newStatus, updatedAt: serverTimestamp() };
-        if (newStatus === 'Received') updatePayload.receivedAt = serverTimestamp();
-        if (newStatus === 'Ordered') updatePayload.lastOrdered = serverTimestamp();
+        
+        if (newStatus === 'Received' || newStatus === 'Completed') {
+            updatePayload.receivedAt = serverTimestamp();
+            updatePayload.overrideVendorId = deleteField(); // Clear override when received
+        } 
+        else if (newStatus === 'Open') {
+             updatePayload.overrideVendorId = deleteField(); // Clear override if sent back to Open
+        }
+        else if (newStatus === 'Ordered') {
+            updatePayload.lastOrdered = serverTimestamp();
+        }
         
         try {
             await updateDoc(doc(db, 'requests', requestId), updatePayload);
@@ -1030,103 +1212,6 @@ $("loading-container").style.display = "block";
         });
     }
 
-    function createBulkAddRow() {
-        const rowId = `bulk-row-${Date.now()}`;
-        const row = document.createElement('div');
-        row.className = 'row';
-        row.id = rowId;
-        row.style.marginBottom = '8px';
-        row.innerHTML = `
-            <select style="flex: 2; min-width: 200px;"></select>
-            <input type="text" placeholder="Qty (e.g., 1 Box)" style="flex: 1;">
-            <button class="btn danger" data-remove-row="${rowId}" style="flex-shrink: 0;">&times;</button>
-        `;
-        
-        $('bulkAddForm').appendChild(row);
-        
-        const select = row.querySelector('select');
-        const choices = new Choices(select, {
-            searchEnabled: true,
-            placeholderValue: 'Select an item...',
-            searchResultLimit: 100,
-            choices: catalogOptionsForBulk()
-        });
-        bulkChoicesInstances.push({ id: rowId, choices: choices });
-        applyPermissions(state.userRole);
-    }
-
-    function setupBulkAddModal() {
-        const modal = $('bulkAddModal');
-        
-        $('showBulkAddModal').addEventListener('click', () => {
-            $('bulkAddForm').innerHTML = ''; 
-            bulkChoicesInstances.forEach(inst => inst.choices.destroy());
-            bulkChoicesInstances = [];
-            createBulkAddRow(); 
-            $('bulkAddStatus').textContent = '';
-            modal.style.display = 'flex';
-        });
-
-        const closeModal = () => {
-            modal.style.display = 'none';
-            bulkChoicesInstances.forEach(inst => inst.choices.destroy());
-            bulkChoicesInstances = [];
-            $('bulkAddForm').innerHTML = '';
-        };
-
-        // This is the line that had the typo. It is now fixed.
-        $('cancelBulkAddBtn').addEventListener('click', closeModal);
-        $('closeBulkAddBtn').addEventListener('click', closeModal);
-        $('addBulkItemRow').addEventListener('click', createBulkAddRow);
-
-        $('bulkAddForm').addEventListener('click', e => {
-            if (e.target.dataset.removeRow) {
-                const rowId = e.target.dataset.removeRow;
-                document.getElementById(rowId)?.remove();
-                const choiceIndex = bulkChoicesInstances.findIndex(inst => inst.id === rowId);
-                if (choiceIndex > -1) {
-                    bulkChoicesInstances[choiceIndex].choices.destroy();
-                    bulkChoicesInstances.splice(choiceIndex, 1);
-                }
-            }
-        });
-
-        $('saveBulkAddBtn').addEventListener('click', async () => {
-            const rows = $('bulkAddForm').querySelectorAll('.row');
-            const statusEl = $('bulkAddStatus');
-            if (rows.length === 0) return closeModal();
-            if (!state.user || !state.user.email) return alert('Cannot add items: user is not properly logged in.');
-
-            const batch = writeBatch(db);
-            let itemsAdded = 0;
-            
-            for (let i = 0; i < rows.length; i++) {
-                const row = rows[i];
-                const choiceInstance = bulkChoicesInstances.find(inst => inst.id === row.id);
-                const catalogId = choiceInstance?.choices.getValue(true);
-                const qty = row.querySelector('input').value.trim();
-                
-                if (catalogId && qty) {
-                    const payload = { catalogId, qty, status: 'Open', createdAt: serverTimestamp(), updatedAt: serverTimestamp(), requesterEmail: state.user.email };
-                    const newReqRef = doc(collection(db, "requests"));
-                    batch.set(newReqRef, payload);
-                    itemsAdded++;
-                }
-            }
-            if (itemsAdded === 0) { statusEl.textContent = 'No valid items to add.'; return; }
-
-            $('saveBulkAddBtn').disabled = true;
-            statusEl.textContent = `Adding ${itemsAdded} item(s)...`;
-            
-            try {
-                await batch.commit();
-                statusEl.textContent = `Successfully added ${itemsAdded} item(s)!`;
-                setTimeout(closeModal, 1000);
-            } catch (e) { console.error("Bulk add failed:", e); statusEl.textContent = 'Error saving. See console.'; } 
-            finally { $('saveBulkAddBtn').disabled = false; }
-        });
-    }
-    
     // --- Helper for list items (Barcodes, Alt Names) ---
     function setupListInput(listContainerEl, inputEl, addBtnEl, listArray) {
         listContainerEl.innerHTML = '';
@@ -1141,7 +1226,9 @@ $("loading-container").style.display = "block";
         };
         
         listContainerEl.onclick = (e) => { // Use onclick to replace any existing
-            if (e.target.tagName === 'BUTTON') e.target.parentElement.remove();
+            if (e.target.tagName === 'BUTTON' && e.target.classList.contains('danger')) {
+                 e.target.parentElement.remove();
+            }
         };
     }
     
@@ -1159,9 +1246,11 @@ $("loading-container").style.display = "block";
     // --- End Helper ---
 
     let currentCatalogItemId = null;
+    let currentCatalogItem = null;
     function openCatalogModal(itemId = null) {
         currentCatalogItemId = itemId; 
-        const item = itemId ? state.catalog.find(i => i.id === itemId) : {};
+        currentCatalogItem = itemId ? state.catalog.find(i => i.id === itemId) : { isActive: true }; // Default new item to active
+        const item = currentCatalogItem;
         
         $('catalogModalTitle').textContent = itemId ? 'Edit Catalog Item' : 'Add New Catalog Item';
         $('editItemName').value = item.itemName || ''; 
@@ -1169,18 +1258,24 @@ $("loading-container").style.display = "block";
         $('editUnit').value = item.unit || ''; 
         $('editPackSize').value = item.packSize || 1;
         $('editParLevel').value = item.parLevel || 0;
-        $('editIsActive').checked = item.isActive !== false;
-        $('inactivateCatalogItem').style.display = itemId ? 'inline-block' : 'none';
+        
+        // --- Activation Button ---
+        const activeBtn = $('toggleActiveBtn');
+        if (item.isActive === false) {
+            activeBtn.textContent = 'Re-Activate Item';
+            activeBtn.classList.add('ok');
+            activeBtn.classList.remove('danger');
+        } else {
+            activeBtn.textContent = 'Inactivate Item';
+            activeBtn.classList.add('danger');
+            activeBtn.classList.remove('ok');
+        }
+        activeBtn.style.display = itemId ? 'inline-block' : 'none'; // Hide on "new item"
         
         // Populate Categories Dropdown
         const catSelect = $('editCategorySelect');
         catSelect.innerHTML = '<option value="">-- Select Category --</option>' + state.categories.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
         catSelect.value = item.category || '';
-        
-        // Populate Preferred Vendor Dropdown
-        const vendSelect = $('editPreferredVendorSelect');
-        vendSelect.innerHTML = '<option value="">-- Select Vendor --</option>' + state.vendors.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
-        vendSelect.value = item.preferredVendorId || '';
         
         // Setup Alt Names
         const altNameArray = Array.isArray(item.itemNameAlt) ? item.itemNameAlt : (item.itemNameAlt ? [item.itemNameAlt] : []);
@@ -1197,21 +1292,40 @@ $("loading-container").style.display = "block";
             addPriceBtn.style.display = 'inline-block';
             addPriceBtn.onclick = () => openPricingModal(null, itemId);
 
-            const prices = state.pricingMap.get(itemId) || [];
+            const prices = (state.pricingMap.get(itemId) || []).map(p => ({...p, vendorName: state.vendorMap.get(p.vendorId) || 'Unknown'}));
             if (prices.length > 0) {
-                const rows = prices.map(p => `
-                    <tr>
-                        <td>${escapeHtml(state.vendorMap.get(p.vendorId) || 'Unknown')}</td>
+                const rows = prices.map(p => {
+                    const isPreferred = p.vendorId === item.preferredVendorId;
+                    return `
+                    <tr style="${isPreferred ? 'background-color: #dbeafe;' : ''}">
+                        <td>${escapeHtml(p.vendorName)}</td>
                         <td>${escapeHtml(p.vendorItemNo)}</td>
                         <td>$${(p.unitPrice||0).toFixed(2)}</td>
-                        <td><button class="btn btn-small" data-edit-price-id-modal="${p.id}">Edit</button></td>
+                        <td>
+                            <button class="btn btn-small" data-edit-price-id-modal="${p.id}">Edit</button>
+                            <button class="btn btn-small ${isPreferred ? 'primary' : ''}" 
+                                    data-set-preferred-vendor="${p.vendorId}" 
+                                    data-item-id="${itemId}" 
+                                    ${isPreferred ? 'disabled' : ''}>
+                                ${isPreferred ? 'Preferred' : 'Set'}
+                            </button>
+                        </td>
                     </tr>
-                `).join('');
-                pricingContainer.innerHTML = `<table style="font-size:0.9rem;"><thead><tr><th>Vendor</th><th>SKU</th><th>Price</th><th>Action</th></tr></thead><tbody>${rows}</tbody></table>`;
+                `}).join('');
+                pricingContainer.innerHTML = `<table style="font-size:0.9rem; width: 100%;"><thead><tr><th>Vendor</th><th>Vendor Order #</th><th>Price</th><th>Action</th></tr></thead><tbody>${rows}</tbody></table>`;
                 
                 // Add listeners for edit buttons inside the modal
                 pricingContainer.querySelectorAll('[data-edit-price-id-modal]').forEach(btn => {
                     btn.onclick = () => openPricingModal(btn.dataset.editPriceIdModal);
+                });
+                pricingContainer.querySelectorAll('[data-set-preferred-vendor]').forEach(btn => {
+                    btn.onclick = async () => {
+                        const vendorId = btn.dataset.setPreferredVendor;
+                        const catId = btn.dataset.itemId;
+                        await updateDoc(doc(db, "catalog", catId), { preferredVendorId: vendorId, updatedAt: serverTimestamp() });
+                        await initializeStaticData(); // Easiest way to refresh state
+                        openCatalogModal(catId); // Re-open/refresh modal
+                    };
                 });
             } else {
                 pricingContainer.innerHTML = '<p class="muted">No vendor pricing recorded.</p>';
@@ -1230,6 +1344,8 @@ $("loading-container").style.display = "block";
         isScannerActive = false; 
         $('barcodeScannerViewport').style.display = 'none'; 
         $('catalogModal').style.display = 'none'; 
+        currentCatalogItemId = null;
+        currentCatalogItem = null;
     }
 
     function setupCatalogModal() {
@@ -1244,17 +1360,19 @@ $("loading-container").style.display = "block";
                 packSize: Number($('editPackSize').value) || 1, 
                 parLevel: Number($('editParLevel').value) || 0,
                 category: $('editCategorySelect').value,
-                preferredVendorId: $('editPreferredVendorSelect').value,
                 itemNameAlt: getListItems($('altNameList')), 
                 barcode: getListItems($('barcodeList')), 
-                isActive: $('editIsActive').checked, 
+                isActive: currentCatalogItem.isActive, // Preserve existing state (only toggled by button)
                 updatedAt: serverTimestamp() 
             };
+            
+            // Note: preferredVendorId is now saved via its own button
             
             if (currentCatalogItemId) { 
                 await updateDoc(doc(db, "catalog", currentCatalogItemId), data); 
             } else { 
                 data.createdAt = serverTimestamp();
+                data.isActive = true; // New items are active by default
                 await addDoc(collection(db, "catalog"), data); 
             }
             
@@ -1262,11 +1380,15 @@ $("loading-container").style.display = "block";
             await initializeStaticData(); // Refresh data
         });
         
-        $('inactivateCatalogItem').addEventListener('click', async () => {
-            if (currentCatalogItemId && confirm('Are you sure you want to mark this item as inactive?')) {
-                await updateDoc(doc(db, "catalog", currentCatalogItemId), { isActive: false });
-                closeCatalogModal();
-                await initializeStaticData();
+        $('toggleActiveBtn').addEventListener('click', async () => {
+            if (currentCatalogItemId && currentCatalogItem) {
+                const newState = !currentCatalogItem.isActive;
+                const action = newState ? 'activate' : 'inactivate';
+                if (confirm(`Are you sure you want to ${action} this item?`)) {
+                    await updateDoc(doc(db, "catalog", currentCatalogItemId), { isActive: newState });
+                    closeCatalogModal();
+                    await initializeStaticData();
+                }
             }
         });
     }
@@ -1275,8 +1397,8 @@ $("loading-container").style.display = "block";
     let currentCatalogIdForPricing = null;
     function openPricingModal(priceId = null, catalogId = null) {
         currentPriceId = priceId; 
-        currentCatalogIdForPricing = catalogId; // Used for "Set as Preferred"
         const price = priceId ? state.pricingAll.find(p => p.id === priceId) : {};
+        currentCatalogIdForPricing = catalogId || price.catalogId; // Get ID from new item or existing price
         
         const itemSelect = $('priceItemSelect');
         const vendorSelect = $('priceVendorSelect');
@@ -1285,7 +1407,6 @@ $("loading-container").style.display = "block";
         vendorSelect.innerHTML = state.vendors.map(v => `<option value="${v.id}">${escapeHtml(v.name)}</option>`).join('');
         
         if (priceId) { // Editing existing price
-            currentCatalogIdForPricing = price.catalogId;
             itemSelect.value = price.catalogId;
             itemSelect.disabled = false;
             vendorSelect.value = price.vendorId;
@@ -1303,7 +1424,6 @@ $("loading-container").style.display = "block";
             $('pricingModalTitle').textContent = 'Add New Price';
         }
         
-        $('priceSetPreferred').checked = false; // Always reset this
         $('pricingModal').style.display = 'flex';
     }
 
@@ -1312,7 +1432,6 @@ $("loading-container").style.display = "block";
             const itemSelect = $('priceItemSelect');
             const vendorId = $('priceVendorSelect').value;
             const catalogId = itemSelect.value;
-            const setAsPreferred = $('priceSetPreferred').checked;
             
             const data = { 
                 catalogId: catalogId, 
@@ -1333,25 +1452,54 @@ $("loading-container").style.display = "block";
                     await addDoc(collection(db, "vendorPricing"), data); 
                 }
                 
-                // After saving price, check if we need to update the catalog item
-                if (setAsPreferred && currentCatalogIdForPricing) {
-                    await updateDoc(doc(db, "catalog", currentCatalogIdForPricing), {
-                        preferredVendorId: vendorId,
-                        updatedAt: serverTimestamp()
-                    });
-                }
-                
                 $('pricingModal').style.display = 'none';
                 itemSelect.disabled = false; // Always re-enable on close
                 
                 // Refresh catalog modal pricing if it's open
                 if ($('catalogModal').style.display === 'flex' && currentCatalogIdForPricing) {
-                     openCatalogModal(currentCatalogIdForPricing);
+                     await initializeStaticData(); // Refresh state
+                     openCatalogModal(currentCatalogIdForPricing); // Re-render modal
                 }
 
             } catch (e) {
-                console.error("Error saving price/preferred vendor:", e);
+                console.error("Error saving price:", e);
                 alert("Error saving. See console.");
+            }
+        });
+    }
+
+    function openChangeVendorModal(requestId) {
+        currentRequestIdToChange = requestId;
+        const request = state.requests.find(r => r.id === requestId);
+        if (!request) return;
+        
+        const catItem = state.catalogMap.get(request.catalogId);
+        $('changeVendorItemName').textContent = catItem ? catItem.itemName : 'This item';
+
+        const vendorSelect = $('changeVendorSelect');
+        vendorSelect.innerHTML = '<option value="">-- Select New Vendor --</option>' + 
+                                 state.vendors.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
+        
+        $('changeVendorModal').style.display = 'flex';
+    }
+
+    function setupChangeVendorModal() {
+        $('saveVendorOverrideBtn').addEventListener('click', async () => {
+            const newVendorId = $('changeVendorSelect').value;
+            if (!newVendorId || !currentRequestIdToChange) {
+                return alert("Please select a vendor.");
+            }
+            
+            try {
+                await updateDoc(doc(db, 'requests', currentRequestIdToChange), {
+                    overrideVendorId: newVendorId,
+                    updatedAt: serverTimestamp()
+                });
+                $('changeVendorModal').style.display = 'none';
+                currentRequestIdToChange = null;
+            } catch (e) {
+                console.error("Failed to override vendor:", e);
+                alert("Error saving override.");
             }
         });
     }
@@ -1361,10 +1509,15 @@ $("loading-container").style.display = "block";
         $('unitsTable').addEventListener('click', async e => {
             if (e.target.id === 'addUnitBtn') {
                 const name = $('newUnitName').value.trim();
-                if (name) { await addDoc(collection(db, 'units'), { name }); $('newUnitName').value = ''; await initializeStaticData(); }
+                if (name) { 
+                    await addDoc(collection(db, 'units'), { name }); 
+                    $('newUnitName').value = ''; 
+                    await initializeStaticData(); 
+                }
             }
-            if (e.target.dataset.deleteUnitId && confirm('Delete Unit?')) {
-                await deleteDoc(doc(db, 'units', e.target.dataset.deleteUnitId)); await initializeStaticData();
+            if (e.target.dataset.deleteUnitId && confirm('Are you sure you want to delete this unit?')) {
+                await deleteDoc(doc(db, 'units', e.target.dataset.deleteUnitId)); 
+                await initializeStaticData();
             }
         });
     }
@@ -1372,22 +1525,31 @@ $("loading-container").style.display = "block";
         $('compartmentsTable').addEventListener('click', async e => {
             if (e.target.id === 'addCompBtn') {
                 const name = $('newCompName').value.trim();
-                if (name) { await addDoc(collection(db, 'compartments'), { name }); $('newCompName').value = ''; await initializeStaticData(); }
+                if (name) { 
+                    await addDoc(collection(db, 'compartments'), { name }); 
+                    $('newCompName').value = ''; 
+                    await initializeStaticData(); 
+                }
             }
-            if (e.target.dataset.deleteCompId && confirm('Delete Compartment?')) {
-                await deleteDoc(doc(db, 'compartments', e.target.dataset.deleteCompId)); await initializeStaticData();
+            if (e.target.dataset.deleteCompId && confirm('Are you sure you want to delete this compartment?')) {
+                await deleteDoc(doc(db, 'compartments', e.target.dataset.deleteCompId)); 
+                await initializeStaticData();
             }
         });
     }
     function setupCategoryActions() {
         $('categoriesTable').addEventListener('click', async e => {
-            // Explicitly checking for addCategoryBtn
             if (e.target.id === 'addCategoryBtn') {
                 const name = $('newCategoryName').value.trim();
-                if (name) { await addDoc(collection(db, 'categories'), { name }); $('newCategoryName').value = ''; await initializeStaticData(); }
+                if (name) { 
+                    await addDoc(collection(db, 'categories'), { name }); 
+                    $('newCategoryName').value = ''; 
+                    await initializeStaticData(); 
+                }
             }
-            if (e.target.dataset.deleteCategoryId && confirm('Delete Category?')) {
-                await deleteDoc(doc(db, 'categories', e.target.dataset.deleteCategoryId)); await initializeStaticData();
+            if (e.target.dataset.deleteCategoryId && confirm('Are you sure you want to delete this category?')) {
+                await deleteDoc(doc(db, 'categories', e.target.dataset.deleteCategoryId)); 
+                await initializeStaticData();
             }
         });
     }
