@@ -1,4 +1,5 @@
 // modules/helpers/utils.js
+import { $ } from "./helpers/utils.js";
 
 export const $ = (id) => document.getElementById(id);
 

@@ -2,6 +2,8 @@
 import { state } from "./state.js";
 import { onUserStateChanged, login, logout } from "./auth.js";
 import { renderOrdersPanel, drawOrders } from "./ui/orders.js";
+import { $ } from "./helpers/utils.js";
+import { renderTabs } from "./ui/tabs.js";
 import {
   loadStaticData,
   listenToRequests,
@@ -25,7 +27,7 @@ onUserStateChanged(async (user) => {
     state.user = null;
   }
 });
-import { renderTabs } from "./ui/tabs.js";
+
 
 function renderPanels() {
   document.getElementById("app").insertAdjacentHTML("beforeend", `
