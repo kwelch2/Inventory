@@ -1051,7 +1051,7 @@ $("loading-container").style.display = "block";
                 <td>${escapeHtml(u.name)}</td>
                 <td>${escapeHtml(u.id)}</td>
                 <td>
-                    <button class="btn btn-small" data-edit-collection="units" data-edit-id="${u.id}">Edit</button>
+                    <button class="btn btn-small" data-edit-collection="units" data-edit-id="${u.id}" data-edit-name="${escapeHtml(u.name)}">Edit</button>
                     <button class="btn danger btn-small" data-delete-unit-id="${u.id}">Delete</button>
                 </td>
             </tr>`).join('');
@@ -1064,7 +1064,7 @@ $("loading-container").style.display = "block";
             <tr>
                 <td>${escapeHtml(c.name)}</td>
                 <td>
-                    <button class="btn btn-small" data-edit-collection="compartments" data-edit-id="${c.id}">Edit</button>
+                    <button class="btn btn-small" data-edit-collection="compartments" data-edit-id="${c.id}" data-edit-name="${escapeHtml(c.name)}">Edit</button>
                     <button class="btn danger btn-small" data-delete-comp-id="${c.id}">Delete</button>
                 </td>
             </tr>`).join('');
@@ -1077,7 +1077,7 @@ $("loading-container").style.display = "block";
             <tr>
                 <td>${escapeHtml(c.name)}</td>
                 <td>
-                    <button class="btn btn-small" data-edit-collection="categories" data-edit-id="${c.id}">Edit</button>
+                    <button class="btn btn-small" data-edit-collection="categories" data-edit-id="${c.id}" data-edit-name="${escapeHtml(c.name)}">Edit</button>
                     <button class="btn danger btn-small" data-delete-category-id="${c.id}">Delete</button>
                 </td>
             </tr>`).join('');
@@ -1239,7 +1239,7 @@ $("loading-container").style.display = "block";
         setupAddItemToOrderModal();
         setupChangeVendorModal();
         setupVendorModal();
-        setupMgmtEditModal(); // <-- Add this
+        setupMgmtEditModal();
         setupManagementPanelActions();
 
         // Close modal buttons
@@ -1416,11 +1416,19 @@ $("loading-container").style.display = "block";
             }
             
             if (target.dataset.addPriceForId) {
+                if (hasUnsavedCatalogChanges()) {
+                    alert("You have unsaved changes. Please save the item first.");
+                    return;
+                }
                 openPricingModal(null, target.dataset.addPriceForId);
                 return;
             }
 
             if (target.dataset.editPriceId) {
+                if (hasUnsavedCatalogChanges()) {
+                    alert("You have unsaved changes. Please save the item first.");
+                    return;
+                }
                 openPricingModal(target.dataset.editPriceId);
                 return;
             }
@@ -1512,6 +1520,38 @@ $("loading-container").style.display = "block";
     }
     // --- End Helper ---
 
+    // --- START: Unsaved Changes Check ---
+    function hasUnsavedCatalogChanges() {
+        if (!currentCatalogItem) return false;
+        
+        const item = currentCatalogItem;
+        const formItemName = $('editItemName').value;
+        const formItemRef = $('editItemRef').value;
+        const formUnit = $('editUnit').value;
+        const formPackSize = Number($('editPackSize').value) || 1;
+        const formParLevel = Number($('editParLevel').value) || 0;
+        const formCategory = $('editCategorySelect').value;
+        
+        if (formItemName !== (item.itemName || '')) return true;
+        if (formItemRef !== (item.itemRef || '')) return true;
+        if (formUnit !== (item.unit || '')) return true;
+        if (formPackSize !== (item.packSize || 1)) return true;
+        if (formParLevel !== (item.parLevel || 0)) return true;
+        if (formCategory !== (item.category || '')) return true;
+        
+        // Check array fields
+        const altNameArray = Array.isArray(item.itemNameAlt) ? item.itemNameAlt : (item.itemNameAlt ? [item.itemNameAlt] : []);
+        const barcodeArray = Array.isArray(item.barcode) ? item.barcode : (item.barcode ? [item.barcode] : []);
+        const formAltNames = getListItems($('altNameList'));
+        const formBarcodes = getListItems($('barcodeList'));
+
+        if (formAltNames.length !== altNameArray.length || formAltNames.some((val, i) => val !== altNameArray[i])) return true;
+        if (formBarcodes.length !== barcodeArray.length || formBarcodes.some((val, i) => val !== barcodeArray[i])) return true;
+
+        return false; // No changes detected
+    }
+    // --- END: Unsaved Changes Check ---
+
     let currentCatalogItemId = null;
     let currentCatalogItem = null;
     function openCatalogModal(itemId = null) {
@@ -1557,7 +1597,10 @@ $("loading-container").style.display = "block";
         const addPriceBtn = $('addPriceInModalBtn');
         if (itemId) {
             addPriceBtn.style.display = 'inline-block';
-            addPriceBtn.onclick = () => openPricingModal(null, itemId);
+            addPriceBtn.onclick = () => {
+                if (hasUnsavedCatalogChanges()) return alert("You have unsaved changes. Please save the item first.");
+                openPricingModal(null, itemId);
+            };
 
             const prices = (state.pricingMap.get(itemId) || []).map(p => ({...p, vendorName: state.vendorMap.get(p.vendorId) || 'Unknown'}));
             if (prices.length > 0) {
@@ -1583,10 +1626,14 @@ $("loading-container").style.display = "block";
                 
                 // Add listeners for edit buttons inside the modal
                 pricingContainer.querySelectorAll('[data-edit-price-id-modal]').forEach(btn => {
-                    btn.onclick = () => openPricingModal(btn.dataset.editPriceIdModal);
+                    btn.onclick = () => {
+                        if (hasUnsavedCatalogChanges()) return alert("You have unsaved changes. Please save the item first.");
+                        openPricingModal(btn.dataset.editPriceIdModal);
+                    };
                 });
                 pricingContainer.querySelectorAll('[data-set-preferred-vendor]').forEach(btn => {
                     btn.onclick = async () => {
+                        if (hasUnsavedCatalogChanges()) return alert("You have unsaved changes. Please save the item first.");
                         const vendorId = btn.dataset.setPreferredVendor;
                         const catId = btn.dataset.itemId;
                         await updateDoc(doc(db, "catalog", catId), { preferredVendorId: vendorId, updatedAt: serverTimestamp() });
@@ -1829,29 +1876,20 @@ $("loading-container").style.display = "block";
         });
     }
 
-    function openMgmtEditModal(collection, id) {
+    function openMgmtEditModal(collection, id, currentName) {
         currentMgmtEdit = { collection, id };
-        let item;
         let title = "Edit Item";
 
         if (collection === 'units') {
-            item = state.units.find(i => i.id === id);
             title = "Edit Unit";
         } else if (collection === 'compartments') {
-            item = state.compartments.find(i => i.id === id);
             title = "Edit Compartment";
         } else if (collection === 'categories') {
-            item = state.categories.find(i => i.id === id);
             title = "Edit Category";
         }
 
-        if (!item) {
-            console.error("Could not find item to edit");
-            return;
-        }
-
         $('mgmtEditModalTitle').textContent = title;
-        $('mgmtEditName').value = item.name;
+        $('mgmtEditName').value = currentName;
         $('mgmtEditModal').style.display = 'flex';
     }
 
@@ -1933,7 +1971,7 @@ $("loading-container").style.display = "block";
                 openVendorModal(target.dataset.editVendorId); // Open modal to edit
             }
             else if (target.dataset.editCollection && target.dataset.editId) {
-                openMgmtEditModal(target.dataset.editCollection, target.dataset.editId);
+                openMgmtEditModal(target.dataset.editCollection, target.dataset.editId, target.dataset.editName);
             }
         });
     }
