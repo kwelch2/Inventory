@@ -35,13 +35,15 @@
     th,td{padding:8px;border-top:1px solid var(--b);text-align:left;vertical-align:top}
     th{background:#fafafa}
     tr.catalog-row:hover { background-color: #f9f9f9; }
-    input,select{padding:8px;border:1px solid var(--b);border-radius:8px; font-size: 1rem; background: #fff;}
+    input,select,textarea{padding:8px;border:1px solid var(--b);border-radius:8px; font-size: 1rem; background: #fff; width: 100%;}
+    input[type="checkbox"] { width: auto; }
     .kvd{font-size:12px;color:#555}
     /* Stack modals correctly */
     .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.4); align-items: center; justify-content: center;}
     #pricingModal { z-index: 1010; } 
     #changeVendorModal { z-index: 1010; }
     #vendorModal { z-index: 1010; }
+    #mgmtEditModal { z-index: 1010; }
     
     .modal-content { background-color: #fefefe; padding: 20px; border: 1px solid #888; width: 80%; max-width: 900px; border-radius: 12px; }
     .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
@@ -81,6 +83,9 @@
     
     .quick-qty-edit {
         transition: background-color 0.2s, border-color 0.2s;
+        width: 70px; 
+        text-align: right; 
+        padding-right: 5px;
     }
     .quick-qty-edit.success { 
         background-color: var(--ok-light); 
@@ -345,11 +350,24 @@
       <label>Contact Email <input id="vendorContactEmail"></label>
       <label>Order Email <input id="vendorEmail"></label>
       <label style="grid-column: 1 / -1;">Address <input id="vendorAddress"></label>
-      <label style="grid-column: 1 / -1;">Notes <input id="vendorNotes"></label>
+      <label style="grid-column: 1 / -1;">Notes <textarea id="vendorNotes" rows="3"></textarea></label>
     </div>
     <div class="modal-footer">
       <button class="btn" data-close-modal="vendorModal">Cancel</button>
       <button class="btn primary" id="saveVendorBtn">Save Vendor</button>
+    </div>
+  </div>
+</div>
+
+<div id="mgmtEditModal" class="modal">
+  <div class="modal-content" style="max-width: 500px;">
+    <div class="modal-header"><h2 id="mgmtEditModalTitle">Edit Item</h2><span class="close-btn" data-close-modal="mgmtEditModal">&times;</span></div>
+    <div class="modal-body" style="grid-template-columns: 1fr;">
+      <label>Name <input id="mgmtEditName"></label>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" data-close-modal="mgmtEditModal">Cancel</button>
+      <button class="btn primary" id="saveMgmtEditBtn">Save Changes</button>
     </div>
   </div>
 </div>
@@ -453,6 +471,7 @@ let appInitialized = false;
 let isScannerActive = false;
 let currentRequestIdToChange = null; // For vendor override modal
 let currentVendorId = null; // For editing vendors
+let currentMgmtEdit = { collection: null, id: null }; // For generic mgmt edit modal
 
 $("loading-container").style.display = "block";
 
@@ -530,10 +549,10 @@ $("loading-container").style.display = "block";
             ]);
             
             state.catalog = catSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-            state.vendors = venSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-            state.units = unitSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-            state.compartments = compSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-            state.categories = catMgmtSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+            state.vendors = venSnap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => a.name.localeCompare(b.name));
+            state.units = unitSnap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => a.name.localeCompare(b.name));
+            state.compartments = compSnap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => a.name.localeCompare(b.name));
+            state.categories = catMgmtSnap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => a.name.localeCompare(b.name));
             
             state.catalogMap = new Map(state.catalog.map(c => [c.id, c]));
             state.vendorMap = new Map(state.vendors.map(v => [v.id, v.name]));
@@ -736,8 +755,7 @@ $("loading-container").style.display = "block";
                         <input class="quick-qty-edit" type="text" value="${escapeHtml(r.qty)}" 
                                ${isQtyEditable ? '' : 'disabled'}
                                data-request-id="${r.id}" 
-                               data-original-value="${escapeHtml(r.qty)}" 
-                               style="width: 70px; text-align: right; padding-right: 5px;">
+                               data-original-value="${escapeHtml(r.qty)}">
                         <span class="muted" style="margin-left: 5px;">${escapeHtml(catItem.unit || 'Each')}</span>
                     </td>
                     <td>${vendorInfo.vendorItemNo || 'N/A'}</td>
@@ -805,7 +823,6 @@ $("loading-container").style.display = "block";
             let groupId, groupName;
             
             if (r.status === 'Open' || !r.status) {
-                // *** FIX HERE: Use overrideId for grouping if it exists ***
                 if (r.overrideVendorId) {
                     groupId = r.overrideVendorId;
                     groupName = state.vendorMap.get(r.overrideVendorId) || 'Unknown Vendor';
@@ -912,8 +929,7 @@ $("loading-container").style.display = "block";
                         <input class="quick-qty-edit" type="text" value="${escapeHtml(r.qty)}" 
                                ${isQtyEditable ? '' : 'disabled'}
                                data-request-id="${r.id}" 
-                               data-original-value="${escapeHtml(r.qty)}" 
-                               style="width: 70px; text-align: right; padding-right: 5px;">
+                               data-original-value="${escapeHtml(r.qty)}">
                         <span class="muted" style="margin-left: 5px;">${escapeHtml(catItem.unit || 'Each')}</span>
                     </td>
                     <td>${escapeHtml(r.vendorInfo.vendorItemNo || 'N/A')}</td>
@@ -1030,19 +1046,41 @@ $("loading-container").style.display = "block";
 
     function renderUnits() {
         $('kvUnits').textContent = `(${state.units.length})`;
-        const rows = state.units.map(u => `<tr><td>${u.name}</td><td>${u.id}</td><td><button class="btn danger" data-delete-unit-id="${u.id}">Delete</button></td></tr>`).join('');
+        const rows = state.units.map(u => `
+            <tr>
+                <td>${escapeHtml(u.name)}</td>
+                <td>${escapeHtml(u.id)}</td>
+                <td>
+                    <button class="btn btn-small" data-edit-collection="units" data-edit-id="${u.id}">Edit</button>
+                    <button class="btn danger btn-small" data-delete-unit-id="${u.id}">Delete</button>
+                </td>
+            </tr>`).join('');
         $('unitsTable').innerHTML = `<div class="row"><input id="newUnitName" placeholder="New Unit Name"><button id="addUnitBtn" class="btn primary">Add Unit</button></div><table><thead><tr><th>Name</th><th>ID</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table>`;
     }
 
     function renderCompartments() {
         $('kvCompartments').textContent = `(${state.compartments.length})`;
-        const rows = state.compartments.map(c => `<tr><td>${c.name}</td><td><button class="btn danger" data-delete-comp-id="${c.id}">Delete</button></td></tr>`).join('');
+        const rows = state.compartments.map(c => `
+            <tr>
+                <td>${escapeHtml(c.name)}</td>
+                <td>
+                    <button class="btn btn-small" data-edit-collection="compartments" data-edit-id="${c.id}">Edit</button>
+                    <button class="btn danger btn-small" data-delete-comp-id="${c.id}">Delete</button>
+                </td>
+            </tr>`).join('');
         $('compartmentsTable').innerHTML = `<div class="row"><input id="newCompName" placeholder="New Compartment Name"><button id="addCompBtn" class="btn primary">Add Compartment</button></div><table><thead><tr><th>Name</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table>`;
     }
 
     function renderCategories() {
         $('kvCategories').textContent = `(${state.categories.length})`;
-        const rows = state.categories.map(c => `<tr><td>${c.name}</td><td><button class="btn danger" data-delete-category-id="${c.id}">Delete</button></td></tr>`).join('');
+        const rows = state.categories.map(c => `
+            <tr>
+                <td>${escapeHtml(c.name)}</td>
+                <td>
+                    <button class="btn btn-small" data-edit-collection="categories" data-edit-id="${c.id}">Edit</button>
+                    <button class="btn danger btn-small" data-delete-category-id="${c.id}">Delete</button>
+                </td>
+            </tr>`).join('');
         $('categoriesTable').innerHTML = `<div class="row"><input id="newCategoryName" placeholder="New Category Name"><button id="addCategoryBtn" class="btn primary">Add Category</button></div><table><thead><tr><th>Name</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table>`;
     }
 
@@ -1053,7 +1091,7 @@ $("loading-container").style.display = "block";
                 <td><strong>${escapeHtml(v.name)}</strong></td>
                 <td>${escapeHtml(v.contactEmail || v.email || '')}</td>
                 <td>${escapeHtml(v.contactPhone || v.phone || '')}</td>
-                <td>${v.weburl ? `<a href="${escapeHtml(v.weburl)}" target="_blank">Website</a>` : ''}</td>
+                <td>${v.weburl ? `<a href="${v.weburl.startsWith('http') ? '' : '//'}${escapeHtml(v.weburl)}" target="_blank">Website</a>` : ''}</td>
                 <td>
                     <button class="btn btn-small" data-edit-vendor-id="${v.id}">Edit</button>
                     <button class="btn danger btn-small" data-delete-vendor-id="${v.id}">Delete</button>
@@ -1200,8 +1238,9 @@ $("loading-container").style.display = "block";
         setupPricingModal(); 
         setupAddItemToOrderModal();
         setupChangeVendorModal();
-        setupVendorModal(); // Add this
-        setupManagementPanelActions(); // Add this
+        setupVendorModal();
+        setupMgmtEditModal(); // <-- Add this
+        setupManagementPanelActions();
 
         // Close modal buttons
         document.querySelectorAll('[data-close-modal]').forEach(btn => {
@@ -1386,10 +1425,6 @@ $("loading-container").style.display = "block";
                 return;
             }
         });
-
-        // setupUnitActions(); 
-        // setupCompartmentActions();
-        // setupCategoryActions();
     }
 
     async function updateRequestStatus(requestId, newStatus) {
@@ -1793,6 +1828,53 @@ $("loading-container").style.display = "block";
             }
         });
     }
+
+    function openMgmtEditModal(collection, id) {
+        currentMgmtEdit = { collection, id };
+        let item;
+        let title = "Edit Item";
+
+        if (collection === 'units') {
+            item = state.units.find(i => i.id === id);
+            title = "Edit Unit";
+        } else if (collection === 'compartments') {
+            item = state.compartments.find(i => i.id === id);
+            title = "Edit Compartment";
+        } else if (collection === 'categories') {
+            item = state.categories.find(i => i.id === id);
+            title = "Edit Category";
+        }
+
+        if (!item) {
+            console.error("Could not find item to edit");
+            return;
+        }
+
+        $('mgmtEditModalTitle').textContent = title;
+        $('mgmtEditName').value = item.name;
+        $('mgmtEditModal').style.display = 'flex';
+    }
+
+    function setupMgmtEditModal() {
+        $('saveMgmtEditBtn').addEventListener('click', async () => {
+            const { collection, id } = currentMgmtEdit;
+            const newName = $('mgmtEditName').value.trim();
+
+            if (!collection || !id || !newName) {
+                alert("Error: Missing data or name is empty.");
+                return;
+            }
+
+            try {
+                await updateDoc(doc(db, collection, id), { name: newName });
+                $('mgmtEditModal').style.display = 'none';
+                await initializeStaticData(); // Refresh all data
+            } catch (e) {
+                console.error("Error updating document:", e);
+                alert("Could not save changes.");
+            }
+        });
+    }
     
     // Consolidated actions for the Management Panel
     function setupManagementPanelActions() {
@@ -1849,6 +1931,9 @@ $("loading-container").style.display = "block";
             // --- Edit Actions ---
             else if (target.dataset.editVendorId) {
                 openVendorModal(target.dataset.editVendorId); // Open modal to edit
+            }
+            else if (target.dataset.editCollection && target.dataset.editId) {
+                openMgmtEditModal(target.dataset.editCollection, target.dataset.editId);
             }
         });
     }
