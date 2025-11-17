@@ -38,14 +38,14 @@ export function activateTab(tabId) {
     btn.classList.toggle("active", btn.dataset.tab === tabId);
   });
 
-  // hide all
+  // hide all panels
   document.querySelectorAll(".panel").forEach(panel => {
-    panel.classList.add("hidden");
+    panel.classList.remove("active");
   });
 
-  // show the correct one
-  const activePanel = document.querySelector(`#panel-${tabId}`);
-  if (activePanel) activePanel.classList.remove("hidden");
+  // show selected panel
+  const panel = document.querySelector(`#panel-${tabId}`);
+  if (panel) panel.classList.add("active");
 
   // dispatch event so other modules know tab changed
   window.dispatchEvent(new CustomEvent("changeTab", { detail: tabId }));

@@ -20,11 +20,14 @@ function renderPanels() {
   if (!app) return;
 
   app.insertAdjacentHTML("beforeend", `
-    <div id="panel-orders" class="panel hidden">Loading orders…</div>
+    <div id="tabs"></div>
+
+    <div id="panel-orders" class="panel">Loading orders…</div>
     <div id="panel-catalog" class="panel hidden">Loading catalog…</div>
     <div id="panel-management" class="panel hidden">Loading management…</div>
   `);
 }
+
 
 // MAIN APP INITIALIZATION — RUNS ONCE AFTER LOGIN
 onUserStateChanged(async (user) => {
