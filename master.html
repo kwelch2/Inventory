@@ -41,6 +41,7 @@
     .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.4); align-items: center; justify-content: center;}
     #pricingModal { z-index: 1010; } 
     #changeVendorModal { z-index: 1010; }
+    #vendorModal { z-index: 1010; }
     
     .modal-content { background-color: #fefefe; padding: 20px; border: 1px solid #888; width: 80%; max-width: 900px; border-radius: 12px; }
     .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
@@ -91,6 +92,13 @@
     }
 
     #printOrderModal .print-header { display: none; }
+
+    /* Management Sub-tabs */
+    .sub-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--b); margin-bottom: 1rem; }
+    .sub-tab-btn { background: #eee; border: 1px solid var(--b); border-bottom: none; padding: 8px 12px; border-radius: 8px 8px 0 0; font-size: 0.9rem; cursor: pointer; margin-bottom: -1px; }
+    .sub-tab-btn.active { background: var(--card); border-bottom: 1px solid var(--card); }
+    .sub-panel { display: none; }
+    .sub-panel.active { display: block; }
     
     @media print {
       body, .modal, .modal-content { margin: 0; padding: 0; box-shadow: none; border: none; }
@@ -174,22 +182,40 @@
         <div id="catalogTableContainer"></div>
       </section>
       
-      <section id="panel-units" class="panel">
-        <h2>Unit Management <span class="kvd" id="kvUnits"></span></h2>
-        <div class="row"><button class="btn" id="refreshUnits">Refresh</button></div>
-        <div id="unitsTable"></div>
-      </section>
+      <section id="panel-management" class="panel">
+        <h2>Management</h2>
+        
+        <div class="sub-tabs" id="mgmtSubTabs">
+            <button class="sub-tab-btn active" data-subtab="vendors">Vendors</button>
+            <button class="sub-tab-btn" data-subtab="categories">Categories</button>
+            <button class="sub-tab-btn" data-subtab="units">Units</button>
+            <button class="sub-tab-btn" data-subtab="compartments">Compartments</button>
+        </div>
 
-      <section id="panel-compartments" class="panel">
-        <h2>Compartment Management <span class="kvd" id="kvCompartments"></span></h2>
-        <div class="row"><button class="btn" id="refreshCompartments">Refresh</button></div>
-        <div id="compartmentsTable"></div>
-      </section>
+        <div id="subpanel-vendors" class="sub-panel active">
+            <h3>Vendors <span class="kvd" id="kvVendors"></span></h3>
+            <div class="row"><button class="btn" id="refreshVendors">Refresh</button><button class="btn primary" id="addVendorBtn">Add New Vendor</button></div>
+            <div id="vendorsTableContainer"></div>
+        </div>
+        
+        <div id="subpanel-categories" class="sub-panel">
+            <h3>Category Management <span class="kvd" id="kvCategories"></span></h3>
+            <div class="row"><button class="btn" id="refreshCategories">Refresh</button></div>
+            <div id="categoriesTable"></div>
+        </div>
+        
+        <div id="subpanel-units" class="sub-panel">
+            <h3>Unit Management <span class="kvd" id="kvUnits"></span></h3>
+            <div class="row"><button class="btn" id="refreshUnits">Refresh</button></div>
+            <div id="unitsTable"></div>
+        </div>
+        
+        <div id="subpanel-compartments" class="sub-panel">
+            <h3>Compartment Management <span class="kvd" id="kvCompartments"></span></h3>
+            <div class="row"><button class="btn" id="refreshCompartments">Refresh</button></div>
+            <div id="compartmentsTable"></div>
+        </div>
 
-      <section id="panel-categories" class="panel">
-        <h2>Category Management <span class="kvd" id="kvCategories"></span></h2>
-        <div class="row"><button class="btn" id="refreshCategories">Refresh</button></div>
-        <div id="categoriesTable"></div>
       </section>
   </div>
 </div>
@@ -305,6 +331,29 @@
   </div>
 </div>
 
+<div id="vendorModal" class="modal">
+  <div class="modal-content" style="max-width: 600px;">
+    <div class="modal-header"><h2 id="vendorModalTitle">Add New Vendor</h2><span class="close-btn" data-close-modal="vendorModal">&times;</span></div>
+    <div class="modal-body" style="grid-template-columns: 1fr 1fr;">
+      <label style="grid-column: 1 / -1;">Vendor Name <input id="vendorName"></label>
+      <label>Account # <input id="vendorAccountNumber"></label>
+      <label>Order URL <input id="vendorOrderUrl" placeholder="https://..."></label>
+      <label>Website URL <input id="vendorWebUrl" placeholder="https://..."></label>
+      <label>Main Phone <input id="vendorPhone"></label>
+      <label>Contact Name <input id="vendorContactName"></label>
+      <label>Contact Phone <input id="vendorContactPhone"></label>
+      <label>Contact Email <input id="vendorContactEmail"></label>
+      <label>Order Email <input id="vendorEmail"></label>
+      <label style="grid-column: 1 / -1;">Address <input id="vendorAddress"></label>
+      <label style="grid-column: 1 / -1;">Notes <input id="vendorNotes"></label>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" data-close-modal="vendorModal">Cancel</button>
+      <button class="btn primary" id="saveVendorBtn">Save Vendor</button>
+    </div>
+  </div>
+</div>
+
 <div id="printOrderModal" class="modal">
   <div class="modal-content" style="max-width: 800px;">
     <div class="modal-header no-print">
@@ -403,6 +452,7 @@ const getFormattedDate = () => {
 let appInitialized = false;
 let isScannerActive = false;
 let currentRequestIdToChange = null; // For vendor override modal
+let currentVendorId = null; // For editing vendors
 
 $("loading-container").style.display = "block";
 
@@ -493,6 +543,7 @@ $("loading-container").style.display = "block";
             renderUnits();
             renderCompartments();
             renderCategories();
+            renderVendors();
         } catch(e) {
             console.error("Static Data Load Failed:", e);
             alert("Static Data Load Failed: " + e.message);
@@ -995,6 +1046,28 @@ $("loading-container").style.display = "block";
         $('categoriesTable').innerHTML = `<div class="row"><input id="newCategoryName" placeholder="New Category Name"><button id="addCategoryBtn" class="btn primary">Add Category</button></div><table><thead><tr><th>Name</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table>`;
     }
 
+    function renderVendors() {
+        $('kvVendors').textContent = `(${state.vendors.length})`;
+        const rows = state.vendors.map(v => `
+            <tr>
+                <td><strong>${escapeHtml(v.name)}</strong></td>
+                <td>${escapeHtml(v.contactEmail || v.email || '')}</td>
+                <td>${escapeHtml(v.contactPhone || v.phone || '')}</td>
+                <td>${v.weburl ? `<a href="${escapeHtml(v.weburl)}" target="_blank">Website</a>` : ''}</td>
+                <td>
+                    <button class="btn btn-small" data-edit-vendor-id="${v.id}">Edit</button>
+                    <button class="btn danger btn-small" data-delete-vendor-id="${v.id}">Delete</button>
+                </td>
+            </tr>`).join('');
+        $('vendorsTableContainer').innerHTML = `
+            <table>
+                <thead>
+                    <tr><th>Name</th><th>Email</th><th>Phone</th><th>Link</th><th>Actions</th></tr>
+                </thead>
+                <tbody>${rows}</tbody>
+            </table>`;
+    }
+
     function startScanner(targetInput, viewportElement) {
         if (isScannerActive) {
             Quagga.stop();
@@ -1127,6 +1200,8 @@ $("loading-container").style.display = "block";
         setupPricingModal(); 
         setupAddItemToOrderModal();
         setupChangeVendorModal();
+        setupVendorModal(); // Add this
+        setupManagementPanelActions(); // Add this
 
         // Close modal buttons
         document.querySelectorAll('[data-close-modal]').forEach(btn => {
@@ -1312,9 +1387,9 @@ $("loading-container").style.display = "block";
             }
         });
 
-        setupUnitActions(); 
-        setupCompartmentActions();
-        setupCategoryActions();
+        // setupUnitActions(); 
+        // setupCompartmentActions();
+        // setupCategoryActions();
     }
 
     async function updateRequestStatus(requestId, newStatus) {
@@ -1662,11 +1737,70 @@ $("loading-container").style.display = "block";
             }
         });
     }
+
+    function openVendorModal(vendorId = null) {
+        currentVendorId = vendorId;
+        const modal = $('vendorModal');
+        const v = vendorId ? state.vendors.find(v => v.id === vendorId) : {};
+        
+        $('vendorModalTitle').textContent = vendorId ? 'Edit Vendor' : 'Add New Vendor';
+        $('vendorName').value = v.name || '';
+        $('vendorAccountNumber').value = v.accountNumber || '';
+        $('vendorOrderUrl').value = v.orderUrl || '';
+        $('vendorWebUrl').value = v.weburl || '';
+        $('vendorPhone').value = v.phone || '';
+        $('vendorContactName').value = v.contactName || '';
+        $('vendorContactPhone').value = v.contactPhone || '';
+        $('vendorContactEmail').value = v.contactEmail || '';
+        $('vendorEmail').value = v.email || '';
+        $('vendorAddress').value = v.address || '';
+        $('vendorNotes').value = v.notes || '';
+        
+        modal.style.display = 'flex';
+    }
+
+    function setupVendorModal() {
+        $('saveVendorBtn').addEventListener('click', async () => {
+            const data = {
+                name: $('vendorName').value.trim(),
+                accountNumber: $('vendorAccountNumber').value.trim(),
+                orderUrl: $('vendorOrderUrl').value.trim(),
+                weburl: $('vendorWebUrl').value.trim(),
+                phone: $('vendorPhone').value.trim(),
+                contactName: $('vendorContactName').value.trim(),
+                contactPhone: $('vendorContactPhone').value.trim(),
+                contactEmail: $('vendorContactEmail').value.trim(),
+                email: $('vendorEmail').value.trim(),
+                address: $('vendorAddress').value.trim(),
+                notes: $('vendorNotes').value.trim(),
+                updatedAt: serverTimestamp()
+            };
+
+            if (!data.name) return alert('Vendor Name is required.');
+
+            try {
+                if (currentVendorId) {
+                    await updateDoc(doc(db, 'vendors', currentVendorId), data);
+                } else {
+                    data.createdAt = serverTimestamp();
+                    await addDoc(collection(db, 'vendors'), data);
+                }
+                $('vendorModal').style.display = 'none';
+                await initializeStaticData(); // Refresh all data
+            } catch (e) {
+                console.error('Error saving vendor:', e);
+                alert('Could not save vendor.');
+            }
+        });
+    }
     
-    // Explicit management setup to avoid pluralization bugs
-    function setupUnitActions() {
-        $('unitsTable').addEventListener('click', async e => {
-            if (e.target.id === 'addUnitBtn') {
+    // Consolidated actions for the Management Panel
+    function setupManagementPanelActions() {
+        $('panel-management').addEventListener('click', async e => {
+            const target = e.target;
+            
+            // --- Add Actions ---
+            if (target.id === 'addUnitBtn') {
                 const name = $('newUnitName').value.trim();
                 if (name) { 
                     await addDoc(collection(db, 'units'), { name }); 
@@ -1674,15 +1808,7 @@ $("loading-container").style.display = "block";
                     await initializeStaticData(); 
                 }
             }
-            if (e.target.dataset.deleteUnitId && confirm('Are you sure you want to delete this unit?')) {
-                await deleteDoc(doc(db, 'units', e.target.dataset.deleteUnitId)); 
-                await initializeStaticData();
-            }
-        });
-    }
-    function setupCompartmentActions() {
-        $('compartmentsTable').addEventListener('click', async e => {
-            if (e.target.id === 'addCompBtn') {
+            else if (target.id === 'addCompBtn') {
                 const name = $('newCompName').value.trim();
                 if (name) { 
                     await addDoc(collection(db, 'compartments'), { name }); 
@@ -1690,15 +1816,7 @@ $("loading-container").style.display = "block";
                     await initializeStaticData(); 
                 }
             }
-            if (e.target.dataset.deleteCompId && confirm('Are you sure you want to delete this compartment?')) {
-                await deleteDoc(doc(db, 'compartments', e.target.dataset.deleteCompId)); 
-                await initializeStaticData();
-            }
-        });
-    }
-    function setupCategoryActions() {
-        $('categoriesTable').addEventListener('click', async e => {
-            if (e.target.id === 'addCategoryBtn') {
+            else if (target.id === 'addCategoryBtn') {
                 const name = $('newCategoryName').value.trim();
                 if (name) { 
                     await addDoc(collection(db, 'categories'), { name }); 
@@ -1706,15 +1824,37 @@ $("loading-container").style.display = "block";
                     await initializeStaticData(); 
                 }
             }
-            if (e.target.dataset.deleteCategoryId && confirm('Are you sure you want to delete this category?')) {
-                await deleteDoc(doc(db, 'categories', e.target.dataset.deleteCategoryId));
+            else if (target.id === 'addVendorBtn') {
+                openVendorModal(); // Open modal for new vendor
+            }
+
+            // --- Delete Actions ---
+            else if (target.dataset.deleteUnitId && confirm('Are you sure you want to delete this unit?')) {
+                await deleteDoc(doc(db, 'units', target.dataset.deleteUnitId)); 
                 await initializeStaticData();
+            }
+            else if (target.dataset.deleteCompId && confirm('Are you sure you want to delete this compartment?')) {
+                await deleteDoc(doc(db, 'compartments', target.dataset.deleteCompId)); 
+                await initializeStaticData();
+            }
+            else if (target.dataset.deleteCategoryId && confirm('Are you sure you want to delete this category?')) {
+                await deleteDoc(doc(db, 'categories', target.dataset.deleteCategoryId));
+                await initializeStaticData();
+            }
+            else if (target.dataset.deleteVendorId && confirm('Are you sure you want to delete this vendor?')) {
+                await deleteDoc(doc(db, 'vendors', target.dataset.deleteVendorId));
+                await initializeStaticData();
+            }
+
+            // --- Edit Actions ---
+            else if (target.dataset.editVendorId) {
+                openVendorModal(target.dataset.editVendorId); // Open modal to edit
             }
         });
     }
     
     function mountTabs() {
-        const TABS = ['Orders', 'Catalog', 'Units', 'Compartments', 'Categories'];
+        const TABS = ['Orders', 'Catalog', 'Management']; // Updated tabs
         $('tabs').innerHTML = TABS.map(t => `<button class="tab" data-tab="${t.toLowerCase().replace(' ', '_')}">${t}</button>`).join('');
         $('tabs').addEventListener('click', (ev) => {
             const tabId = ev.target.dataset.tab; if (!tabId) return;
@@ -1724,11 +1864,27 @@ $("loading-container").style.display = "block";
         $('tabs').querySelector('[data-tab="orders"]').click();
     }
 
+    function mountManagementTabs() {
+        $('mgmtSubTabs').addEventListener('click', (ev) => {
+            const subTabId = ev.target.dataset.subtab;
+            if (!subTabId) return;
+            
+            // Handle button active state
+            $('mgmtSubTabs').querySelectorAll('.sub-tab-btn').forEach(btn => btn.classList.remove('active'));
+            ev.target.classList.add('active');
+            
+            // Handle panel active state
+            $('panel-management').querySelectorAll('.sub-panel').forEach(panel => panel.classList.remove('active'));
+            $(`subpanel-${subTabId}`).classList.add('active');
+        });
+    }
+
     async function boot() {
         mountTabs();
+        mountManagementTabs(); // Mount the new sub-tabs
         setupAllModalsAndActions();
         
-        ['refreshCatalog', 'refreshUnits', 'refreshCompartments', 'refreshCategories'].forEach(id => {
+        ['refreshCatalog', 'refreshUnits', 'refreshCompartments', 'refreshCategories', 'refreshVendors'].forEach(id => {
             const btn = $(id); if (btn) btn.addEventListener('click', initializeStaticData);
         });
 
