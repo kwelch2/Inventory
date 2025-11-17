@@ -1682,17 +1682,11 @@ $("loading-container").style.display = "block";
     }
     function setupCategoryActions() {
         $('categoriesTable').addEventListener('click', async e => {
-            if (e.target.id === 'addCategoryBtn') {
-                const name = $('newCategoryName').value.trim();
-                if (name) { 
-                    await addDoc(collection(db, 'categories'), { name }); 
-                    $('newCategoryName').value = ''; 
-                    await initializeStaticData(); 
-                }
-            }
+            // ... (add new category code) ...
+            
             if (e.target.dataset.deleteCategoryId && confirm('Are you sure you want to delete this category?')) {
-                // ** THIS IS THE JAVASCRIPT FIX **
-                await deleteDoc(doc(db, 'categories', e.target.dataset.deleteCategoryId)); 
+                // ** THIS IS THE LINE TO FIX **
+                await deleteDoc(doc(db, 'categories', e.target.dataset.deleteCategoryId));
                 await initializeStaticData();
             }
         });
