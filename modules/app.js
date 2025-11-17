@@ -4,6 +4,7 @@ import { onUserStateChanged, login, logout } from "./auth.js";
 import { $ } from "./helpers/utils.js";
 import { renderTabs, activateTab } from "./ui/tabs.js";
 import { renderOrdersPanel, drawOrders } from "./ui/orders.js";
+import { renderCatalogPanel, drawCatalogTable } from "./ui/catalog.js";
 
 import {
   loadStaticData,
@@ -41,6 +42,11 @@ onUserStateChanged(async (user) => {
   renderPanels();
   renderOrdersPanel();
   activateTab("orders");
+  listenToRequests(() => drawOrders());
+  listenToVendorPricing(() => drawOrders());
+  listenToVendorPricing(() => drawCatalogTable());
+  listenToRequests(() => drawCatalogTable());
+
 
   // Tab switching
   window.addEventListener("changeTab", (e) => {

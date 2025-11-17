@@ -8,11 +8,11 @@ import {
 
 let currentMode = "vendor"; // or "item"
 
-// ---------------------------
-// PUBLIC ENTRY POINT
-// ---------------------------
+// Called once when user logs in and UI shell is ready
 export function renderOrdersPanel() {
   const panel = $("#panel-orders");
+  if (!panel) return;
+
   panel.innerHTML = `
     <div class="orders-header">
       <button id="ordersByVendor" class="order-mode-btn">Group: Vendor</button>
@@ -37,24 +37,21 @@ export function renderOrdersPanel() {
   drawOrders();
 }
 
-// ---------------------------
-// RENDER MAIN PANEL
-// ---------------------------
+// Draw on initial load & every Firestore update
 export function drawOrders() {
   const container = $("#orders-content");
   if (!container) return;
 
-  if (state.requests.length === 0) {
-    container.innerHTML = `<p>No active requests.</p>`;
+  if (!state.requests.length) {
+    container.innerHTML = `<p>No requests pending.</p>`;
     return;
   }
 
-  // Group based on mode
-  const output = (currentMode === "vendor")
-    ? renderByVendor()
-    : renderByItem();
+  container.innerHTML =
+    currentMode === "vendor"
+      ? renderByVendor()
+      : renderByItem();
 
-  container.innerHTML = output;
   attachRowEvents();
 }
 
@@ -67,10 +64,10 @@ function renderByVendor() {
   state.requests
     .filter(r => r.status !== "Received")
     .forEach(req => {
-      const catalog = state.maps.catalog.get(req.catalogId);
-      if (!catalog) return;
+      const item = state.maps.catalog.get(req.catalogId);
+      if (!item) return;
 
-      const vendorId = catalog.vendor || "unknown";
+      const vendorId = item.vendor || "unknown";
 
       if (!groups.has(vendorId)) groups.set(vendorId, []);
       groups.get(vendorId).push(req);
@@ -82,32 +79,27 @@ function renderByVendor() {
     const vendor = state.maps.vendors.get(vendorId);
     const vendorName = vendor ? vendor.name : "Unknown Vendor";
 
-    html += `<div class="vendor-block">
-      <h2>${escapeHtml(vendorName)}</h2>
-      <table class="orders-table">
-        <thead>
-          <tr>
-            <th>Item</th>
-            <th>Qty</th>
-            <th>Notes</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-    `;
-
-    for (const r of reqs) {
-      const item = state.maps.catalog.get(r.catalogId);
-      html += renderOrderRow(r, item);
-    }
-
     html += `
-        </tbody>
-      </table>
-    </div>`;
+      <div class="vendor-block">
+        <h2>${escapeHtml(vendorName)}</h2>
+        <table class="orders-table">
+          <thead>
+            <tr>
+              <th>Item</th>
+              <th>Qty</th>
+              <th>Notes</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${reqs.map(r => renderRow(r)).join("")}
+          </tbody>
+        </table>
+      </div>
+    `;
   }
 
-  return html || "<p>No pending vendor requests.</p>";
+  return html || "<p>No requests pending.</p>";
 }
 
 // ---------------------------
@@ -119,9 +111,6 @@ function renderByItem() {
   state.requests
     .filter(r => r.status !== "Received")
     .forEach(req => {
-      const item = state.maps.catalog.get(req.catalogId);
-      if (!item) return;
-
       if (!groups.has(req.catalogId)) groups.set(req.catalogId, []);
       groups.get(req.catalogId).push(req);
     });
@@ -130,27 +119,22 @@ function renderByItem() {
 
   for (const [catalogId, reqs] of groups.entries()) {
     const item = state.maps.catalog.get(catalogId);
+    const itemName = item ? item.name : "Unknown Item";
 
     html += `
       <div class="item-block">
-        <h2>${escapeHtml(item.name)}</h2>
+        <h2>${escapeHtml(itemName)}</h2>
         <table class="orders-table">
           <thead>
             <tr>
               <th>Unit</th>
               <th>Qty</th>
               <th>Notes</th>
-              <th></th>
+              <th>Action</th>
             </tr>
           </thead>
           <tbody>
-    `;
-
-    for (const r of reqs) {
-      html += renderOrderRow(r, item);
-    }
-
-    html += `
+            ${reqs.map(r => renderRow(r)).join("")}
           </tbody>
         </table>
       </div>
@@ -163,17 +147,16 @@ function renderByItem() {
 // ---------------------------
 // ROW RENDERING
 // ---------------------------
-function renderOrderRow(req, item) {
+function renderRow(req) {
+  const item = state.maps.catalog.get(req.catalogId);
+
   return `
     <tr data-id="${req.id}">
-      <td>${escapeHtml(item.name)}</td>
-
+      <td>${escapeHtml(item?.name || "Unknown")}</td>
       <td>
         <input type="number" class="qty-input" value="${req.qty}" min="1" style="width:60px">
       </td>
-
       <td>${escapeHtml(req.notes || "")}</td>
-
       <td>
         <button class="receive-btn">Received</button>
       </td>
@@ -182,28 +165,25 @@ function renderOrderRow(req, item) {
 }
 
 // ---------------------------
-// EVENTS
+// ATTACH EVENTS
 // ---------------------------
 function attachRowEvents() {
+  // Qty change
   document.querySelectorAll(".qty-input").forEach(input => {
-    input.addEventListener("change", async (e) => {
+    input.addEventListener("change", (e) => {
       const row = e.target.closest("tr");
       const id = row.dataset.id;
       const qty = Number(e.target.value);
-
       updateRequestQty(id, qty);
     });
   });
 
+  // Mark as received
   document.querySelectorAll(".receive-btn").forEach(btn => {
-    btn.addEventListener("click", async (e) => {
-      const row = e.target.closest("tr");
+    btn.addEventListener("click", () => {
+      const row = btn.closest("tr");
       const id = row.dataset.id;
-
-      await updateRequestStatus(id, "Received");
-
-      // Redraw after marking received
-      drawOrders();
+      updateRequestStatus(id, "Received");
     });
   });
 }

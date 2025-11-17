@@ -36,6 +36,55 @@
     .panel.active {
       display:block;
     }
+    .catalog-table, .orders-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+    }
+
+    .catalog-table th, .catalog-table td,
+    .orders-table th, .orders-table td {
+      border: 1px solid #ddd;
+      padding: 8px;
+    }
+
+    .button-primary {
+      background: #0a66ff;
+      color: white;
+      padding: 8px 12px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    .button-secondary {
+      padding: 8px 12px;
+      border: 1px solid #aaa;
+      border-radius: 6px;
+      background: white;
+      cursor: pointer;
+    }
+
+    .modal-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.45);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 50;
+    }
+
+    .modal {
+      background: white;
+      padding: 20px;
+      width: 350px;
+      border-radius: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
   </style>
 </head>
 
