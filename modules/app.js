@@ -39,22 +39,32 @@ onUserStateChanged(async (user) => {
 
   console.log("Logged in:", user.email);
 
-  // --- BUILD UI ONCE ---
-  document.getElementById("app").innerHTML = ""; // Clear startup text
-  renderTabs();
-  renderPanels();
-  renderOrdersPanel();
-  activateTab("orders");
-  listenToRequests(() => drawOrders());
-  listenToVendorPricing(() => drawOrders());
-  listenToVendorPricing(() => drawCatalogTable());
-  listenToRequests(() => drawCatalogTable());
+// --- BUILD UI ONCE ---
+document.getElementById("app").innerHTML = ""; 
 
+renderPanels();        // MUST come first — creates #tabs
+renderTabs();          // now tabs container exists
+renderOrdersPanel();   // builds orders panel content
+renderCatalogPanel();  // builds catalog panel content
+activateTab("orders"); // sets initial tab
 
-  // Tab switching
-  window.addEventListener("changeTab", (e) => {
-    activateTab(e.detail);
-  });
+// --- LOAD DATA ---
+await loadStaticData();
+
+// realtime updates
+listenToRequests(() => {
+  drawOrders();
+  drawCatalogTable();
+});
+listenToVendorPricing(() => {
+  drawOrders();
+  drawCatalogTable();
+});
+
+// tab switching
+window.addEventListener("changeTab", (e) => {
+  activateTab(e.detail);
+});
 
   // --- LOAD DATA ---
   await loadStaticData();
