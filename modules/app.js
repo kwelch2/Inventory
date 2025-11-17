@@ -1,6 +1,7 @@
 // modules/app.js
 import { state } from "./state.js";
 import { onUserStateChanged, login, logout } from "./auth.js";
+import { renderOrdersPanel, drawOrders } from "./ui/orders.js";
 import {
   loadStaticData,
   listenToRequests,
@@ -61,6 +62,15 @@ onUserStateChanged(async (user) => {
     listenToVendorPricing(() => console.log("Pricing updated"));
   }
 });
+
+renderTabs();
+renderPanels();
+renderOrdersPanel();  // <<< ADD THIS
+activateTab("orders");
+
+// refresh UI when data updates
+listenToRequests(() => drawOrders());
+listenToVendorPricing(() => drawOrders());
 
 // TEMP LOGIN/LOGOUT BUTTONS
 document.body.insertAdjacentHTML("beforeend", `
