@@ -131,7 +131,7 @@
   </div>
 
   <div id="app-container" style="display: none;">
-    <div classs="header">
+    <div class="header">
         <h1>EMS Supplies — Master Admin</h1>
         <div class="nav-links">
             <a href="https://supplies-ems.web.app/">Home</a>
@@ -1547,7 +1547,10 @@ $("loading-container").style.display = "block";
         const vendorSelect = $('priceVendorSelect');
         
         itemSelect.innerHTML = state.catalog.map(i => `<option value="${i.id}">${escapeHtml(i.itemName)}</option>`).join('');
-        vendorSelect.innerHTML = state.vendors.map(v => `<option value="${v.id}">${escapeHtml(v.name)}</option>').join('');
+        vendorSelect.innerHTML = state.vendors
+    .map(v => `<option value="${v.id}">${escapeHtml(v.name)}</option>`)
+    .join('');
+
         
         if (priceId) { // Editing existing price
             itemSelect.value = price.catalogId;
@@ -1620,14 +1623,14 @@ $("loading-container").style.display = "block";
         $('changeVendorItemName').textContent = catItem ? catItem.itemName : 'This item';
 
         const vendorSelect = $('changeVendorSelect');
-        vendorSelect.innerHTML = '<option value="">-- Select New Vendor --</option>' + 
+        HTML = '<option value="">-- Select New Vendor --</option>' + 
                                  state.vendors.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
         
         $('changeVendorModal').style.display = 'flex';
     }
 
     function setupChangeVendorModal() {
-        $('saveVendorOverrideBtn').addEventListener('click', async () => {
+        $('saveVendorOverrideBtn').addEventListener('click', async () => {vendorSelect.inner
             const newVendorId = $('changeVendorSelect').value;
             if (!newVendorId || !currentRequestIdToChange) {
                 return alert("Please select a vendor.");
