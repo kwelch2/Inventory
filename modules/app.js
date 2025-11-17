@@ -4,7 +4,7 @@ import { onUserStateChanged, login, logout } from "./auth.js";
 
 console.log("App starting…");
 
-// Track login/logout
+// TRACK LOGIN/LOGOUT
 onUserStateChanged((user) => {
   if (user) {
     console.log("Logged in:", user.email);
@@ -15,9 +15,9 @@ onUserStateChanged((user) => {
   }
 });
 
-// Temporary test buttons so you can confirm login/logout works
+// INJECT TEMPORARY LOGIN BUTTONS FOR TESTING
 document.body.insertAdjacentHTML("beforeend", `
-  <div style="margin-top:2rem;">
+  <div style="margin-top:2rem; padding:1rem; border:1px solid #ccc;">
     <button id="loginBtn">Login with Google</button>
     <button id="logoutBtn">Logout</button>
   </div>
