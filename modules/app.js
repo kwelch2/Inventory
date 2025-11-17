@@ -1,9 +1,10 @@
 // modules/app.js
 import { state } from "./state.js";
 import { onUserStateChanged, login, logout } from "./auth.js";
-import { renderOrdersPanel, drawOrders } from "./ui/orders.js";
 import { $ } from "./helpers/utils.js";
-import { renderTabs } from "./ui/tabs.js";
+import { renderTabs, activateTab } from "./ui/tabs.js";
+import { renderOrdersPanel, drawOrders } from "./ui/orders.js";
+
 import {
   loadStaticData,
   listenToRequests,
@@ -12,67 +13,47 @@ import {
 
 console.log("App starting…");
 
-// LOGIN / LOGOUT
-onUserStateChanged(async (user) => {
-  if (user) {
-    console.log("Logged in:", user.email);
-
-    // Load core data
-    await loadStaticData();
-    listenToRequests(() => console.log("Requests updated:", state.requests));
-    listenToVendorPricing(() => console.log("Pricing updated:", state.pricing));
-
-  } else {
-    console.log("Logged out.");
-    state.user = null;
-  }
-});
-
-
+// Build empty panels container once
 function renderPanels() {
-  document.getElementById("app").insertAdjacentHTML("beforeend", `
-    <div id="panel-orders" class="panel">Loading orders…</div>
-    <div id="panel-catalog" class="panel">Loading catalog…</div>
-    <div id="panel-manage" class="panel">Loading management…</div>
+  const app = document.getElementById("app");
+  if (!app) return;
+
+  app.insertAdjacentHTML("beforeend", `
+    <div id="panel-orders" class="panel hidden">Loading orders…</div>
+    <div id="panel-catalog" class="panel hidden">Loading catalog…</div>
+    <div id="panel-management" class="panel hidden">Loading management…</div>
   `);
 }
 
-function activateTab(name) {
-  document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
-  
-  if (name === "orders") $("#panel-orders").classList.add("active");
-  if (name === "catalog") $("#panel-catalog").classList.add("active");
-  if (name === "manage") $("#panel-manage").classList.add("active");
-}
+// MAIN APP INITIALIZATION — RUNS ONCE AFTER LOGIN
 onUserStateChanged(async (user) => {
-  if (user) {
-    console.log("Logged in:", user.email);
-
-    // UI shell
-    renderTabs();
-    renderPanels();
-    activateTab("orders");
-
-    // Listen for tab switching
-    window.addEventListener("changeTab", (e) => {
-      activateTab(e.detail);
-    });
-
-    // Load data
-    await loadStaticData();
-    listenToRequests(() => console.log("Requests updated"));
-    listenToVendorPricing(() => console.log("Pricing updated"));
+  if (!user) {
+    console.log("Logged out.");
+    state.user = null;
+    return;
   }
+
+  console.log("Logged in:", user.email);
+
+  // --- BUILD UI ONCE ---
+  document.getElementById("app").innerHTML = ""; // Clear startup text
+  renderTabs();
+  renderPanels();
+  renderOrdersPanel();
+  activateTab("orders");
+
+  // Tab switching
+  window.addEventListener("changeTab", (e) => {
+    activateTab(e.detail);
+  });
+
+  // --- LOAD DATA ---
+  await loadStaticData();
+
+  // --- REALTIME LIVE UPDATES ---
+  listenToRequests(() => drawOrders());
+  listenToVendorPricing(() => drawOrders());
 });
-
-renderTabs();
-renderPanels();
-renderOrdersPanel();  // <<< ADD THIS
-activateTab("orders");
-
-// refresh UI when data updates
-listenToRequests(() => drawOrders());
-listenToVendorPricing(() => drawOrders());
 
 // TEMP LOGIN/LOGOUT BUTTONS
 document.body.insertAdjacentHTML("beforeend", `
