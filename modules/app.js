@@ -1,32 +1,33 @@
 // modules/app.js
 import { 
-  doc, updateDoc, addDoc, collection, serverTimestamp, deleteDoc 
+  doc, updateDoc, addDoc, collection, serverTimestamp, deleteDoc, deleteField
 } from "./firebase.js"; // <--- CHANGED
 import { state } from "./state.js";
 import { db } from "./firebase.js"; // <--- db is still imported from here
-import { onUserHandler, login, logout } from "./auth.js";
+import { onUserHandler, login, logout, applyPermissions } from "./auth.js";
 import { $, escapeHtml } from "./helpers/utils.js";
 import { initializeStaticData, setupRealtimeListeners, updateRequestStatus, findBestVendor } from "./firestoreApi.js";
 import { renderOrders } from "./ui/orders.js";
-import { renderCatalog, setupCatalogPanel } from "./ui/catalog.js";
+import { renderCatalog, setupCatalogPanel, populateCategoryFilter } from "./ui/catalog.js";
 import { mountTabs, mountManagementTabs } from "./ui/tabs.js";
 import { 
     setupAddItemToOrderModal, setupCatalogModal, setupPricingModal, 
     setupChangeVendorModal, setupVendorModal, setupMgmtEditModal,
     setupPrintModal, setupModalCloseButtons, showPrintModal, showMasterOrderModal,
     openVendorModal, openMgmtEditModal, openChangeVendorModal, 
-    openExportModal, setupExportModal // <-- Make sure both are here
+    openExportModal, setupExportModal
 } from "./ui/modals.js";
 
 let appInitialized = false;
 
 // --- Permissions ---
-export function applyPermissions(role) {
-    const isAdmin = (role === 'Admin');
-    document.querySelectorAll('.btn.danger').forEach(btn => {
-        btn.style.display = isAdmin ? 'inline-block' : 'none';
-    });
-}
+// MOVED TO AUTH.JS, but can be re-added if needed.
+// export function applyPermissions(role) {
+//     const isAdmin = (role === 'Admin');
+//     document.querySelectorAll('.btn.danger').forEach(btn => {
+//         btn.style.display = isAdmin ? 'inline-block' : 'none';
+//     });
+// }
 
 // --- Main App Initialization ---
 async function boot() {
@@ -66,107 +67,120 @@ async function boot() {
 // --- Event Listeners ---
 function setupOrdersPanelListeners() {
     // Listener for Order filtering
-    document.querySelector('#panel-orders .row').addEventListener('click', e => {
-        if (e.target.classList.contains('filter-btn')) {
-            document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
-            e.target.classList.add('active');
-            renderOrders();
-        }
-        if (e.target.classList.contains('view-btn')) {
-            document.querySelectorAll('.view-btn').forEach(btn => btn.classList.remove('active'));
-            e.target.classList.add('active');
-            state.orderViewMode = e.target.dataset.view;
-            renderOrders();
-        }
-    });
-    $('#showHistoryToggle').addEventListener('change', renderOrders);
+    const ordersPanelRow = document.querySelector('#panel-orders .row');
+    if (ordersPanelRow) {
+        ordersPanelRow.addEventListener('click', e => {
+            if (e.target.classList.contains('filter-btn')) {
+                document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
+                e.target.classList.add('active');
+                renderOrders();
+            }
+            if (e.target.classList.contains('view-btn')) {
+                document.querySelectorAll('.view-btn').forEach(btn => btn.classList.remove('active'));
+                e.target.classList.add('active');
+                state.orderViewMode = e.target.dataset.view;
+                renderOrders();
+            }
+        });
+    }
+
+    const historyToggle = $('#showHistoryToggle');
+    if (historyToggle) {
+        historyToggle.addEventListener('change', renderOrders);
+    }
     
     // Generate Order from "View by Item"
-    $('#generateItemOrderBtn').addEventListener('click', () => {
-        const selectedCheckboxes = document.querySelectorAll('.item-order-checkbox:checked');
-        if (selectedCheckboxes.length === 0) {
-            alert("Please select items to include in the order.");
-            return;
-        }
-        const selectedRequestIds = Array.from(selectedCheckboxes).map(cb => cb.dataset.requestId);
-        const selectedRequests = state.requests
-            .filter(r => selectedRequestIds.includes(r.id))
-            .map(r => {
-                const catItem = state.catalogMap.get(r.catalogId);
-                const vendorInfo = findBestVendor(r.catalogId, catItem?.preferredVendorId, r.overrideVendorId);
-                return { ...r, catItem, vendorInfo };
-            });
+    const genItemOrderBtn = $('#generateItemOrderBtn');
+    if (genItemOrderBtn) {
+        genItemOrderBtn.addEventListener('click', () => {
+            const selectedCheckboxes = document.querySelectorAll('.item-order-checkbox:checked');
+            if (selectedCheckboxes.length === 0) {
+                alert("Please select items to include in the order.");
+                return;
+            }
+            const selectedRequestIds = Array.from(selectedCheckboxes).map(cb => cb.dataset.requestId);
+            const selectedRequests = state.requests
+                .filter(r => selectedRequestIds.includes(r.id))
+                .map(r => {
+                    const catItem = state.catalogMap.get(r.catalogId);
+                    const vendorInfo = findBestVendor(r.catalogId, catItem?.preferredVendorId, r.overrideVendorId);
+                    return { ...r, catItem, vendorInfo };
+                });
 
-        const groupedRequests = new Map();
-        for (const r of selectedRequests) {
-            const vendorId = r.vendorInfo.vendorId;
-            if (!groupedRequests.has(vendorId)) groupedRequests.set(vendorId, []);
-            groupedRequests.get(vendorId).push(r);
-        }
-        showMasterOrderModal(groupedRequests);
-    });
+            const groupedRequests = new Map();
+            for (const r of selectedRequests) {
+                const vendorId = r.vendorInfo.vendorId;
+                if (!groupedRequests.has(vendorId)) groupedRequests.set(vendorId, []);
+                groupedRequests.get(vendorId).push(r);
+            }
+            showMasterOrderModal(groupedRequests);
+        });
+    }
 
 
     // Event delegation for Orders panel CLICK actions
-    $('#ordersGroupContainer').addEventListener('click', async e => {
-        const target = e.target;
-        
-        if (target.classList.contains('vendor-select-all') || target.classList.contains('item-select-all')) {
-            const groupContainer = target.closest('.vendor-group, .vendor-group-table');
-            const isChecked = target.checked;
-            const checkboxClass = state.orderViewMode === 'vendor' ? '.order-item-checkbox' : '.item-order-checkbox';
-            groupContainer.querySelectorAll(checkboxClass).forEach(cb => cb.checked = isChecked);
-            return;
-        }
-
-        if (target.classList.contains('generate-order-btn')) {
-            const vendorName = target.dataset.vendorName;
-            const groupContainer = target.closest('.vendor-group');
-            const selectedCheckboxes = groupContainer.querySelectorAll('.order-item-checkbox:checked');
-            if (selectedCheckboxes.length === 0) return alert("Please select at least one item to order.");
-            const selectedRequestIds = Array.from(selectedCheckboxes).map(cb => cb.dataset.requestId);
-            const selectedRequests = state.requests.filter(r => selectedRequestIds.includes(r.id));
-            showPrintModal(vendorName, selectedRequests);
-            return;
-        }
-        
-        const tr = target.closest('tr[data-request-id]');
-        if (!tr) return; 
-        
-        const requestId = tr.dataset.requestId;
-
-        if (target.dataset.toggleDetails !== undefined) {
-            const detailsRow = tr.nextElementSibling;
-            if (detailsRow && detailsRow.dataset.detailsFor === requestId) {
-                detailsRow.classList.toggle('visible');
+    const ordersContainer = $('#ordersGroupContainer');
+    if (ordersContainer) {
+        ordersContainer.addEventListener('click', async e => {
+            const target = e.target;
+            
+            if (target.classList.contains('vendor-select-all') || target.classList.contains('item-select-all')) {
+                const groupContainer = target.closest('.vendor-group, .vendor-group-table');
+                const isChecked = target.checked;
+                const checkboxClass = state.orderViewMode === 'vendor' ? '.order-item-checkbox' : '.item-order-checkbox';
+                groupContainer.querySelectorAll(checkboxClass).forEach(cb => cb.checked = isChecked);
+                return;
             }
-            return;
-        }
 
-        if (target.dataset.status) {
-            await updateRequestStatus(requestId, target.dataset.status);
-            return;
-        }
-        
-        if (target.dataset.changeVendorId) {
-            openChangeVendorModal(requestId);
-            return;
-        }
-    });
+            if (target.classList.contains('generate-order-btn')) {
+                const vendorName = target.dataset.vendorName;
+                const groupContainer = target.closest('.vendor-group');
+                const selectedCheckboxes = groupContainer.querySelectorAll('.order-item-checkbox:checked');
+                if (selectedCheckboxes.length === 0) return alert("Please select at least one item to order.");
+                const selectedRequestIds = Array.from(selectedCheckboxes).map(cb => cb.dataset.requestId);
+                const selectedRequests = state.requests.filter(r => selectedRequestIds.includes(r.id));
+                showPrintModal(vendorName, selectedRequests);
+                return;
+            }
+            
+            const tr = target.closest('tr[data-request-id]');
+            if (!tr) return; 
+            
+            const requestId = tr.dataset.requestId;
 
-    // Listeners for Qty changes (blur and Enter)
-    $('#ordersGroupContainer').addEventListener('blur', e => {
-        if (e.target.classList.contains('quick-qty-edit')) {
-            handleQuickQtyUpdate(e.target);
-        }
-    }, true);
+            if (target.dataset.toggleDetails !== undefined) {
+                const detailsRow = tr.nextElementSibling;
+                if (detailsRow && detailsRow.dataset.detailsFor === requestId) {
+                    detailsRow.classList.toggle('visible');
+                }
+                return;
+            }
 
-    $('#ordersGroupContainer').addEventListener('keydown', e => {
-        if (e.key === 'Enter' && e.target.classList.contains('quick-qty-edit')) {
-            handleQuickQtyUpdate(e.target);
-            e.target.blur();
-        }
-    });
+            if (target.dataset.status) {
+                await updateRequestStatus(requestId, target.dataset.status);
+                return;
+            }
+            
+            if (target.dataset.changeVendorId) {
+                openChangeVendorModal(requestId);
+                return;
+            }
+        });
+
+        // Listeners for Qty changes (blur and Enter)
+        ordersContainer.addEventListener('blur', e => {
+            if (e.target.classList.contains('quick-qty-edit')) {
+                handleQuickQtyUpdate(e.target);
+            }
+        }, true);
+
+        ordersContainer.addEventListener('keydown', e => {
+            if (e.key === 'Enter' && e.target.classList.contains('quick-qty-edit')) {
+                handleQuickQtyUpdate(e.target);
+                e.target.blur();
+            }
+        });
+    }
 }
 
 async function handleQuickQtyUpdate(target) {
@@ -201,67 +215,75 @@ async function handleQuickQtyUpdate(target) {
 }
 
 function setupManagementPanelActions() {
-    $('#panel-management').addEventListener('click', async e => {
-        const target = e.target;
-        
-        // --- Add Actions ---
-        if (target.id === 'addUnitBtn') {
-            const name = $('#newUnitName').value.trim();
-            if (name) { 
-                await addDoc(collection(db, 'units'), { name }); 
-                $('#newUnitName').value = ''; 
-                await initializeStaticData(); 
+    const mgmtPanel = $('#panel-management');
+    if (mgmtPanel) {
+        mgmtPanel.addEventListener('click', async e => {
+            const target = e.target;
+            
+            // --- Add Actions ---
+            if (target.id === 'addUnitBtn') {
+                const nameInput = $('#newUnitName');
+                const name = nameInput.value.trim();
+                if (name) { 
+                    await addDoc(collection(db, 'units'), { name }); 
+                    nameInput.value = ''; 
+                    await initializeStaticData(); 
+                }
             }
-        }
-        else if (target.id === 'addCompBtn') {
-            const name = $('#newCompName').value.trim();
-            if (name) { 
-                await addDoc(collection(db, 'compartments'), { name }); 
-                $('#newCompName').value = ''; 
-                await initializeStaticData(); 
+            else if (target.id === 'addCompBtn') {
+                const nameInput = $('#newCompName');
+                const name = nameInput.value.trim();
+                if (name) { 
+                    await addDoc(collection(db, 'compartments'), { name }); 
+                    nameInput.value = ''; 
+                    await initializeStaticData(); 
+                }
             }
-        }
-        else if (target.id === 'addCategoryBtn') {
-            const name = $('#newCategoryName').value.trim();
-            if (name) { 
-                await addDoc(collection(db, 'categories'), { name }); 
-                $('#newCategoryName').value = ''; 
-                await initializeStaticData(); 
+            else if (target.id === 'addCategoryBtn') {
+                const nameInput = $('#newCategoryName');
+                const name = nameInput.value.trim();
+                if (name) { 
+                    await addDoc(collection(db, 'categories'), { name }); 
+                    nameInput.value = ''; 
+                    await initializeStaticData(); 
+                }
             }
-        }
-        else if (target.id === 'addVendorBtn') {
-            openVendorModal();
-        }
+            else if (target.id === 'addVendorBtn') {
+                openVendorModal();
+            }
 
-        // --- Delete Actions ---
-        else if (target.dataset.deleteUnitId && confirm('Are you sure you want to delete this unit?')) {
-            await deleteDoc(doc(db, 'units', target.dataset.deleteUnitId)); 
-            await initializeStaticData();
-        }
-        else if (target.dataset.deleteCompId && confirm('Are you sure you want to delete this compartment?')) {
-            await deleteDoc(doc(db, 'compartments', target.dataset.deleteCompId)); 
-            await initializeStaticData();
-        }
-        else if (target.dataset.deleteCategoryId && confirm('Are you sure you want to delete this category?')) {
-            await deleteDoc(doc(db, 'categories', target.dataset.deleteCategoryId));
-            await initializeStaticData();
-        }
-        else if (target.dataset.deleteVendorId && confirm('Are you sure you want to delete this vendor?')) {
-            await deleteDoc(doc(db, 'vendors', target.dataset.deleteVendorId));
-            await initializeStaticData();
-        }
+            // --- Delete Actions ---
+            else if (target.dataset.deleteUnitId && confirm('Are you sure you want to delete this unit?')) {
+                await deleteDoc(doc(db, 'units', target.dataset.deleteUnitId)); 
+                await initializeStaticData();
+            }
+            else if (target.dataset.deleteCompId && confirm('Are you sure you want to delete this compartment?')) {
+                await deleteDoc(doc(db, 'compartments', target.dataset.deleteCompId)); 
+                await initializeStaticData();
+            }
+            else if (target.dataset.deleteCategoryId && confirm('Are you sure you want to delete this category?')) {
+                await deleteDoc(doc(db, 'categories', target.dataset.deleteCategoryId));
+                await initializeStaticData();
+            }
+            else if (target.dataset.deleteVendorId && confirm('Are you sure you want to delete this vendor?')) {
+                await deleteDoc(doc(db, 'vendors', target.dataset.deleteVendorId));
+                await initializeStaticData();
+            }
 
-        // --- Edit Actions ---
-        else if (target.dataset.editVendorId) {
-            openVendorModal(target.dataset.editVendorId);
-        }
-        else if (target.dataset.editCollection && target.dataset.editId) {
-            openMgmtEditModal(target.dataset.editCollection, target.dataset.editId, target.dataset.editName);
-        }
-    });
+            // --- Edit Actions ---
+            else if (target.dataset.editVendorId) {
+                openVendorModal(target.dataset.editVendorId);
+            }
+            else if (target.dataset.editCollection && target.dataset.editId) {
+                openMgmtEditModal(target.dataset.editCollection, target.dataset.editId, target.dataset.editName);
+            }
+        });
+    }
 }
 
 // --- App Start ---
+// ***** THIS IS THE FIX *****
+// Wait for the entire HTML document to be loaded before running any script
 document.addEventListener("DOMContentLoaded", () => {
     
     const loadingContainer = $("#loading-container");
