@@ -79,6 +79,38 @@
     .quick-qty-edit { transition: background-color 0.2s, border-color 0.2s; width: 70px; text-align: right; padding-right: 5px; }
     .quick-qty-edit.success { background-color: var(--ok-light); border-color: var(--ok); }
     .quick-qty-edit.error { background-color: #fdecea; border-color: var(--bad); }
+    #export-fields-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 10px;
+      background: var(--bg);
+      padding: 1rem;
+      border: 1px solid var(--b);
+      border-radius: 8px;
+    }
+    #export-fields-list label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: normal;
+      margin: 0;
+    }
+    #export-fields-list input[type="checkbox"] {
+      width: auto;
+    }
+    .export-price-options {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1rem;
+        margin-top: 1rem;
+    }
+    .export-price-options label {
+        font-weight: normal;
+        margin: 0;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
     #printOrderModal .print-header { display: none; }
     .sub-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--b); margin-bottom: 1rem; }
     .sub-tab-btn { background: #eee; border: 1px solid var(--b); border-bottom: none; padding: 8px 12px; border-radius: 8px 8px 0 0; font-size: 0.9rem; cursor: pointer; margin-bottom: -1px; }

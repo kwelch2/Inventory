@@ -35,7 +35,14 @@ export function login() {
 export function logout() {
     return signOut(auth);
 }
-
+// --- NEW: Moved from app.js ---
+export function applyPermissions(role) {
+    const isAdmin = (role === 'Admin');
+    document.querySelectorAll('.btn.danger').forEach(btn => {
+        btn.style.display = isAdmin ? 'inline-block' : 'none';
+    });
+}
+// --- End Moved Function ---
 export function onUserHandler(callback) {
     onAuthStateChanged(auth, async (user) => {
         if (user) {
