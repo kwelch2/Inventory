@@ -14,7 +14,8 @@ import {
     setupAddItemToOrderModal, setupCatalogModal, setupPricingModal, 
     setupChangeVendorModal, setupVendorModal, setupMgmtEditModal,
     setupPrintModal, setupModalCloseButtons, showPrintModal, showMasterOrderModal,
-    openVendorModal, openMgmtEditModal, openChangeVendorModal
+    openVendorModal, openMgmtEditModal, openChangeVendorModal, 
+    openExportModal, setupExportModal // <-- Make sure both are here
 } from "./ui/modals.js";
 
 let appInitialized = false;
@@ -44,6 +45,7 @@ async function boot() {
     setupMgmtEditModal();
     setupPrintModal();
     setupModalCloseButtons();
+    setupExportModal();
 
     // Setup panel-specific listeners
     setupCatalogPanel();

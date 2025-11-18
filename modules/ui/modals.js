@@ -4,7 +4,7 @@ import {
 } from "../firebase.js"; // <--- CHANGED
 import { db } from "../firebase.js"; // <--- db is still imported from here
 import { state } from "../state.js";
-import { $, escapeHtml } from "../helpers/utils.js";
+import { $, escapeHtml, exportToCsv, downloadCsv } from "../helpers/utils.js";
 import { initializeStaticData, findBestVendor } from "../firestoreApi.js";
 import { applyPermissions } from "../app.js"; 
 
@@ -593,7 +593,116 @@ function handlePrint() {
 export function setupPrintModal() {
     $('#printOrderBtn').addEventListener('click', handlePrint);
 }
+export function openExportModal() {
+    $('#exportModal').style.display = 'flex';
+}
 
+export function setupExportModal() {
+    $('#confirmExportBtn').addEventListener('click', () => {
+        const selectedFields = Array.from(document.querySelectorAll('.export-field:checked')).map(cb => cb.value);
+        const pricingOption = document.querySelector('input[name="priceOption"]:checked').value;
+        
+        if (selectedFields.length === 0) {
+            alert("Please select at least one field to export.");
+            return;
+        }
+
+        const { data, columns } = buildExportData(selectedFields, pricingOption);
+        
+        if (data.length === 0) {
+            alert("No active catalog items to export.");
+            return;
+        }
+        
+        const csvString = exportToCsv(data, columns);
+        downloadCsv(csvString, 'ems_catalog_export.csv');
+        $('#exportModal').style.display = 'none';
+    });
+}
+
+function buildExportData(selectedFields, pricingOption) {
+    const data = [];
+    let columns = [...selectedFields]; // Start with base catalog fields
+    
+    // Add price columns if needed
+    if (pricingOption === 'lowest' || pricingOption === 'preferred') {
+        columns.push('vendorName', 'vendorItemNo', 'unitPrice');
+    } else if (pricingOption === 'all') {
+        columns.push('vendorName', 'vendorItemNo', 'unitPrice', 'vendorStatus');
+    }
+
+    const itemsToExport = state.catalog.filter(item => item.isActive !== false);
+
+    for (const item of itemsToExport) {
+        // Build the base row with selected catalog fields
+        const baseRow = {};
+        for (const field of selectedFields) {
+            if (field === 'categoryName') {
+                baseRow[field] = state.categoryMap.get(item.category) || item.category || '';
+            } else if (field === 'barcode') {
+                baseRow[field] = Array.isArray(item.barcode) ? item.barcode.join('; ') : (item.barcode || '');
+            } else {
+                baseRow[field] = item[field] || '';
+            }
+        }
+        
+        const prices = (state.pricingMap.get(item.id) || [])
+            .map(p => ({
+                ...p, 
+                vendorName: state.vendorMap.get(p.vendorId) || 'N/A'
+            }))
+            .sort((a,b) => (a.unitPrice || Infinity) - (b.unitPrice || Infinity));
+
+        // Add pricing data based on the selected option
+        if (pricingOption === 'none') {
+            data.push(baseRow);
+        } 
+        else if (pricingOption === 'lowest') {
+            const lowestPrice = prices[0];
+            if (lowestPrice) {
+                data.push({
+                    ...baseRow,
+                    vendorName: lowestPrice.vendorName,
+                    vendorItemNo: lowestPrice.vendorItemNo || '',
+                    unitPrice: lowestPrice.unitPrice || 0
+                });
+            } else {
+                data.push(baseRow); // Add item even if no price
+            }
+        } 
+        else if (pricingOption === 'preferred') {
+            const preferredPrice = prices.find(p => p.vendorId === item.preferredVendorId);
+            if (preferredPrice) {
+                data.push({
+                    ...baseRow,
+                    vendorName: preferredPrice.vendorName,
+                    vendorItemNo: preferredPrice.vendorItemNo || '',
+                    unitPrice: preferredPrice.unitPrice || 0
+                });
+            } else {
+                data.push(baseRow); // Add item even if no preferred price
+            }
+        }
+        else if (pricingOption === 'all') {
+            if (prices.length === 0) {
+                data.push(baseRow); // Add item once even if no prices
+            } else {
+                // Add one row for *each* price
+                for (const price of prices) {
+                    data.push({
+                        ...baseRow,
+                        vendorName: price.vendorName,
+                        vendorItemNo: price.vendorItemNo || '',
+                        unitPrice: price.unitPrice || 0,
+                        vendorStatus: price.vendorStatus || 'In Stock'
+                    });
+                }
+            }
+        }
+    }
+    
+    return { data, columns };
+}
 // --- Close Modal Global ---
 export function setupModalCloseButtons() {
     document.querySelectorAll('[data-close-modal]').forEach(btn => {

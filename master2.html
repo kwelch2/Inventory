@@ -406,7 +406,42 @@
     </div>
   </div>
 </div>
+<div id="exportModal" class="modal">
+  <div class="modal-content" style="max-width: 600px;">
+    <div class="modal-header">
+      <h2>Export Label Data</h2>
+      <span class="close-btn" data-close-modal="exportModal">&times;</span>
+    </div>
+    <div class="modal-body" style="grid-template-columns: 1fr;">
+      <h4>Select Catalog Fields to Include:</h4>
+      <div id="export-fields-list">
+        <label><input type="checkbox" class="export-field" value="itemName" checked> Item Name</label>
+        <label><input type="checkbox" class="export-field" value="itemRef" checked> Item Ref #</label>
+        <label><input type="checkbox" class="export-field" value="parLevel" checked> PAR Level</label>
+        <label><input type="checkbox" class="export-field" value="unit"> Unit (e.g., Box)</label>
+        <label><input type="checkbox" class="export-field" value="packSize"> Qty per Unit</label>
+        <label><input type="checkbox" class="export-field" value="categoryName"> Category Name</label>
+        <label><input type="checkbox" class="export-field" value="barcode"> Barcodes (joined)</label>
+      </div>
+      
+      <h4 style="margin-top: 1rem;">Include Vendor Pricing:</h4>
+      <div class="export-price-options">
+          <label><input type="radio" name="priceOption" value="none" checked> None</label>
+          <label><input type="radio" name="priceOption" value="lowest"> Lowest Price (as columns)</label>
+          <label><input type="radio" name="priceOption" value="preferred"> Preferred Price (as columns)</label>
+          <label><input type="radio" name="priceOption" value="all"> All Prices (one row per price)</label>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" data-close-modal="exportModal">Cancel</button>
+      <button class="btn primary" id="confirmExportBtn">Export CSV</button>
+    </div>
+  </div>
+</div>
 
+<script type="module" src="./modules/app.js"></script>
+</body>
+</html>
 <script type="module" src="./modules/app.js"></script>
 </body>
 </html>
