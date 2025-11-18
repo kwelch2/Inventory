@@ -262,17 +262,30 @@ function setupManagementPanelActions() {
 }
 
 // --- App Start ---
-$("#loading-container").style.display = "block";
+document.addEventListener("DOMContentLoaded", () => {
+    
+    const loadingContainer = $("#loading-container");
+    if (loadingContainer) {
+        loadingContainer.style.display = "block";
+    }
 
-// Listen for auth state changes
-onUserHandler((isLoggedIn) => {
-    if (isLoggedIn && !appInitialized) {
-        boot();
-    } else if (!isLoggedIn) {
-        appInitialized = false; // Reset app if user logs out
+    // Listen for auth state changes
+    onUserHandler((isLoggedIn) => {
+        if (isLoggedIn && !appInitialized) {
+            boot();
+        } else if (!isLoggedIn) {
+            appInitialized = false; // Reset app if user logs out
+        }
+    });
+
+    // Wire up login/logout buttons
+    const loginBtn = $("#googleLoginBtn");
+    if (loginBtn) {
+        loginBtn.addEventListener("click", login);
+    }
+
+    const logoutBtn = $("#logoutBtn");
+    if (logoutBtn) {
+        logoutBtn.addEventListener("click", logout);
     }
 });
-
-// Wire up login/logout buttons
-$("#googleLoginBtn").addEventListener("click", login);
-$("#logoutBtn").addEventListener("click", logout);
