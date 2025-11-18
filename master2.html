@@ -155,7 +155,12 @@
       
       <section id="panel-catalog" class="panel">
         <h2>Catalog Manager <span class="kvd" id="kvCatalog"></span></h2>
-        <div class="row"><button class="btn" id="refreshCatalog">Refresh</button><button class="btn primary" id="showCatalogModal">Add New Item</button><span style="flex: 1;"></span><input id="catSearch" placeholder="Search..."/></div>
+        <div class="row">
+            <button class="btn" id="refreshCatalog">Refresh</button>
+            <button class="btn primary" id="showCatalogModal">Add New Item</button>
+            <button class="btn" id="exportLabelsCsvBtn" style="margin-left: 1rem;">Export for Labels (CSV)</button> <span style="flex: 1;"></span>
+            <input id="catSearch" placeholder="Search..."/>
+        </div>
         <div id="catalogTableContainer"></div>
       </section>
       
