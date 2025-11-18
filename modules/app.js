@@ -14,7 +14,7 @@ import {
     setupAddItemToOrderModal, setupCatalogModal, setupPricingModal, 
     setupChangeVendorModal, setupVendorModal, setupMgmtEditModal,
     setupPrintModal, setupModalCloseButtons, showPrintModal, showMasterOrderModal,
-    openVendorModal, openMgmtEditModal, openChangeVendorModal, setupExportModal
+    openVendorModal, openMgmtEditModal, openChangeVendorModal
 } from "./ui/modals.js";
 
 let appInitialized = false;

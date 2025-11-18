@@ -1,6 +1,6 @@
 // modules/ui/catalog.js
 import { state } from "../state.js";
-import { $, escapeHtml } from "../helpers/utils.js";
+import { $, eescapeHtml, exportToCsv, downloadCsv} from "../helpers/utils.js";
 import { openCatalogModal, openPricingModal } from "./modals.js"; // <-- Removed openLabelModal
 
 export function renderCatalog() {
