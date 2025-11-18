@@ -1,9 +1,9 @@
 // modules/app.js
 import { 
   doc, updateDoc, addDoc, collection, serverTimestamp, deleteDoc 
-} from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+} from "./firebase.js"; // <--- CHANGED
 import { state } from "./state.js";
-import { db } from "./firebase.js";
+import { db } from "./firebase.js"; // <--- db is still imported from here
 import { onUserHandler, login, logout } from "./auth.js";
 import { $, escapeHtml } from "./helpers/utils.js";
 import { initializeStaticData, setupRealtimeListeners, updateRequestStatus, findBestVendor } from "./firestoreApi.js";

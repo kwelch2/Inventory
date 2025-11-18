@@ -4,6 +4,22 @@ import {
   initializeFirestore,
   persistentLocalCache,
   persistentMultipleTabManager,
+  // Add all the other functions we need
+  collection, 
+  getDocs, 
+  doc, 
+  setDoc, 
+  getDoc, 
+  addDoc, 
+  updateDoc, 
+  deleteDoc, 
+  writeBatch, 
+  serverTimestamp, 
+  query, 
+  where, 
+  orderBy, 
+  onSnapshot,
+  deleteField
 } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
 export const firebaseConfig = {
@@ -19,3 +35,22 @@ export const db = initializeFirestore(app, {
     tabManager: persistentMultipleTabManager(),
   }),
 });
+
+// Re-export all the firestore functions so other modules can import from this file
+export {
+  collection, 
+  getDocs, 
+  doc, 
+  setDoc, 
+  getDoc, 
+  addDoc, 
+  updateDoc, 
+  deleteDoc, 
+  writeBatch, 
+  serverTimestamp, 
+  query, 
+  where, 
+  orderBy, 
+  onSnapshot,
+  deleteField
+};
