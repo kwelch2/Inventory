@@ -1,86 +1,276 @@
 // modules/app.js
+import { 
+  doc, updateDoc, addDoc, collection, serverTimestamp, deleteDoc 
+} from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 import { state } from "./state.js";
-import { onUserStateChanged, login, logout } from "./auth.js";
-import { $ } from "./helpers/utils.js";
-import { renderTabs, activateTab } from "./ui/tabs.js";
-import { renderOrdersPanel, drawOrders } from "./ui/orders.js";
-import { renderCatalogPanel, drawCatalogTable } from "./ui/catalog.js";
+import { db } from "./firebase.js";
+import { onUserHandler, login, logout } from "./auth.js";
+import { $, escapeHtml } from "./helpers/utils.js";
+import { initializeStaticData, setupRealtimeListeners, updateRequestStatus } from "./firestoreApi.js";
+import { renderOrders } from "./ui/orders.js";
+import { renderCatalog, setupCatalogPanel } from "./ui/catalog.js";
+import { mountTabs, mountManagementTabs } from "./ui/tabs.js";
+import { 
+    setupAddItemToOrderModal, setupCatalogModal, setupPricingModal, 
+    setupChangeVendorModal, setupVendorModal, setupMgmtEditModal,
+    setupPrintModal, setupModalCloseButtons, showPrintModal, showMasterOrderModal,
+    openVendorModal, openMgmtEditModal 
+} from "./ui/modals.js";
 
-import {
-  loadStaticData,
-  listenToRequests,
-  listenToVendorPricing
-} from "./firestoreApi.js";
+let appInitialized = false;
 
-console.log("App starting…");
-
-// Build empty panels container once
-function renderPanels() {
-  const app = document.getElementById("app");
-  if (!app) return;
-
-  app.insertAdjacentHTML("beforeend", `
-    <div id="tabs"></div>
-
-    <div id="panel-orders" class="panel">Loading orders…</div>
-    <div id="panel-catalog" class="panel hidden">Loading catalog…</div>
-    <div id="panel-management" class="panel hidden">Loading management…</div>
-  `);
+// --- Permissions ---
+export function applyPermissions(role) {
+    const isAdmin = (role === 'Admin');
+    document.querySelectorAll('.btn.danger').forEach(btn => {
+        btn.style.display = isAdmin ? 'inline-block' : 'none';
+    });
 }
 
+// --- Main App Initialization ---
+async function boot() {
+    if (appInitialized) return;
+    appInitialized = true;
 
-// MAIN APP INITIALIZATION — RUNS ONCE AFTER LOGIN
-onUserStateChanged(async (user) => {
-  if (!user) {
-    console.log("Logged out.");
-    state.user = null;
-    return;
-  }
+    mountTabs();
+    mountManagementTabs();
+    
+    // Setup all modal triggers and save buttons
+    setupAddItemToOrderModal();
+    setupCatalogModal();
+    setupPricingModal();
+    setupChangeVendorModal();
+    setupVendorModal();
+    setupMgmtEditModal();
+    setupPrintModal();
+    setupModalCloseButtons();
 
-  console.log("Logged in:", user.email);
+    // Setup panel-specific listeners
+    setupCatalogPanel();
+    setupOrdersPanelListeners();
+    setupManagementPanelActions();
+    
+    // Setup refresh buttons
+    ['refreshCatalog', 'refreshUnits', 'refreshCompartments', 'refreshCategories', 'refreshVendors'].forEach(id => {
+        const btn = $(`#${id}`); 
+        if (btn) btn.addEventListener('click', initializeStaticData);
+    });
+    
+    await initializeStaticData();
+    setupRealtimeListeners();
+    applyPermissions(state.userRole); // Apply permissions once data is loaded
+}
 
-// --- BUILD UI ONCE ---
-document.getElementById("app").innerHTML = ""; 
+// --- Event Listeners ---
+function setupOrdersPanelListeners() {
+    // Listener for Order filtering
+    document.querySelector('#panel-orders .row').addEventListener('click', e => {
+        if (e.target.classList.contains('filter-btn')) {
+            document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
+            e.target.classList.add('active');
+            renderOrders();
+        }
+        if (e.target.classList.contains('view-btn')) {
+            document.querySelectorAll('.view-btn').forEach(btn => btn.classList.remove('active'));
+            e.target.classList.add('active');
+            state.orderViewMode = e.target.dataset.view;
+            renderOrders();
+        }
+    });
+    $('#showHistoryToggle').addEventListener('change', renderOrders);
+    
+    // Generate Order from "View by Item"
+    $('#generateItemOrderBtn').addEventListener('click', () => {
+        const selectedCheckboxes = document.querySelectorAll('.item-order-checkbox:checked');
+        if (selectedCheckboxes.length === 0) {
+            alert("Please select items to include in the order.");
+            return;
+        }
+        const selectedRequestIds = Array.from(selectedCheckboxes).map(cb => cb.dataset.requestId);
+        const selectedRequests = state.requests
+            .filter(r => selectedRequestIds.includes(r.id))
+            .map(r => {
+                const catItem = state.catalogMap.get(r.catalogId);
+                const vendorInfo = findBestVendor(r.catalogId, catItem?.preferredVendorId, r.overrideVendorId);
+                return { ...r, catItem, vendorInfo };
+            });
 
-renderPanels();        // MUST come first — creates #tabs
-renderTabs();          // now tabs container exists
-renderOrdersPanel();   // builds orders panel content
-renderCatalogPanel();  // builds catalog panel content
-activateTab("orders"); // sets initial tab
+        const groupedRequests = new Map();
+        for (const r of selectedRequests) {
+            const vendorId = r.vendorInfo.vendorId;
+            if (!groupedRequests.has(vendorId)) groupedRequests.set(vendorId, []);
+            groupedRequests.get(vendorId).push(r);
+        }
+        showMasterOrderModal(groupedRequests);
+    });
 
-// --- LOAD DATA ---
-await loadStaticData();
 
-// realtime updates
-listenToRequests(() => {
-  drawOrders();
-  drawCatalogTable();
+    // Event delegation for Orders panel CLICK actions
+    $('#ordersGroupContainer').addEventListener('click', async e => {
+        const target = e.target;
+        
+        if (target.classList.contains('vendor-select-all') || target.classList.contains('item-select-all')) {
+            const groupContainer = target.closest('.vendor-group, .vendor-group-table');
+            const isChecked = target.checked;
+            const checkboxClass = state.orderViewMode === 'vendor' ? '.order-item-checkbox' : '.item-order-checkbox';
+            groupContainer.querySelectorAll(checkboxClass).forEach(cb => cb.checked = isChecked);
+            return;
+        }
+
+        if (target.classList.contains('generate-order-btn')) {
+            const vendorName = target.dataset.vendorName;
+            const groupContainer = target.closest('.vendor-group');
+            const selectedCheckboxes = groupContainer.querySelectorAll('.order-item-checkbox:checked');
+            if (selectedCheckboxes.length === 0) return alert("Please select at least one item to order.");
+            const selectedRequestIds = Array.from(selectedCheckboxes).map(cb => cb.dataset.requestId);
+            const selectedRequests = state.requests.filter(r => selectedRequestIds.includes(r.id));
+            showPrintModal(vendorName, selectedRequests);
+            return;
+        }
+        
+        const tr = target.closest('tr[data-request-id]');
+        if (!tr) return; 
+        
+        const requestId = tr.dataset.requestId;
+
+        if (target.dataset.toggleDetails !== undefined) {
+            const detailsRow = tr.nextElementSibling;
+            if (detailsRow && detailsRow.dataset.detailsFor === requestId) {
+                detailsRow.classList.toggle('visible');
+            }
+            return;
+        }
+
+        if (target.dataset.status) {
+            await updateRequestStatus(requestId, target.dataset.status);
+            return;
+        }
+        
+        if (target.dataset.changeVendorId) {
+            openChangeVendorModal(requestId);
+            return;
+        }
+    });
+
+    // Listeners for Qty changes (blur and Enter)
+    $('#ordersGroupContainer').addEventListener('blur', e => {
+        if (e.target.classList.contains('quick-qty-edit')) {
+            handleQuickQtyUpdate(e.target);
+        }
+    }, true);
+
+    $('#ordersGroupContainer').addEventListener('keydown', e => {
+        if (e.key === 'Enter' && e.target.classList.contains('quick-qty-edit')) {
+            handleQuickQtyUpdate(e.target);
+            e.target.blur();
+        }
+    });
+}
+
+async function handleQuickQtyUpdate(target) {
+    const requestId = target.dataset.requestId;
+    const newQty = target.value.trim();
+    const originalQty = target.dataset.originalValue;
+
+    if (!newQty) {
+        target.classList.add('error');
+        alert("Quantity cannot be empty.");
+        target.value = originalQty;
+        setTimeout(() => target.classList.remove('error'), 1000);
+        return;
+    }
+    if (newQty === originalQty) return; // No change
+
+    try {
+        await updateDoc(doc(db, 'requests', requestId), {
+            qty: newQty,
+            updatedAt: serverTimestamp()
+        });
+        target.dataset.originalValue = newQty;
+        target.classList.add('success');
+        setTimeout(() => target.classList.remove('success'), 1500);
+    } catch (e) {
+        console.error("Failed to update quantity:", e);
+        target.classList.add('error');
+        alert("Error saving quantity.");
+        target.value = originalQty;
+        setTimeout(() => target.classList.remove('error'), 1000);
+    }
+}
+
+function setupManagementPanelActions() {
+    $('#panel-management').addEventListener('click', async e => {
+        const target = e.target;
+        
+        // --- Add Actions ---
+        if (target.id === 'addUnitBtn') {
+            const name = $('#newUnitName').value.trim();
+            if (name) { 
+                await addDoc(collection(db, 'units'), { name }); 
+                $('#newUnitName').value = ''; 
+                await initializeStaticData(); 
+            }
+        }
+        else if (target.id === 'addCompBtn') {
+            const name = $('#newCompName').value.trim();
+            if (name) { 
+                await addDoc(collection(db, 'compartments'), { name }); 
+                $('#newCompName').value = ''; 
+                await initializeStaticData(); 
+            }
+        }
+        else if (target.id === 'addCategoryBtn') {
+            const name = $('#newCategoryName').value.trim();
+            if (name) { 
+                await addDoc(collection(db, 'categories'), { name }); 
+                $('#newCategoryName').value = ''; 
+                await initializeStaticData(); 
+            }
+        }
+        else if (target.id === 'addVendorBtn') {
+            openVendorModal();
+        }
+
+        // --- Delete Actions ---
+        else if (target.dataset.deleteUnitId && confirm('Are you sure you want to delete this unit?')) {
+            await deleteDoc(doc(db, 'units', target.dataset.deleteUnitId)); 
+            await initializeStaticData();
+        }
+        else if (target.dataset.deleteCompId && confirm('Are you sure you want to delete this compartment?')) {
+            await deleteDoc(doc(db, 'compartments', target.dataset.deleteCompId)); 
+            await initializeStaticData();
+        }
+        else if (target.dataset.deleteCategoryId && confirm('Are you sure you want to delete this category?')) {
+            await deleteDoc(doc(db, 'categories', target.dataset.deleteCategoryId));
+            await initializeStaticData();
+        }
+        else if (target.dataset.deleteVendorId && confirm('Are you sure you want to delete this vendor?')) {
+            await deleteDoc(doc(db, 'vendors', target.dataset.deleteVendorId));
+            await initializeStaticData();
+        }
+
+        // --- Edit Actions ---
+        else if (target.dataset.editVendorId) {
+            openVendorModal(target.dataset.editVendorId);
+        }
+        else if (target.dataset.editCollection && target.dataset.editId) {
+            openMgmtEditModal(target.dataset.editCollection, target.dataset.editId, target.dataset.editName);
+        }
+    });
+}
+
+// --- App Start ---
+$("loading-container").style.display = "block";
+
+// Listen for auth state changes
+onUserHandler((isLoggedIn) => {
+    if (isLoggedIn && !appInitialized) {
+        boot();
+    } else if (!isLoggedIn) {
+        appInitialized = false; // Reset app if user logs out
+    }
 });
-listenToVendorPricing(() => {
-  drawOrders();
-  drawCatalogTable();
-});
 
-// tab switching
-window.addEventListener("changeTab", (e) => {
-  activateTab(e.detail);
-});
-
-  // --- LOAD DATA ---
-  await loadStaticData();
-
-  // --- REALTIME LIVE UPDATES ---
-  listenToRequests(() => drawOrders());
-  listenToVendorPricing(() => drawOrders());
-});
-
-// TEMP LOGIN/LOGOUT BUTTONS
-document.body.insertAdjacentHTML("beforeend", `
-  <div style="margin-top:2rem; padding:1rem; border:1px solid #ccc;">
-    <button id="loginBtn">Login with Google</button>
-    <button id="logoutBtn">Logout</button>
-  </div>
-`);
-
-document.getElementById("loginBtn").addEventListener("click", login);
-document.getElementById("logoutBtn").addEventListener("click", logout);
+// Wire up login/logout buttons
+$("#googleLoginBtn").addEventListener("click", login);
+$("#logoutBtn").addEventListener("click", logout);

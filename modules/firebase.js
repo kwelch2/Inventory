@@ -9,7 +9,7 @@ import {
 export const firebaseConfig = {
   apiKey: "AIzaSyD7pMc-AHXb1cApzSfImkWvIjM9iwCoym4",
   authDomain: "supplies-ems.firebaseapp.com",
-  projectId: "supplies-ems",
+  projectId: "suppies-ems",
 };
 
 export const app = initializeApp(firebaseConfig);

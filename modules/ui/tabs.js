@@ -1,52 +1,34 @@
 // modules/ui/tabs.js
 import { $ } from "../helpers/utils.js";
 
-const TABS = [
-  { id: "orders", label: "Orders" },
-  { id: "catalog", label: "Catalog" },
-  { id: "management", label: "Management" }
-];
-
-// Build the tab bar UI
-export function renderTabs() {
-  const tabsContainer = $("#tabs");
-  if (!tabsContainer) return;
-
-  tabsContainer.innerHTML = TABS.map(t => `
-    <button class="tab-btn" data-tab="${t.id}">
-      ${t.label}
-    </button>
-  `).join("");
-
-  // Default
-  activateTab("orders");
-
-  // Clicking switches tabs
-  tabsContainer.addEventListener("click", (e) => {
-    const btn = e.target.closest(".tab-btn");
-    if (!btn) return;
-
-    const tabId = btn.dataset.tab;
-    activateTab(tabId);
-  });
+export function mountTabs() {
+    const TABS = ['Orders', 'Catalog', 'Management'];
+    $('#tabs').innerHTML = TABS.map(t => `<button class="tab" data-tab="${t.toLowerCase().replace(' ', '_')}">${t}</button>`).join('');
+    
+    $('#tabs').addEventListener('click', (ev) => {
+        const tabId = ev.target.dataset.tab; 
+        if (!tabId) return;
+        
+        document.querySelectorAll('.tab, .panel').forEach(el => el.classList.remove('active'));
+        ev.target.classList.add('active'); 
+        $(`#panel-${tabId}`).classList.add('active');
+    });
+    
+    // Activate the first tab by default
+    $('#tabs').querySelector('[data-tab="orders"]').click();
 }
 
-// Handles showing/hiding panels & highlighting active tab
-export function activateTab(tabId) {
-  // highlight active button
-  document.querySelectorAll(".tab-btn").forEach(btn => {
-    btn.classList.toggle("active", btn.dataset.tab === tabId);
-  });
-
-  // hide all panels
-  document.querySelectorAll(".panel").forEach(panel => {
-    panel.classList.remove("active");
-  });
-
-  // show selected panel
-  const panel = document.querySelector(`#panel-${tabId}`);
-  if (panel) panel.classList.add("active");
-
-  // dispatch event so other modules know tab changed
-  window.dispatchEvent(new CustomEvent("changeTab", { detail: tabId }));
+export function mountManagementTabs() {
+    $('#mgmtSubTabs').addEventListener('click', (ev) => {
+        const subTabId = ev.target.dataset.subtab;
+        if (!subTabId) return;
+        
+        // Handle button active state
+        $('#mgmtSubTabs').querySelectorAll('.sub-tab-btn').forEach(btn => btn.classList.remove('active'));
+        ev.target.classList.add('active');
+        
+        // Handle panel active state
+        $('#panel-management').querySelectorAll('.sub-panel').forEach(panel => panel.classList.remove('active'));
+        $(`#subpanel-${subTabId}`).classList.add('active');
+    });
 }
