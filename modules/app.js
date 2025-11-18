@@ -6,7 +6,7 @@ import { state } from "./state.js";
 import { db } from "./firebase.js";
 import { onUserHandler, login, logout } from "./auth.js";
 import { $, escapeHtml } from "./helpers/utils.js";
-import { initializeStaticData, setupRealtimeListeners, updateRequestStatus } from "./firestoreApi.js";
+import { initializeStaticData, setupRealtimeListeners, updateRequestStatus, findBestVendor } from "./firestoreApi.js";
 import { renderOrders } from "./ui/orders.js";
 import { renderCatalog, setupCatalogPanel } from "./ui/catalog.js";
 import { mountTabs, mountManagementTabs } from "./ui/tabs.js";
@@ -14,7 +14,7 @@ import {
     setupAddItemToOrderModal, setupCatalogModal, setupPricingModal, 
     setupChangeVendorModal, setupVendorModal, setupMgmtEditModal,
     setupPrintModal, setupModalCloseButtons, showPrintModal, showMasterOrderModal,
-    openVendorModal, openMgmtEditModal 
+    openVendorModal, openMgmtEditModal, openChangeVendorModal
 } from "./ui/modals.js";
 
 let appInitialized = false;
@@ -260,7 +260,7 @@ function setupManagementPanelActions() {
 }
 
 // --- App Start ---
-$("loading-container").style.display = "block";
+$("#loading-container").style.display = "block";
 
 // Listen for auth state changes
 onUserHandler((isLoggedIn) => {

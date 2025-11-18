@@ -54,10 +54,10 @@ export function onUserHandler(callback) {
                 resetInactivityTimer(); // Start timer on login
                 
                 // UI updates for logged-in state
-                $("auth-status-main").textContent = `${user.email} (${state.userRole})`;
-                $("app-container").style.display = "block";
-                $("login-container").style.display = "none";
-                $("loading-container").style.display = "none";
+                $("#auth-status-main").textContent = `${user.email} (${state.userRole})`;
+                $("#app-container").style.display = "block";
+                $("#login-container").style.display = "none";
+                $("#loading-container").style.display = "none";
                 
                 callback(true); // Tell app.js to boot
             } catch (error) {
@@ -69,9 +69,9 @@ export function onUserHandler(callback) {
             // Handle Sign Out
             state.user = null;
             clearTimeout(inactivityTimeout); // Stop timer
-            $("app-container").style.display = "none";
-            $("login-container").style.display = "block";
-            $("loading-container").style.display = "none";
+            $("#app-container").style.display = "none";
+            $("#login-container").style.display = "block";
+            $("#loading-container").style.display = "none";
             
             callback(false); // Tell app.js to reset
         }
