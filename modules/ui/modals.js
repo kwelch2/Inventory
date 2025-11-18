@@ -6,7 +6,7 @@ import { db } from "../firebase.js"; // <--- db is still imported from here
 import { state } from "../state.js";
 import { $, escapeHtml, exportToCsv, downloadCsv } from "../helpers/utils.js";
 import { initializeStaticData, findBestVendor } from "../firestoreApi.js";
-import { applyPermissions } from "../app.js"; 
+import { applyPermissions } from "../auth.js";
 
 let addItemChoices;
 let isScannerActive = false;
