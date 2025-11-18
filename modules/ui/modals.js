@@ -116,6 +116,17 @@ function hasUnsavedCatalogChanges() {
 export function setupAddItemToOrderModal() {
     const modal = $('#addItemToOrderModal');
     const itemElement = $('#addItemSelect');
+    const showModalBtn = $('#showAddItemModal'); // <-- Get element
+    const saveBtn = $('#saveAddItemBtn'); // <-- Get element
+
+    // --- SAFETY CHECK ---
+    // If these elements don't exist, stop the function.
+    if (!modal || !itemElement || !showModalBtn || !saveBtn) {
+        console.warn("Could not find 'Add Item to Order' modal elements.");
+        return; // Exit function early
+    }
+    // --- END CHECK ---
+
     if (addItemChoices) addItemChoices.destroy();
     addItemChoices = new Choices(itemElement, { 
         searchEnabled: true, 
@@ -123,13 +134,13 @@ export function setupAddItemToOrderModal() {
         searchResultLimit: 100 
     });
 
-    $('#showAddItemModal').addEventListener('click', () => {
+    showModalBtn.addEventListener('click', () => { // <-- Use variable
         const options = state.catalog.filter(c=>c.isActive !== false).map(c=>({value: c.id, label: c.itemName}));
         addItemChoices.setChoices(options, 'value', 'label', true);
         modal.style.display = 'flex';
     });
 
-    $('#saveAddItemBtn').addEventListener('click', async () => {
+    saveBtn.addEventListener('click', async () => { // <-- Use variable
         const catalogId = addItemChoices.getValue(true);
         const qty = $('#addItemQty').value;
         if (!catalogId || !qty) return alert('Please select an item and quantity.');
