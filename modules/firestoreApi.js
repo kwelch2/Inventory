@@ -5,7 +5,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 import { db } from "./firebase.js";
 import { state } from "./state.js";
-import { renderCatalog } from "./ui/catalog.js";
+import { renderCatalog, populateCategoryFilter } from "./ui/catalog.js";
 import { renderOrders } from "./ui/orders.js";
 import { renderUnits, renderCompartments, renderCategories, renderVendors } from "./ui/management.js";
 
@@ -35,6 +35,7 @@ export async function initializeStaticData() {
         renderCompartments();
         renderCategories();
         renderVendors();
+        populateCategoryFilter();
     } catch(e) {
         console.error("Static Data Load Failed:", e);
         alert("Static Data Load Failed: " + e.message);

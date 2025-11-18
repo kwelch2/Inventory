@@ -168,9 +168,12 @@
       <section id="panel-orders" class="panel">
         <h2>Orders & Requests</h2>
         <div class="row">
-            <button class="btn primary" id="showAddItemModal">+ Add Item to Order</button>
-            <button class="btn primary" id="generateItemOrderBtn" style="display: none;">Generate Order from Selected</button>
-            <span class="spacer" style="flex: 1;"></span>
+            <button class="btn primary" id="showCatalogModal">Add New Item</button>
+            <button class="btn" id="exportLabelsCsvBtn" style="margin-left: 1rem;">Export for Labels (CSV)</button>
+            
+            <select id="catFilterCategory" style="width: 200px; margin-left: 1rem;"></select>
+            
+            <span style="flex: 1;"></span>
             <div class="view-toggle-wrap" style="margin-left: 1rem;">
                 <button class="btn view-btn active" data-view="vendor">View by Vendor</button>
                 <button class="btn view-btn" data-view="item">View by Item</button>

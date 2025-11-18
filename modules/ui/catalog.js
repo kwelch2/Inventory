@@ -8,11 +8,16 @@ export function renderCatalog() {
     if (!container) return; 
     
     const query = $('#catSearch').value.toLowerCase();
+    const categoryFilter = $('#catFilterCategory') ? $('#catFilterCategory').value : 'all'; // Get filter value
     
-    const filtered = state.catalog.filter(i => 
-        (i.itemName || '').toLowerCase().includes(query) || 
-        (Array.isArray(i.itemNameAlt) ? i.itemNameAlt.join(' ') : (i.itemNameAlt || '')).toLowerCase().includes(query)
-    );
+    const filtered = state.catalog.filter(i => {
+        const searchMatch = (i.itemName || '').toLowerCase().includes(query) || 
+            (Array.isArray(i.itemNameAlt) ? i.itemNameAlt.join(' ') : (i.itemNameAlt || '')).toLowerCase().includes(query);
+        
+        const categoryMatch = (categoryFilter === 'all' || i.category === categoryFilter); // Check category
+        
+        return searchMatch && categoryMatch; // Must match both
+    });
 
     filtered.sort((a, b) => {
         const aActive = a.isActive !== false;
@@ -80,7 +85,22 @@ export function renderCatalog() {
             <tbody>${rows}</tbody>
         </table>`;
 }
-
+export function populateCategoryFilter() {
+    const catSelect = $("#catFilterCategory");
+    if (!catSelect) return; // Guard clause
+    
+    // Preserve selected value if it exists
+    const currentVal = catSelect.value;
+    
+    catSelect.innerHTML = '<option value="all">All Categories</option>' +
+        state.categories
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`)
+            .join('');
+    
+    // Restore selected value
+    catSelect.value = currentVal || 'all';
+}
 // Setup event listeners for the catalog panel
 export function setupCatalogPanel() {
     $('#catalogTableContainer').addEventListener('click', e => {
@@ -104,7 +124,14 @@ export function setupCatalogPanel() {
         }
     });
 
-    $('#catSearch').addEventListener('input', renderCatalog);
+   $('#catSearch').addEventListener('input', renderCatalog);
+    
+    // ADD THIS LISTENER
+    const catFilter = $('#catFilterCategory');
+    if (catFilter) {
+        catFilter.addEventListener('change', renderCatalog);
+    }
+    
     $('#showCatalogModal').addEventListener('click', () => openCatalogModal());
 
     // --- NEW: Wire up the Export Button to open the modal ---
