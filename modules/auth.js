@@ -21,7 +21,7 @@ export function resetInactivityTimer() {
         }, INACTIVITY_LIMIT);
     }
 }
-['mousemove', 'keydown', 'click', 'touchstart'].forEach(evt => window.addEventListener(evt, resetInactivityTimer));
+['mousemove', 'keydown', 'click', 'touchstart'].forEach(evt => window.addEventListener('evt', resetInactivityTimer));
 
 export function login() {
     const provider = new GoogleAuthProvider();
@@ -35,14 +35,14 @@ export function login() {
 export function logout() {
     return signOut(auth);
 }
-// --- NEW: Moved from app.js ---
+
 export function applyPermissions(role) {
     const isAdmin = (role === 'Admin');
     document.querySelectorAll('.btn.danger').forEach(btn => {
         btn.style.display = isAdmin ? 'inline-block' : 'none';
     });
 }
-// --- End Moved Function ---
+
 export function onUserHandler(callback) {
     onAuthStateChanged(auth, async (user) => {
         if (user) {

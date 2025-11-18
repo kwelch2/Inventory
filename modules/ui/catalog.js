@@ -1,7 +1,7 @@
 // modules/ui/catalog.js
 import { state } from "../state.js";
-import { $, escapeHtml, exportToCsv, downloadCsv} from "../helpers/utils.js";
-import { openCatalogModal, openPricingModal, openExportModal } from "./modals.js"; // <-- Removed openLabelModal
+import { $, escapeHtml, exportToCsv, downloadCsv } from "../helpers/utils.js";
+import { openCatalogModal, openPricingModal, openExportModal } from "./modals.js";
 
 export function renderCatalog() {
     const container = $("#catalogTableContainer");
@@ -85,6 +85,7 @@ export function renderCatalog() {
             <tbody>${rows}</tbody>
         </table>`;
 }
+
 export function populateCategoryFilter() {
     const catSelect = $("#catFilterCategory");
     if (!catSelect) return; // Guard clause
@@ -101,6 +102,7 @@ export function populateCategoryFilter() {
     // Restore selected value
     catSelect.value = currentVal || 'all';
 }
+
 // Setup event listeners for the catalog panel
 export function setupCatalogPanel() {
     $('#catalogTableContainer').addEventListener('click', e => {
@@ -110,8 +112,6 @@ export function setupCatalogPanel() {
             openCatalogModal(target.dataset.editItemId);
             return;
         }
-        
-        // --- REMOVED: data-label-item-id listener ---
         
         if (target.dataset.addPriceForId) {
             openPricingModal(null, target.dataset.addPriceForId);
@@ -124,9 +124,8 @@ export function setupCatalogPanel() {
         }
     });
 
-   $('#catSearch').addEventListener('input', renderCatalog);
+    $('#catSearch').addEventListener('input', renderCatalog);
     
-    // ADD THIS LISTENER
     const catFilter = $('#catFilterCategory');
     if (catFilter) {
         catFilter.addEventListener('change', renderCatalog);

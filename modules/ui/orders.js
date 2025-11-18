@@ -6,11 +6,20 @@ import { openChangeVendorModal } from "./modals.js";
 
 // Main render function, decides which view to show
 export function renderOrders() {
+    const genItemOrderBtn = $('#generateItemOrderBtn');
+    const container = $('#ordersGroupContainer');
+
+    // Safety check to prevent crash if DOM isn't ready
+    if (!genItemOrderBtn || !container) {
+        console.warn("renderOrders() called, but essential elements (#generateItemOrderBtn or #ordersGroupContainer) not found.");
+        return; // Exit function early
+    }
+
     if (state.orderViewMode === 'vendor') {
-        $('#generateItemOrderBtn').style.display = 'none';
+        genItemOrderBtn.style.display = 'none';
         renderOrdersByVendor();
     } else {
-        $('#generateItemOrderBtn').style.display = 'inline-block';
+        genItemOrderBtn.style.display = 'inline-block';
         renderOrdersByItem();
     }
 }
@@ -32,6 +41,7 @@ export function getFilteredRequests() {
 
 function renderOrdersByItem() {
     const container = $('#ordersGroupContainer');
+    if (!container) return; 
     const requestsToProcess = getFilteredRequests();
     
     const sortOrder = { "Open": 1, "Backordered": 2, "Pending": 2, "Ordered": 3 };
@@ -135,6 +145,7 @@ function renderOrdersByItem() {
 
 function renderOrdersByVendor() {
     const container = $('#ordersGroupContainer');
+    if (!container) return; 
     const requestsToProcess = getFilteredRequests();
 
     const sortOrder = { "Open": 1, "Backordered": 2, "Pending": 2, "Ordered": 3 };

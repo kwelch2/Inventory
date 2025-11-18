@@ -1,12 +1,12 @@
 // modules/ui/modals.js
 import { 
-  doc, updateDoc, addDoc, collection, serverTimestamp, deleteDoc 
-} from "../firebase.js"; // <--- CHANGED
-import { db } from "../firebase.js"; // <--- db is still imported from here
+  doc, updateDoc, addDoc, collection, serverTimestamp, deleteDoc, deleteField
+} from "../firebase.js"; 
+import { db } from "../firebase.js"; 
 import { state } from "../state.js";
 import { $, escapeHtml, exportToCsv, downloadCsv } from "../helpers/utils.js";
 import { initializeStaticData, findBestVendor } from "../firestoreApi.js";
-import { applyPermissions } from "../auth.js";
+import { applyPermissions } from "../auth.js"; 
 
 let addItemChoices;
 let isScannerActive = false;
@@ -116,16 +116,13 @@ function hasUnsavedCatalogChanges() {
 export function setupAddItemToOrderModal() {
     const modal = $('#addItemToOrderModal');
     const itemElement = $('#addItemSelect');
-    const showModalBtn = $('#showAddItemModal'); // <-- Get element
-    const saveBtn = $('#saveAddItemBtn'); // <-- Get element
+    const showModalBtn = $('#showAddItemModal');
+    const saveBtn = $('#saveAddItemBtn');
 
-    // --- SAFETY CHECK ---
-    // If these elements don't exist, stop the function.
     if (!modal || !itemElement || !showModalBtn || !saveBtn) {
         console.warn("Could not find 'Add Item to Order' modal elements.");
         return; // Exit function early
     }
-    // --- END CHECK ---
 
     if (addItemChoices) addItemChoices.destroy();
     addItemChoices = new Choices(itemElement, { 
@@ -134,13 +131,13 @@ export function setupAddItemToOrderModal() {
         searchResultLimit: 100 
     });
 
-    showModalBtn.addEventListener('click', () => { // <-- Use variable
+    showModalBtn.addEventListener('click', () => {
         const options = state.catalog.filter(c=>c.isActive !== false).map(c=>({value: c.id, label: c.itemName}));
         addItemChoices.setChoices(options, 'value', 'label', true);
         modal.style.display = 'flex';
     });
 
-    saveBtn.addEventListener('click', async () => { // <-- Use variable
+    saveBtn.addEventListener('click', async () => {
         const catalogId = addItemChoices.getValue(true);
         const qty = $('#addItemQty').value;
         if (!catalogId || !qty) return alert('Please select an item and quantity.');
@@ -604,6 +601,19 @@ function handlePrint() {
 export function setupPrintModal() {
     $('#printOrderBtn').addEventListener('click', handlePrint);
 }
+
+// --- Close Modal Global ---
+export function setupModalCloseButtons() {
+    document.querySelectorAll('[data-close-modal]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const modalId = e.currentTarget.dataset.closeModal;
+            if(modalId === 'catalogModal') closeCatalogModal();
+            else if (modalId) $(`#${modalId}`).style.display = 'none';
+        });
+    });
+}
+
+// --- Modal: Export ---
 export function openExportModal() {
     $('#exportModal').style.display = 'flex';
 }
@@ -713,14 +723,4 @@ function buildExportData(selectedFields, pricingOption) {
     }
     
     return { data, columns };
-}
-// --- Close Modal Global ---
-export function setupModalCloseButtons() {
-    document.querySelectorAll('[data-close-modal]').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            const modalId = e.currentTarget.dataset.closeModal;
-            if(modalId === 'catalogModal') closeCatalogModal();
-            else if (modalId) $(`#${modalId}`).style.display = 'none';
-        });
-    });
 }
