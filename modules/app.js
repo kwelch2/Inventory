@@ -20,15 +20,6 @@ import {
 
 let appInitialized = false;
 
-// --- Permissions ---
-// MOVED TO AUTH.JS, but can be re-added if needed.
-// export function applyPermissions(role) {
-//     const isAdmin = (role === 'Admin');
-//     document.querySelectorAll('.btn.danger').forEach(btn => {
-//         btn.style.display = isAdmin ? 'inline-block' : 'none';
-//     });
-// }
-
 // --- Main App Initialization ---
 async function boot() {
     if (appInitialized) return;
@@ -84,12 +75,14 @@ function setupOrdersPanelListeners() {
         });
     }
 
+    // *** FIX: Added '#' ***
     const historyToggle = $('#showHistoryToggle');
     if (historyToggle) {
         historyToggle.addEventListener('change', renderOrders);
     }
     
     // Generate Order from "View by Item"
+    // *** FIX: Added '#' ***
     const genItemOrderBtn = $('#generateItemOrderBtn');
     if (genItemOrderBtn) {
         genItemOrderBtn.addEventListener('click', () => {
@@ -119,6 +112,7 @@ function setupOrdersPanelListeners() {
 
 
     // Event delegation for Orders panel CLICK actions
+    // *** FIX: Added '#' ***
     const ordersContainer = $('#ordersGroupContainer');
     if (ordersContainer) {
         ordersContainer.addEventListener('click', async e => {
@@ -215,6 +209,7 @@ async function handleQuickQtyUpdate(target) {
 }
 
 function setupManagementPanelActions() {
+    // *** FIX: Added '#' ***
     const mgmtPanel = $('#panel-management');
     if (mgmtPanel) {
         mgmtPanel.addEventListener('click', async e => {
@@ -222,6 +217,7 @@ function setupManagementPanelActions() {
             
             // --- Add Actions ---
             if (target.id === 'addUnitBtn') {
+                // *** FIX: Added '#' ***
                 const nameInput = $('#newUnitName');
                 const name = nameInput.value.trim();
                 if (name) { 
@@ -231,6 +227,7 @@ function setupManagementPanelActions() {
                 }
             }
             else if (target.id === 'addCompBtn') {
+                // *** FIX: Added '#' ***
                 const nameInput = $('#newCompName');
                 const name = nameInput.value.trim();
                 if (name) { 
@@ -240,6 +237,7 @@ function setupManagementPanelActions() {
                 }
             }
             else if (target.id === 'addCategoryBtn') {
+                // *** FIX: Added '#' ***
                 const nameInput = $('#newCategoryName');
                 const name = nameInput.value.trim();
                 if (name) { 
