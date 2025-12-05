@@ -66,8 +66,8 @@ async function fileToGenerativePart(file) {
 
 async function processInvoiceWithGemini(file) {
     const genAI = new GoogleGenerativeAI(API_KEY);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
+    
     const prompt = `
     Analyze this invoice image or PDF. Extract the line items.
     Return a JSON array where each object has:
