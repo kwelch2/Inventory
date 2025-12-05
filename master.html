@@ -169,6 +169,7 @@
         <h2>Orders & Requests</h2>
         <div class="row">
             <button class="btn primary" id="showAddItemModal">+ Add Item to Order</button>
+            <button class="btn" id="uploadInvoiceBtn" style="background:#6f42c1; color:white; border:none;">📄 Upload Invoice (AI)</button>
             <button class="btn primary" id="generateItemOrderBtn" style="display: none;">Generate Order from Selected</button>
             
             <span class="spacer" style="flex: 1;"></span>
@@ -441,6 +442,42 @@
     <div class="modal-footer">
       <button class="btn" data-close-modal="exportModal">Cancel</button>
       <button class="btn primary" id="confirmExportBtn">Export CSV</button>
+    </div>
+  </div>
+</div>
+
+<div id="invoiceLoading" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(255,255,255,0.8); z-index:2000; align-items:center; justify-content:center; flex-direction:column;">
+    <div style="font-size:2rem; margin-bottom:1rem;">🤖</div>
+    <h3>AI is reading your invoice...</h3>
+    <p>This may take a few seconds.</p>
+</div>
+
+<div id="invoiceReviewModal" class="modal">
+  <div class="modal-content" style="max-width: 900px;">
+    <div class="modal-header">
+      <h2>Review Invoice: <span id="invoiceVendorName"></span></h2>
+      <span class="close-btn" data-close-modal="invoiceReviewModal">&times;</span>
+    </div>
+    <div class="modal-body" style="display:block;">
+      <p class="muted">Review the extracted items below. Match them to your catalog to update costs or mark as ordered.</p>
+      <div style="max-height: 400px; overflow-y: auto;">
+          <table id="invoiceReviewTable" style="width:100%;">
+              <thead>
+                  <tr>
+                      <th>Item Detected</th>
+                      <th>Qty</th>
+                      <th>Price</th>
+                      <th>Action</th>
+                      <th>Matched Catalog Item</th>
+                  </tr>
+              </thead>
+              <tbody></tbody>
+          </table>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" data-close-modal="invoiceReviewModal">Cancel</button>
+      <button class="btn primary" id="confirmInvoiceImportBtn">Process Selected</button>
     </div>
   </div>
 </div>

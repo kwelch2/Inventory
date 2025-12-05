@@ -10,6 +10,7 @@ import { initializeStaticData, setupRealtimeListeners, updateRequestStatus, find
 import { renderOrders } from "./ui/orders.js";
 import { renderCatalog, setupCatalogPanel, populateCategoryFilter } from "./ui/catalog.js";
 import { mountTabs, mountManagementTabs } from "./ui/tabs.js";
+import { setupInvoiceScanner } from "./ui/invoiceScanner.js";
 import { 
     setupAddItemToOrderModal, setupCatalogModal, setupPricingModal, 
     setupChangeVendorModal, setupVendorModal, setupMgmtEditModal,
@@ -38,6 +39,7 @@ async function boot() {
     setupPrintModal();
     setupModalCloseButtons();
     setupExportModal();
+    setupInvoiceScanner();
 
     // Setup panel-specific listeners
     setupCatalogPanel();
