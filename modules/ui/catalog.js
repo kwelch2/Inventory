@@ -35,21 +35,29 @@ export function renderCatalog() {
         const isActive = item.isActive !== false;
         
         const allPrices = (state.pricingMap.get(item.id) || [])
-            .map(p => ({...p, vendorName: state.vendorMap.get(p.vendorId) || 'N/A'}))
-            .sort((a,b) => (a.unitPrice || Infinity) - (b.unitPrice || Infinity));
-        
-        const cheapestPrice = allPrices[0];
-        
-        const pricesHtml = allPrices.length > 0 ? allPrices.map(p => {
-            let classes = 'price-tag';
-            if (p.vendorId === item.preferredVendorId) classes += ' preferred-price';
-            if (p.vendorId === cheapestPrice?.vendorId) classes += ' best-price';
-            
-            return `<span class="${classes}">
-                ${escapeHtml(p.vendorName)}: $${(p.unitPrice || 0).toFixed(2)}
-                <button class="btn btn-small" data-edit-price-id="${p.id}" style="margin-left: 8px; padding: 2px 6px; font-size: 0.7rem;">Edit</button>
-            </span>`;
-        }).join('') : '<span class="muted">No pricing</span>';
+    .map(p => {
+        const v = state.vendors.find(ven => ven.id === p.vendorId);
+        const fee = v?.serviceFee || 0;
+        return {
+            ...p, 
+            vendorName: v?.name || 'N/A',
+            effectivePrice: (p.unitPrice || 0) * (1 + (fee/100))
+        };
+    })
+    .sort((a,b) => a.effectivePrice - b.effectivePrice);
+
+const cheapestPrice = allPrices[0];
+
+const pricesHtml = allPrices.length > 0 ? allPrices.map(p => {
+    let classes = 'price-tag';
+    if (p.vendorId === item.preferredVendorId) classes += ' preferred-price';
+    if (p.vendorId === cheapestPrice?.vendorId) classes += ' best-price';
+    
+    return `<span class="${classes}">
+        ${escapeHtml(p.vendorName)}: $${p.effectivePrice.toFixed(2)}
+        <button class="btn btn-small" data-edit-price-id="${p.id}" ... >Edit</button>
+    </span>`;
+}).join('') : '<span class="muted">No pricing</span>';
         
         return `
             <tr class="catalog-row" data-catalog-id="${item.id}" style="${isActive ? '' : 'opacity: 0.5;'}">

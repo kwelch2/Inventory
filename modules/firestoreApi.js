@@ -61,9 +61,28 @@ export function setupRealtimeListeners() {
 }
 
 export function findBestVendor(catalogId, preferredVendorId, overrideVendorId) {
+    // Helper to calculate price with fee
+    const getEffectivePrice = (p) => {
+        const vendor = state.vendorMap.get(p.vendorId); // Currently storing name strings in map? 
+        // We need the full vendor object to get the fee. 
+        // Let's find it from state.vendors array for safety:
+        const vendorObj = state.vendors.find(v => v.id === p.vendorId);
+        const feePercent = vendorObj?.serviceFee || 0;
+        return (p.unitPrice || 0) * (1 + (feePercent / 100));
+    };
+
     const prices = (state.pricingMap.get(catalogId) || [])
-        .map(p => ({...p, vendorName: state.vendorMap.get(p.vendorId) || 'Unknown Vendor' }))
-        .sort((a,b) => (a.unitPrice || Infinity) - (b.unitPrice || Infinity));
+        .map(p => {
+            const vendorObj = state.vendors.find(v => v.id === p.vendorId);
+            const fee = vendorObj?.serviceFee || 0;
+            return {
+                ...p, 
+                vendorName: vendorObj?.name || 'Unknown Vendor',
+                effectivePrice: (p.unitPrice || 0) * (1 + (fee / 100)), // Calculate once
+                hasFee: fee > 0
+            };
+        })
+        .sort((a,b) => a.effectivePrice - b.effectivePrice); // Sort by EFFECTIVE price
 
     // 1. Check for manual override
     if (overrideVendorId) {
@@ -73,7 +92,7 @@ export function findBestVendor(catalogId, preferredVendorId, overrideVendorId) {
                 vendorId: overridePrice.vendorId,
                 vendorName: overridePrice.vendorName,
                 vendorItemNo: overridePrice.vendorItemNo || 'N/A',
-                unitPrice: overridePrice.unitPrice,
+                unitPrice: overridePrice.effectivePrice, // Return effective price
                 status: 'Manual Override'
             };
         }
@@ -94,47 +113,47 @@ export function findBestVendor(catalogId, preferredVendorId, overrideVendorId) {
             vendorId: preferredPrice.vendorId,
             vendorName: preferredPrice.vendorName,
             vendorItemNo: preferredPrice.vendorItemNo || 'N/A',
-            unitPrice: preferredPrice.unitPrice,
+            unitPrice: preferredPrice.effectivePrice, // Use Effective
             status: 'Preferred'
         };
     }
     
     // 3. Find cheapest vendor that is "In Stock"
+    // (Prices are already sorted by effective price)
     const cheapestInStock = prices.find(p => p.vendorStatus === 'In Stock' || !p.vendorStatus);
     if (cheapestInStock) {
         return {
             vendorId: cheapestInStock.vendorId,
             vendorName: cheapestInStock.vendorName,
             vendorItemNo: cheapestInStock.vendorItemNo || 'N/A',
-            unitPrice: cheapestInStock.unitPrice,
+            unitPrice: cheapestInStock.effectivePrice, // Use Effective
             status: 'Cheapest'
         };
     }
 
-    // 4. Fallback: Use preferred vendor (even if backordered)
+    // 4. Fallback: Preferred (Backordered)
     if (preferredPrice) {
         return {
             vendorId: preferredPrice.vendorId,
             vendorName: preferredPrice.vendorName,
             vendorItemNo: preferredPrice.vendorItemNo || 'N/A',
-            unitPrice: preferredPrice.unitPrice,
+            unitPrice: preferredPrice.effectivePrice, // Use Effective
             status: `Preferred (${preferredPrice.vendorStatus || 'N/A'})`
         };
     }
     
-    // 5. Fallback: Use cheapest vendor (even if backordered/out of stock)
+    // 5. Fallback: Cheapest (Backordered)
     const cheapestOverall = prices[0];
     if (cheapestOverall) {
         return {
             vendorId: cheapestOverall.vendorId,
             vendorName: cheapestOverall.vendorName,
             vendorItemNo: cheapestOverall.vendorItemNo || 'N/A',
-            unitPrice: cheapestOverall.unitPrice,
+            unitPrice: cheapestOverall.effectivePrice, // Use Effective
             status: `Cheapest (${cheapestOverall.vendorStatus || 'N/A'})`
         };
     }
 
-    // 6. No pricing info
     return { vendorId: 'unassigned', vendorName: 'Unassigned / No Pricing', vendorItemNo: 'N/A', unitPrice: 0, status: 'No Pricing' };
 }
 

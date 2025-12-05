@@ -256,6 +256,10 @@ export function setupCatalogModal() {
     $('#scanNewBarcodeBtn').addEventListener('click', () => startScanner($('#newBarcode'), $('#barcodeScannerViewport')));
     
     $('#saveCatalogEdit').addEventListener('click', async () => {
+        const btn = $('#saveCatalogEdit');
+        btn.textContent = "Saving...";
+        btn.disabled = true;
+
         const data = { 
             itemName: $('#editItemName').value, 
             itemRef: $('#editItemRef').value, 
@@ -265,20 +269,39 @@ export function setupCatalogModal() {
             category: $('#editCategorySelect').value,
             itemNameAlt: getListItems($('#altNameList')), 
             barcode: getListItems($('#barcodeList')), 
-            isActive: currentCatalogItem.isActive,
+            isActive: currentCatalogItem ? currentCatalogItem.isActive : true, // Handle new item default
             updatedAt: serverTimestamp() 
         };
         
-        if (currentCatalogItemId) { 
-            await updateDoc(doc(db, "catalog", currentCatalogItemId), data); 
-        } else { 
-            data.createdAt = serverTimestamp();
-            data.isActive = true;
-            await addDoc(collection(db, "catalog"), data); 
+        let savedId = currentCatalogItemId;
+
+        try {
+            if (currentCatalogItemId) { 
+                await updateDoc(doc(db, "catalog", currentCatalogItemId), data); 
+            } else { 
+                data.createdAt = serverTimestamp();
+                data.isActive = true;
+                const docRef = await addDoc(collection(db, "catalog"), data); 
+                savedId = docRef.id; // Capture the new ID
+            }
+            
+            // 1. Refresh global state to include the new item
+            await initializeStaticData();
+
+            // 2. Re-open the modal with the saved ID to show the "Vendor Pricing" section
+            // This effectively "saves and keeps open" while switching UI to Edit mode
+            openCatalogModal(savedId);
+            
+            // Optional: Visual feedback
+            alert("Item saved! You can now add vendor pricing.");
+
+        } catch (e) {
+            console.error("Error saving item:", e);
+            alert("Error saving item: " + e.message);
+        } finally {
+            btn.textContent = "Save Changes";
+            btn.disabled = false;
         }
-        
-        closeCatalogModal();
-        await initializeStaticData();
     });
     
     $('#toggleActiveBtn').addEventListener('click', async () => {
@@ -415,6 +438,7 @@ export function openVendorModal(vendorId = null) {
     $('#vendorModalTitle').textContent = vendorId ? 'Edit Vendor' : 'Add New Vendor';
     $('#vendorName').value = v.name || '';
     $('#vendorAccountNumber').value = v.accountNumber || '';
+    $('#vendorServiceFee').value = v.serviceFee || 0;
     $('#vendorOrderUrl').value = v.orderUrl || '';
     $('#vendorWebUrl').value = v.weburl || '';
     $('#vendorPhone').value = v.phone || '';
@@ -433,6 +457,7 @@ export function setupVendorModal() {
         const data = {
             name: $('#vendorName').value.trim(),
             accountNumber: $('#vendorAccountNumber').value.trim(),
+            serviceFee: Number($('#vendorServiceFee').value) || 0,
             orderUrl: $('#vendorOrderUrl').value.trim(),
             weburl: $('#vendorWebUrl').value.trim(),
             phone: $('#vendorPhone').value.trim(),

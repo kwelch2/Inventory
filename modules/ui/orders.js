@@ -71,9 +71,20 @@ function renderOrdersByItem() {
         if (!catItem) return ''; // Skip items not in catalog
 
         const vendorInfo = findBestVendor(r.catalogId, catItem.preferredVendorId, r.overrideVendorId);
-        const allPrices = (state.pricingMap.get(catItem.id) || [])
-            .map(p => ({...p, vendorName: state.vendorMap.get(p.vendorId) || 'N/A'}))
-            .sort((a,b) => (a.unitPrice || Infinity) - (b.unitPrice || Infinity));
+       const allPrices = (state.pricingMap.get(catItem.id) || [])
+    .map(p => {
+        const v = state.vendors.find(ven => ven.id === p.vendorId);
+        const fee = v?.serviceFee || 0;
+        const effective = (p.unitPrice || 0) * (1 + (fee/100));
+        return {
+            ...p, 
+            vendorName: v?.name || 'N/A',
+            effectivePrice: effective,
+            hasFee: fee > 0,
+            feePercent: fee
+        };
+    })
+    .sort((a,b) => a.effectivePrice - b.effectivePrice);
         const cheapestPrice = allPrices[0];
         
         const allPricesHtml = allPrices.length > 0 ? allPrices.map(p => {
@@ -245,19 +256,35 @@ function renderVendorGroup(container, group, vendorId) {
         const catItem = r.catItem;
         
         const allPrices = (state.pricingMap.get(catItem.id) || [])
-            .map(p => ({...p, vendorName: state.vendorMap.get(p.vendorId) || 'N/A'}))
-            .sort((a,b) => (a.unitPrice || Infinity) - (b.unitPrice || Infinity));
+    .map(p => {
+        const v = state.vendors.find(ven => ven.id === p.vendorId);
+        const fee = v?.serviceFee || 0;
+        const effective = (p.unitPrice || 0) * (1 + (fee/100));
+        return {
+            ...p, 
+            vendorName: v?.name || 'N/A',
+            effectivePrice: effective,
+            hasFee: fee > 0,
+            feePercent: fee
+        };
+    })
+    .sort((a,b) => a.effectivePrice - b.effectivePrice);
         const cheapestPrice = allPrices[0];
         
         const allPricesHtml = allPrices.length > 0 ? allPrices.map(p => {
-            let classes = 'price-tag';
-            if (p.vendorId === catItem.preferredVendorId) classes += ' preferred-price';
-            if (p.vendorId === cheapestPrice?.vendorId) classes += ' best-price';
-            
-            return `<div class="${classes}">
-                ${escapeHtml(p.vendorName)}: $${(p.unitPrice || 0).toFixed(2)} (#${escapeHtml(p.vendorItemNo)}) - <em>${escapeHtml(p.vendorStatus || 'In Stock')}</em>
-            </div>`;
-        }).join('') : '<div class="muted">No prices found.</div>';
+    let classes = 'price-tag';
+    if (p.vendorId === catItem.preferredVendorId) classes += ' preferred-price';
+    if (p.vendorId === cheapestPrice?.vendorId) classes += ' best-price';
+    
+    // Show base price if there is a fee, otherwise just show price
+    const priceDisplay = p.hasFee 
+        ? `$${p.effectivePrice.toFixed(2)} <span style="font-size:0.8em; color:#666;">(incl. ${p.feePercent}%)</span>`
+        : `$${p.effectivePrice.toFixed(2)}`;
+
+    return `<div class="${classes}">
+        ${escapeHtml(p.vendorName)}: ${priceDisplay} (#${escapeHtml(p.vendorItemNo)}) - <em>${escapeHtml(p.vendorStatus || 'In Stock')}</em>
+    </div>`;
+}).join('') : '<div class="muted">No prices found.</div>';
         
         const isQtyEditable = status === 'Open' || status === 'Backordered';
 
