@@ -70,7 +70,7 @@
             <a href="https://chores-ems.gemfireems.org/issues">Issues</a>
         </div>
         <h1>Expiring Supplies</h1>
-        <div class="muted">Track all supplies expiring within the next 3 months. Mark each item date in pink or red to flag it, then document it here.</div>
+        <div class="muted">Now backed by Firebase Firestore.</div>
         <div class="toolbar">
             <label>Window <select id="rangeSel"><option value="30">30 days</option><option value="60">60 days</option><option value="90" selected>90 days</option><option value="ALL">All</option></select></label>
             <label>Unit <select id="unitSel"><option value="ALL">ALL</option></select></label>
@@ -104,27 +104,42 @@
       <div id="interactive" class="viewport" style="display:none; width:100%; height:240px; border:1px solid #ccc; background:#000; margin-bottom:1rem; position:relative;">
           <button id="closeScannerBtn" style="position:absolute; top:5px; right:5px; z-index:10; color:white; background:rgba(0,0,0,0.5); border:1px solid white;">[ X ]</button>
       </div>
+      
       <label>Item</label>
       <div style="display:flex; gap:8px; align-items:center;">
-          <select id="addItemSelect"></select>
+          <div style="flex: 1;">
+              <select id="addItemSelect"></select>
+              <input id="addCustomItemName" placeholder="Enter item name..." style="display: none; width: 100%;">
+          </div>
           <button id="scanBarcodeBtn" class="btn" title="Scan Barcode to Select Item" style="flex-shrink:0;">
               <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z'/%3E%3C/svg%3E" alt="Barcode Scanner" style="height:20px;width:20px;">
           </button>
       </div>
+      <div style="margin-top: 6px;">
+          <label style="font-weight: normal; font-size: 0.9rem;">
+              <input type="checkbox" id="itemNotInList"> Item not in list
+          </label>
+      </div>
+
       <label style="margin-top: 10px;">Unit</label>
       <select id="addUnitSelect"><option value="">Select...</option></select>
       <label>Compartment</label>
       <select id="addCompartmentSelect"><option value="">Select…</option><option>Wall</option><option>Bag</option><option>Supply RM</option><option>Clear Container</option><option>BLS Bag</option><option>ALS Bag</option><option>Other</option></select>
+      
       <div style="margin-top: 10px;">
-          <label>Expiry Month</label>
+          <label>Expiry Date</label>
           <div id="addExpiryChips" class="chipbar"></div>
-          <div id="customExpiryWrap" style="display:none; margin-top: 8px;">
-              <label><input type="radio" name="expiryType" value="month" checked> Month</label>
-              <label><input type="radio" name="expiryType" value="date"> Exact Date</label>
+          <div id="customExpiryWrap" style="display:none; margin-top: 8px; border: 1px solid #eee; padding: 8px; border-radius: 8px; background: #fafafa;">
+              <div style="margin-bottom: 6px;">
+                  <label style="display:inline-block; margin-right:10px;"><input type="radio" name="expiryType" value="month" checked> Month End</label>
+                  <label style="display:inline-block;"><input type="radio" name="expiryType" value="date"> Exact Date</label>
+              </div>
               <div id="monthInputWrap"><input id="customMonth" type="month"></div>
               <div id="dateInputWrap" style="display:none;"><input id="customDate" type="date"></div>
+              <small class="muted">"Month End" will set expiry to the last day of the selected month.</small>
           </div>
       </div>
+      
       <label>Quantity</label>
       <input id="addQty" type="number" min="1" step="1" value="1"/>
       <label>Note</label>
@@ -277,8 +292,10 @@
             if (unitFilter !== 'ALL' && item.unitId !== unitFilter) return false;
 
             const catalogItem = catalogMap.get(item.catalogId);
-            const itemName = (catalogItem ? catalogItem.itemName : 'Unknown').toLowerCase();
+            // Support for legacy catalog lookups OR custom names saved directly on the item
+            const itemName = (catalogItem ? catalogItem.itemName : (item.itemName || 'Unknown Item')).toLowerCase();
             const compartment = (item.compartment || '').toLowerCase();
+            
             if (searchQuery && !itemName.includes(searchQuery) && !compartment.includes(searchQuery)) return false;
 
             return true;
@@ -293,8 +310,8 @@
             if (unitA !== unitB) {
                 return unitA.localeCompare(unitB);
             }
-            const itemA = (catalogMap.get(a.catalogId)?.itemName || '').toLowerCase();
-            const itemB = (catalogMap.get(b.catalogId)?.itemName || '').toLowerCase();
+            const itemA = (catalogMap.get(a.catalogId)?.itemName || a.itemName || '').toLowerCase();
+            const itemB = (catalogMap.get(b.catalogId)?.itemName || b.itemName || '').toLowerCase();
             return itemA.localeCompare(itemB);
         });
         
@@ -306,7 +323,7 @@
                 <tbody>
                     ${filtered.map(item => {
                         const catalogItem = catalogMap.get(item.catalogId);
-                        const itemName = catalogItem ? catalogItem.itemName : `Unknown (ID: ${item.catalogId})`;
+                        const itemName = catalogItem ? catalogItem.itemName : (item.itemName || `Unknown (ID: ${item.catalogId})`);
                         const unit = units.find(u => u.id === item.unitId);
                         const unitName = unit ? unit.name : item.unitId;
                         const unitColor = getColorForUnit(unitName);
@@ -373,7 +390,7 @@
                 <thead><tr><th>Item</th><th>Status</th><th>Updated</th></tr></thead>
                 <tbody>
                     ${historyItems.map(item => {
-                        const itemName = catalogMap.get(item.catalogId)?.itemName || 'Unknown Item';
+                        const itemName = catalogMap.get(item.catalogId)?.itemName || item.itemName || 'Unknown Item';
                         const updatedTime = item.updatedAt ? new Date(item.updatedAt.seconds * 1000).toLocaleString() : 'N/A';
                         return `
                             <tr>
@@ -465,49 +482,114 @@
 
     function setupAddItemModal() {
         const modal = $('#addItemModal');
+        
+        // --- Populate and Open ---
         $('#showAddItemModal').addEventListener('click', () => {
             populateAddItemDropdowns();
-            buildExpiryChips();
+            buildExpiryChips(); // Rebuild chips relative to TODAY
             const currentUnit = $('#unitSel').value;
             if (currentUnit !== 'ALL') {
                 $('#addUnitSelect').value = currentUnit;
             }
+            // Reset "Custom/Unlisted" state
+            $('#itemNotInList').checked = false;
+            toggleCustomItemInput(false);
+            
             modal.style.display = 'block';
         });
+
         modal.querySelector('.close-btn').addEventListener('click', () => modal.style.display = 'none');
         window.addEventListener('click', e => { if (e.target === modal) modal.style.display = 'none'; });
         $('#closeScannerBtn').addEventListener('click', () => stopScanner(false));
 
+        // --- Toggle Unlisted Item ---
+        $('#itemNotInList').addEventListener('change', (e) => {
+            toggleCustomItemInput(e.target.checked);
+        });
+
+        // --- Save Logic ---
         $('#saveNewItemBtn').addEventListener('click', async () => {
-            const catalogId = itemSelectChoices.getValue(true);
+            const isUnlisted = $('#itemNotInList').checked;
+            
+            // 1. Gather Basic Data
             const unitId = $('#addUnitSelect').value;
             const compartment = $('#addCompartmentSelect').value.trim();
             const note = $('#addNote').value.trim();
+            const qty = parseInt($('#addQty').value, 10) || 1;
             
-            if (document.querySelector('input[name="expiryType"]:checked').value === 'month') {
-                selectedExp = $('#customMonth').value ? new Date($('#customMonth').value + '-02').toISOString().split('T')[0] : '';
+            // 2. Validate Item
+            let catalogId = null;
+            let customItemName = null;
+
+            if (isUnlisted) {
+                customItemName = $('#addCustomItemName').value.trim();
+                if (!customItemName) {
+                    alert("Please enter a name for the custom item.");
+                    return;
+                }
             } else {
-                selectedExp = $('#customDate').value;
+                catalogId = itemSelectChoices.getValue(true);
+                if (!catalogId) {
+                    alert("Please select an item from the list.");
+                    return;
+                }
             }
 
+            // 3. Determine Expiry Date
+            const isCustomDateMode = $('#customExpiryWrap').style.display !== 'none';
+            let expiryDateObj = null;
+
+            if (isCustomDateMode) {
+                // Custom Mode (Month picker or Date picker)
+                const type = document.querySelector('input[name="expiryType"]:checked').value;
+                
+                if (type === 'month') {
+                    const ym = $('#customMonth').value; // YYYY-MM
+                    if (!ym) { alert("Please select an expiry month."); return; }
+                    const [y, m] = ym.split('-');
+                    // Create date for the last day of that month
+                    // new Date(year, monthIndex, 0) -> day 0 of monthIndex is the last day of monthIndex-1
+                    // Split gives '01' for Jan. Date uses 0 for Jan.
+                    // To get last day of selected month: new Date(y, m, 0)
+                    // e.g. "2025-02" -> y=2025, m=2. new Date(2025, 2, 0) -> Last day of Feb. Correct.
+                    expiryDateObj = new Date(y, m, 0); 
+                } else {
+                    const ymd = $('#customDate').value;
+                    if (!ymd) { alert("Please select an exact date."); return; }
+                    expiryDateObj = new Date(ymd);
+                }
+            } else {
+                // Chip Mode
+                if (!selectedExp) { alert("Please select an expiry date (chip or custom)."); return; }
+                expiryDateObj = new Date(selectedExp);
+            }
+
+            if (!expiryDateObj || isNaN(expiryDateObj.getTime())) {
+                alert("Invalid Date calculated.");
+                return;
+            }
+
+            // 4. Duplicate Check (Warning)
             const isDuplicate = allInventory.some(item => 
-                item.catalogId === catalogId &&
+                (isUnlisted ? item.itemName === customItemName : item.catalogId === catalogId) &&
                 item.unitId === unitId &&
                 item.compartment === compartment
             );
 
             if (isDuplicate) {
-                if (!confirm("This item already exists in this unit and compartment. Are you sure you want to add a duplicate?")) {
+                if (!confirm("This item already exists in this unit/compartment. Add duplicate?")) {
                     return;
                 }
             }
 
+            // 5. Construct Payload
             const payload = {
-                catalogId: catalogId,
+                catalogId: catalogId, // null if custom
+                itemName: customItemName, // null if catalog
                 unitId: unitId,
                 compartment: compartment,
-                expiryDate: new Date(selectedExp),
-                qty: parseInt($('#addQty').value, 10) || 1,
+                expiryDate: expiryDateObj, // Firestore will convert Date object to timestamp
+                qty: qty,
                 status: "",
                 crewStatus: note,
                 createdAt: serverTimestamp(),
@@ -515,24 +597,55 @@
                 updatedBy: "WebApp (Expiring Page)"
             };
 
-            if (!payload.catalogId || !payload.unitId || !selectedExp) {
-                alert("Please select an item, unit, and expiry date.");
+            if (!payload.unitId) {
+                alert("Please select a unit.");
                 return;
             }
 
+            // 6. Save to Firestore
             $('#saveNewItemBtn').disabled = true;
             $('#saveNewItemBtn').textContent = 'Saving...';
             
             try {
                 await addDoc(collection(db, "inventory"), payload);
+                
+                // 7. Cleanup & Close
+                $('#addNote').value = '';
+                $('#addQty').value = '1';
+                $('#addCustomItemName').value = '';
+                if(itemSelectChoices) itemSelectChoices.setChoiceByValue('');
+                
+                // Reset Chips
+                selectedExp = '';
+                document.querySelectorAll('.exp-chip').forEach(x => x.style.borderColor = '');
+                $('#customExpiryWrap').style.display = 'none';
+                
                 modal.style.display = 'none';
+                
             } catch (e) {
                 console.error("Error adding document: ", e);
+                alert("Error adding document: " + e.message);
             } finally {
                 $('#saveNewItemBtn').disabled = false;
                 $('#saveNewItemBtn').textContent = 'Save Item';
             }
         });
+    }
+
+    function toggleCustomItemInput(showCustom) {
+        const selectWrap = $('#addItemSelect').parentElement.parentElement; // choices wrapper
+        const inputEl = $('#addCustomItemName');
+        const choicesEl = document.querySelector('.choices');
+        
+        if (showCustom) {
+            if(choicesEl) choicesEl.style.display = 'none';
+            inputEl.style.display = 'block';
+            if(itemSelectChoices) itemSelectChoices.removeActiveItems();
+        } else {
+            if(choicesEl) choicesEl.style.display = 'block';
+            inputEl.style.display = 'none';
+            inputEl.value = '';
+        }
     }
 
     function populateAddItemDropdowns() {
@@ -550,22 +663,37 @@
         const chipBar = $('#addExpiryChips');
         const now = new Date();
         const chips = [];
+        // Generate chips for current month + next 2 months
         for (let i=0; i<3; i++) {
+            // Logic: Month + i. Day 1.
             const d = new Date(now.getFullYear(), now.getMonth()+i, 1);
+            // Calculate Last Day of that month for the ISO string
+            const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+            
             chips.push({
                 label: d.toLocaleString('default', {month:'short', year:'2-digit'}),
-                iso: new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split('T')[0]
+                iso: lastDay.toISOString().split('T')[0] // YYYY-MM-DD of last day
             });
         }
+        
         chipBar.innerHTML = chips.map(c=>`<button class="btn exp-chip" data-exp="${c.iso}">${c.label}</button>`).join('') +
                             `<button class="btn exp-chip custom" data-exp="">Custom…</button>`;
         
         chipBar.querySelectorAll('.exp-chip').forEach(b => b.addEventListener('click', (e) => {
             e.preventDefault();
+            // Visual reset
             chipBar.querySelectorAll('.exp-chip').forEach(x => x.style.borderColor = '');
             b.style.borderColor = 'blue';
-            selectedExp = b.dataset.exp;
-            $('#customExpiryWrap').style.display = b.classList.contains('custom') ? 'block' : 'none';
+            
+            if (b.classList.contains('custom')) {
+                // Show custom picker
+                $('#customExpiryWrap').style.display = 'block';
+                selectedExp = ''; // We will rely on inputs
+            } else {
+                // Use chip value
+                $('#customExpiryWrap').style.display = 'none';
+                selectedExp = b.dataset.exp;
+            }
         }));
 
         document.querySelectorAll('input[name="expiryType"]').forEach(radio => {
@@ -607,6 +735,10 @@
             $('#searchBox').value = item.itemName;
             render();
         } else {
+            // If adding item, and in "Unlisted" mode, switch back to list mode first?
+            if ($('#itemNotInList').checked) {
+                $('#itemNotInList').click(); // trigger uncheck handler
+            }
             if (itemSelectChoices) {
                 itemSelectChoices.setChoiceByValue(item.id);
             }
