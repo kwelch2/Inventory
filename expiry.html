@@ -19,7 +19,7 @@
     .muted{color:var(--muted);font-size:.9rem}
     .toolbar{display: flex;flex-wrap: wrap;gap: 10px;align-items: center;margin-top: 10px;}
     .toolbar-actions {display: flex;gap: 10px;margin-left: auto;}
-    select,button,input,textarea{padding:8px 10px;border:1px solid var(--b);border-radius:10px;background:#fff;width:100%;font-family:inherit;font-size:inherit}
+    select,button,input,textarea{padding:8px 10px;border:1px solid var(--b);border-radius:8px;background:#fff;width:100%;font-family:inherit;font-size:inherit}
     button, select{width:auto}
     button{cursor:pointer}
     #showAddItemModal {background-color: #007bff;color: #fff;border-color: #007bff;font-weight: 600;}
@@ -27,26 +27,50 @@
     th,td{padding:8px 10px;border-bottom:1px solid #eee;text-align:left;vertical-align:top}
     th{font-weight:600;background:#fafafa}
     .ok{background:var(--ok)} .warn{background:var(--warn)} .bad{background:var(--bad)}
-    .modal{display:none;position:fixed;z-index:99;left:0;top:0;width:100%;height:100%;overflow:auto;background:rgba(0,0,0,.35)}
-    .modal-content{background:#fff;margin:10% auto;padding:16px;border:1px solid var(--b);width:min(540px,92%);border-radius:12px}
-    .close-btn{float:right;font-size:24px;cursor:pointer}
+    
+    /* Modal Styles */
+    .modal{display:none;position:fixed;z-index:99;left:0;top:0;width:100%;height:100%;overflow:auto;background:rgba(0,0,0,.4)}
+    .modal-content{background:#fff;margin:5% auto;padding:20px;border:1px solid var(--b);width:95%;max-width:500px;border-radius:12px;box-shadow: 0 4px 12px rgba(0,0,0,0.15);}
+    .close-btn{float:right;font-size:24px;cursor:pointer; color: #888;}
+    .close-btn:hover { color: #000; }
+
+    /* Form Layout Grid */
+    .form-row { display: flex; gap: 12px; margin-bottom: 12px; }
+    .form-col { flex: 1; }
+    label { display: block; margin-bottom: 4px; font-weight: 500; font-size: 0.9rem; color: #333; }
+    
     .table-container{overflow-x:auto;width:100%}
     .actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center;}
-    .btn{padding:6px 10px;border-radius:10px;background:#fafafa; border: 1px solid var(--b);}
-    .btn.red{border-color:#c00} .btn.green{border-color:#090}
+    .btn{padding:6px 12px;border-radius:6px;background:#fff; border: 1px solid var(--b); transition: all 0.2s;}
+    .btn:hover { background: #f0f0f0; }
+    .btn.primary { background: #007bff; color: white; border-color: #007bff; }
+    .btn.primary:hover { background: #0056b3; }
+    .btn.red{border-color:#c00; color: #c00;} .btn.green{border-color:#090; color: #090;}
     .btn.pending.is-active { background: #ffeb3b !important; color: #000; font-weight: 600; border-color: #fdd835; }
+    
     .note-trigger{ min-width:100px; text-align:left; }
     #noteModal{display:none;position:fixed;z-index:120;inset:0;background:rgba(0,0,0,.35)}
     #noteModal .box{background:#fff;margin:12% auto;max-width:420px;width:92%;border:1px solid var(--b);border-radius:12px;padding:14px}
-    .chipbar{display:flex;gap:6px;flex-wrap:wrap}
+    
+    .chipbar{display:flex;gap:8px;flex-wrap:wrap; margin-bottom: 8px;}
+    .btn.exp-chip { border-radius: 20px; font-size: 0.9rem; padding: 6px 12px; background: #fff; }
+    .btn.exp-chip.selected { background: #e7f1ff; border-color: #007bff; color: #007bff; font-weight: 600; }
+
     .viewport { position: relative; }
     .viewport video, .viewport .drawingBuffer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
-    #addItemModal .choices { flex: 1; min-width: 0; }
+    #addItemModal .choices { flex: 1; min-width: 0; margin-bottom: 0; }
+    
     .nav-links { float: right; font-size: 0.9rem; }
     .nav-links a { color: #007bff; text-decoration: none; margin-left: 1rem; }
     .tag { display: inline-block; font-size: 0.8rem; padding: 3px 6px; border-radius: 999px; background: #eee; }
     summary { cursor: pointer; font-weight: bold; font-size: 1.25em; }
     .unit-color-tag { font-size: 1.2em; margin-right: 6px; }
+
+    /* Custom Toggles and Layouts for Modal */
+    .switch-wrapper { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+    .toggle-label { font-size: 0.85rem; color: #666; cursor: pointer; display: flex; align-items: center; gap: 6px;}
+    .custom-expiry-box { border: 1px solid #eee; background: #fafafa; padding: 10px; border-radius: 8px; margin-top: 5px; }
+    
 </style>
 </head>
 <body>
@@ -70,7 +94,7 @@
             <a href="https://chores-ems.gemfireems.org/issues">Issues</a>
         </div>
         <h1>Expiring Supplies</h1>
-        <div class="muted">We are monitoring expiration dates three months in advance. Please highlight upcoming expirations in pink or circle them in red, and record them here. Full inspections will occur every other month, with interim months focused on replacing items identified on this list.”</div>
+        <div class="muted">We are monitoring expiration dates three months in advance. Please highlight upcoming expirations in pink or circle them in red, and record them here. Full inspections will occur every other month, with interim months focused on replacing items identified on this list.</div>
         <div class="toolbar">
             <label>Window <select id="rangeSel"><option value="30">30 days</option><option value="60">60 days</option><option value="90" selected>90 days</option><option value="ALL">All</option></select></label>
             <label>Unit <select id="unitSel"><option value="ALL">ALL</option></select></label>
@@ -80,7 +104,7 @@
                 </button>
                 <input id="searchBox" placeholder="Search item, compartment…" style="flex:1;"/>
             </div>
-            <div class="toolbar-actions"><button class="btn" id="showAddItemModal">+ Add Item</button></div>
+            <div class="toolbar-actions"><button class="btn primary" id="showAddItemModal">+ Add Item</button></div>
             <span id="count" class="muted"></span>
         </div>
     </div>
@@ -99,52 +123,88 @@
 
 <div id="addItemModal" class="modal">
     <div class="modal-content">
-      <span class="close-btn">&times;</span>
-      <h3>Add Item to Inventory</h3>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 15px;">
+          <h3 style="margin:0;">Add Inventory Item</h3>
+          <span class="close-btn">&times;</span>
+      </div>
+
       <div id="interactive" class="viewport" style="display:none; width:100%; height:240px; border:1px solid #ccc; background:#000; margin-bottom:1rem; position:relative;">
           <button id="closeScannerBtn" style="position:absolute; top:5px; right:5px; z-index:10; color:white; background:rgba(0,0,0,0.5); border:1px solid white;">[ X ]</button>
       </div>
       
-      <label>Item</label>
-      <div style="display:flex; gap:8px; align-items:center;">
+      <div class="switch-wrapper">
+          <label>Item Name</label>
+          <label class="toggle-label">
+              <input type="checkbox" id="itemNotInList"> Not in catalog?
+          </label>
+      </div>
+      
+      <div style="display:flex; gap:8px; align-items:flex-start; margin-bottom: 12px;">
           <div style="flex: 1;">
               <select id="addItemSelect"></select>
-              <input id="addCustomItemName" placeholder="Enter item name..." style="display: none; width: 100%;">
+              <input id="addCustomItemName" placeholder="Enter custom item name..." style="display: none; width: 100%;">
           </div>
           <button id="scanBarcodeBtn" class="btn" title="Scan Barcode to Select Item" style="flex-shrink:0;">
               <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 6h2v12H3V6zm3 0h2v12H6V6zm3 0h2v12H9V6zm3-2h2v16h-2V4zm3 2h2v12h-2V6zm3 0h2v12h-2V6z'/%3E%3C/svg%3E" alt="Barcode Scanner" style="height:20px;width:20px;">
           </button>
       </div>
-      <div style="margin-top: 6px;">
-          <label style="font-weight: normal; font-size: 0.9rem;">
-              <input type="checkbox" id="itemNotInList"> Item not in list
-          </label>
-      </div>
 
-      <label style="margin-top: 10px;">Unit</label>
-      <select id="addUnitSelect"><option value="">Select...</option></select>
-      <label>Compartment</label>
-      <select id="addCompartmentSelect"><option value="">Select…</option><option>Wall</option><option>Bag</option><option>Supply RM</option><option>Clear Container</option><option>BLS Bag</option><option>ALS Bag</option><option>Other</option></select>
-      
-      <div style="margin-top: 10px;">
-          <label>Expiry Date</label>
-          <div id="addExpiryChips" class="chipbar"></div>
-          <div id="customExpiryWrap" style="display:none; margin-top: 8px; border: 1px solid #eee; padding: 8px; border-radius: 8px; background: #fafafa;">
-              <div style="margin-bottom: 6px;">
-                  <label style="display:inline-block; margin-right:10px;"><input type="radio" name="expiryType" value="month" checked> Month End</label>
-                  <label style="display:inline-block;"><input type="radio" name="expiryType" value="date"> Exact Date</label>
-              </div>
-              <div id="monthInputWrap"><input id="customMonth" type="month"></div>
-              <div id="dateInputWrap" style="display:none;"><input id="customDate" type="date"></div>
-              <small class="muted">"Month End" will set expiry to the last day of the selected month.</small>
+      <div class="form-row">
+          <div class="form-col">
+              <label>Unit</label>
+              <select id="addUnitSelect"><option value="">Select...</option></select>
+          </div>
+          <div class="form-col">
+              <label>Compartment</label>
+              <select id="addCompartmentSelect">
+                  <option value="">Select…</option>
+                  <option>Wall</option>
+                  <option>Bag</option>
+                  <option>Supply RM</option>
+                  <option>Clear Container</option>
+                  <option>BLS Bag</option>
+                  <option>ALS Bag</option>
+                  <option>Other</option>
+              </select>
           </div>
       </div>
       
-      <label>Quantity</label>
-      <input id="addQty" type="number" min="1" step="1" value="1"/>
-      <label>Note</label>
-      <textarea id="addNote" placeholder="Add a note..."></textarea>
-      <button id="saveNewItemBtn" class="btn" style="width:100%;margin-top:12px;">Save Item</button>
+      <div style="margin-bottom: 12px;">
+          <label>Expiry Date</label>
+          <div id="addExpiryChips" class="chipbar"></div>
+          
+          <div id="customExpiryWrap" class="custom-expiry-box" style="display:none;">
+              <div style="display:flex; gap: 15px; margin-bottom: 8px;">
+                  <label style="font-weight:normal; cursor:pointer;">
+                      <input type="radio" name="expiryType" value="month" checked> Month End
+                  </label>
+                  <label style="font-weight:normal; cursor:pointer;">
+                      <input type="radio" name="expiryType" value="date"> Exact Date
+                  </label>
+              </div>
+              
+              <div id="monthInputWrap">
+                  <input id="customMonth" type="month">
+                  <small class="muted" style="display:block; margin-top:4px;">Sets expiry to the <b>last day</b> of the selected month.</small>
+              </div>
+              <div id="dateInputWrap" style="display:none;">
+                  <input id="customDate" type="date">
+              </div>
+          </div>
+      </div>
+      
+      <div class="form-row">
+          <div class="form-col" style="flex: 0 0 80px;">
+              <label>Qty</label>
+              <input id="addQty" type="number" min="1" step="1" value="1"/>
+          </div>
+          <div class="form-col">
+              <label>Note (Optional)</label>
+              <input id="addNote" placeholder="e.g. Broken seal check">
+          </div>
+      </div>
+
+      <button id="saveNewItemBtn" class="btn primary" style="width:100%; margin-top:10px; padding: 10px;">Save Item</button>
     </div>
 </div>
 
@@ -210,13 +270,21 @@
     
     let allInventory = [], units = [], catalog = [];
     let itemSelectChoices;
-    let selectedExp = '';
+    let selectedExp = ''; // Stores ISO string YYYY-MM-DD
     let isScannerActive = false;
     let quaggaHandler = null;
     const unitColorCache = new Map();
 
     const $ = s => document.querySelector(s);
     const escapeHtml = s => (s??'').toString().replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;' }[m]));
+
+    // Helper: Prevent timezone shifts when converting date to string
+    // This creates a string YYYY-MM-DD based on local computer time
+    const toLocalISO = (date) => {
+        const offset = date.getTimezoneOffset() * 60000;
+        const local = new Date(date.getTime() - offset);
+        return local.toISOString().split('T')[0];
+    };
 
     function getColorForUnit(unitName) {
         if (unitColorCache.has(unitName)) {
@@ -292,7 +360,6 @@
             if (unitFilter !== 'ALL' && item.unitId !== unitFilter) return false;
 
             const catalogItem = catalogMap.get(item.catalogId);
-            // Support for legacy catalog lookups OR custom names saved directly on the item
             const itemName = (catalogItem ? catalogItem.itemName : (item.itemName || 'Unknown Item')).toLowerCase();
             const compartment = (item.compartment || '').toLowerCase();
             
@@ -323,7 +390,16 @@
                 <tbody>
                     ${filtered.map(item => {
                         const catalogItem = catalogMap.get(item.catalogId);
-                        const itemName = catalogItem ? catalogItem.itemName : (item.itemName || `Unknown (ID: ${item.catalogId})`);
+                        // Display Custom name if Catalog ID is missing
+                        let itemName = 'Unknown';
+                        let isCustom = false;
+                        if (catalogItem) {
+                            itemName = catalogItem.itemName;
+                        } else if (item.itemName) {
+                            itemName = item.itemName;
+                            isCustom = true;
+                        }
+
                         const unit = units.find(u => u.id === item.unitId);
                         const unitName = unit ? unit.name : item.unitId;
                         const unitColor = getColorForUnit(unitName);
@@ -333,7 +409,10 @@
 
                         return `
                             <tr class="${rowClass(item.daysToExpire)}" data-id="${item.inventoryId}">
-                                <td><strong>${escapeHtml(itemName)}</strong></td>
+                                <td>
+                                    <strong>${escapeHtml(itemName)}</strong>
+                                    ${isCustom ? '<span class="tag" style="margin-left:5px;">Unlisted</span>' : ''}
+                                </td>
                                 <td>
                                     <div class="unit-display" style="display: flex; align-items: center;">
                                         <span class="unit-color-tag" style="color: ${unitColor};">●</span>
@@ -358,7 +437,7 @@
                                         <button class="btn green ok-btn">OK</button>
                                         <button class="btn red replaced-btn">Replaced</button>
                                         <button class="btn edit-btn">Edit</button>
-                                        <button class="btn save-btn" style="display:none;">Save</button>
+                                        <button class="btn save-btn primary" style="display:none;">Save</button>
                                         <button class="btn cancel-btn" style="display:none;">Cancel</button>
                                     </div>
                                 </td>
@@ -546,22 +625,28 @@
                 if (type === 'month') {
                     const ym = $('#customMonth').value; // YYYY-MM
                     if (!ym) { alert("Please select an expiry month."); return; }
-                    const [y, m] = ym.split('-');
-                    // Create date for the last day of that month
-                    // new Date(year, monthIndex, 0) -> day 0 of monthIndex is the last day of monthIndex-1
-                    // Split gives '01' for Jan. Date uses 0 for Jan.
-                    // To get last day of selected month: new Date(y, m, 0)
-                    // e.g. "2025-02" -> y=2025, m=2. new Date(2025, 2, 0) -> Last day of Feb. Correct.
-                    expiryDateObj = new Date(y, m, 0); 
+                    const [y, m] = ym.split('-').map(Number);
+                    
+                    // Create date for the last day of the selected month
+                    // new Date(y, m, 0) in JS gives the last day of month m-1.
+                    // But input type="month" gives strict YYYY-MM. 
+                    // Example: "2026-02". y=2026, m=2.
+                    // new Date(2026, 2, 0) -> March 0th -> Feb 28th.
+                    // We set time to NOON (12) to avoid timezone rollover issues
+                    expiryDateObj = new Date(y, m, 0, 12, 0, 0); 
                 } else {
-                    const ymd = $('#customDate').value;
+                    const ymd = $('#customDate').value; // YYYY-MM-DD
                     if (!ymd) { alert("Please select an exact date."); return; }
-                    expiryDateObj = new Date(ymd);
+                    // Parse manually to ensure noon local time
+                    const [y, m, d] = ymd.split('-').map(Number);
+                    expiryDateObj = new Date(y, m - 1, d, 12, 0, 0);
                 }
             } else {
                 // Chip Mode
                 if (!selectedExp) { alert("Please select an expiry date (chip or custom)."); return; }
-                expiryDateObj = new Date(selectedExp);
+                // Parse string YYYY-MM-DD
+                const [y, m, d] = selectedExp.split('-').map(Number);
+                expiryDateObj = new Date(y, m - 1, d, 12, 0, 0);
             }
 
             if (!expiryDateObj || isNaN(expiryDateObj.getTime())) {
@@ -569,15 +654,44 @@
                 return;
             }
 
-            // 4. Duplicate Check (Warning)
-            const isDuplicate = allInventory.some(item => 
-                (isUnlisted ? item.itemName === customItemName : item.catalogId === catalogId) &&
-                item.unitId === unitId &&
-                item.compartment === compartment
-            );
+            // 4. Duplicate Check
+            // Logic: Must match Item Name (or ID) + Unit + Expiry Date.
+            // Ignore items that are 'Replaced' or 'OK' (Historical).
+            
+            // Helper to compare dates (YYYY-MM-DD)
+            const isSameDay = (d1, d2) => {
+                return d1.getFullYear() === d2.getFullYear() &&
+                       d1.getMonth() === d2.getMonth() &&
+                       d1.getDate() === d2.getDate();
+            };
+
+            const activeInventory = allInventory.filter(i => i.status !== 'Replaced' && i.status !== 'OK');
+            
+            const isDuplicate = activeInventory.some(item => {
+                // Check Unit
+                if (item.unitId !== unitId) return false;
+
+                //Check Compartment (Added back in)
+                if (item.compartment !== compartment) return false;
+                
+                // Check Item Identity
+                let matchItem = false;
+                if (isUnlisted) {
+                    matchItem = (item.itemName === customItemName);
+                } else {
+                    matchItem = (item.catalogId === catalogId);
+                }
+                if (!matchItem) return false;
+
+                // Check Expiry
+                if (!item.expiryDate) return false;
+                const itemExp = item.expiryDate.seconds ? new Date(item.expiryDate.seconds * 1000) : new Date(item.expiryDate);
+                
+                return isSameDay(itemExp, expiryDateObj);
+            });
 
             if (isDuplicate) {
-                if (!confirm("This item already exists in this unit/compartment. Add duplicate?")) {
+                if (!confirm("An active item with the same Name, Unit, and Expiry Date already exists. Add duplicate?")) {
                     return;
                 }
             }
@@ -588,7 +702,7 @@
                 itemName: customItemName, // null if catalog
                 unitId: unitId,
                 compartment: compartment,
-                expiryDate: expiryDateObj, // Firestore will convert Date object to timestamp
+                expiryDate: expiryDateObj, 
                 qty: qty,
                 status: "",
                 crewStatus: note,
@@ -617,7 +731,7 @@
                 
                 // Reset Chips
                 selectedExp = '';
-                document.querySelectorAll('.exp-chip').forEach(x => x.style.borderColor = '');
+                document.querySelectorAll('.exp-chip').forEach(x => x.classList.remove('selected'));
                 $('#customExpiryWrap').style.display = 'none';
                 
                 modal.style.display = 'none';
@@ -640,6 +754,7 @@
         if (showCustom) {
             if(choicesEl) choicesEl.style.display = 'none';
             inputEl.style.display = 'block';
+            inputEl.focus();
             if(itemSelectChoices) itemSelectChoices.removeActiveItems();
         } else {
             if(choicesEl) choicesEl.style.display = 'block';
@@ -665,25 +780,25 @@
         const chips = [];
         // Generate chips for current month + next 2 months
         for (let i=0; i<3; i++) {
-            // Logic: Month + i. Day 1.
+            // Logic: Month + i.
             const d = new Date(now.getFullYear(), now.getMonth()+i, 1);
-            // Calculate Last Day of that month for the ISO string
+            // Calculate Last Day of that month for the ISO string (using the logic year, month+1, 0)
             const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0);
             
             chips.push({
                 label: d.toLocaleString('default', {month:'short', year:'2-digit'}),
-                iso: lastDay.toISOString().split('T')[0] // YYYY-MM-DD of last day
+                iso: toLocalISO(lastDay) // YYYY-MM-DD
             });
         }
         
         chipBar.innerHTML = chips.map(c=>`<button class="btn exp-chip" data-exp="${c.iso}">${c.label}</button>`).join('') +
-                            `<button class="btn exp-chip custom" data-exp="">Custom…</button>`;
+                            `<button class="btn exp-chip custom" data-exp="">Custom...</button>`;
         
         chipBar.querySelectorAll('.exp-chip').forEach(b => b.addEventListener('click', (e) => {
             e.preventDefault();
             // Visual reset
-            chipBar.querySelectorAll('.exp-chip').forEach(x => x.style.borderColor = '');
-            b.style.borderColor = 'blue';
+            chipBar.querySelectorAll('.exp-chip').forEach(x => x.classList.remove('selected'));
+            b.classList.add('selected');
             
             if (b.classList.contains('custom')) {
                 // Show custom picker
