@@ -3,7 +3,8 @@ import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai";
 import { state } from "../state.js"; 
 import { db } from "../firebase.js"; 
 import { doc, updateDoc, addDoc, collection, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
-import { $ } from "../helpers/utils.js"; 
+// FIX: Added escapeHtml to this import line
+import { $, escapeHtml } from "../helpers/utils.js"; 
 
 // === CONFIGURATION ===
 let API_KEY = localStorage.getItem("GEMINI_API_KEY");
@@ -185,9 +186,6 @@ function renderInvoiceReview(data) {
         
         let vendorId = state.vendors.find(v => v.name.toLowerCase().includes(vendorName.toLowerCase()))?.id;
         
-        // If vendor not found, we can't update pricing easily, but we can mark ordered
-        // Ideally we'd prompt to create vendor, but for now lets proceed
-        
         for (const row of rows) {
             const action = row.querySelector('.inv-action').value;
             const matchId = row.querySelector('.inv-match').value;
@@ -216,7 +214,6 @@ function renderInvoiceReview(data) {
                 }
             } else if (action === 'mark_ordered') {
                 // Find open request for this item
-                // Logic: Look for Open request for this Catalog ID
                 const req = state.requests.find(r => r.catalogId === matchId && r.status === 'Open');
                 if (req) {
                     await updateDoc(doc(db, "requests", req.id), { status: 'Ordered', lastOrdered: serverTimestamp() });
