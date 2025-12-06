@@ -1,11 +1,9 @@
 // modules/ui/invoiceScanner.js
 import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai";
-import { state } from "../state.js"; // Changed ./ to ../
-import { db } from "../firebase.js";  // Changed ./ to ../
+import { state } from "../state.js"; 
+import { db } from "../firebase.js"; 
 import { doc, updateDoc, addDoc, collection, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
-import { $ } from "../helpers/utils.js"; // Changed ./ to ../
-
-// ... (The rest of the code remains exactly the same as before) ...
+import { $ } from "../helpers/utils.js"; 
 
 // === CONFIGURATION ===
 let API_KEY = localStorage.getItem("GEMINI_API_KEY");
@@ -18,7 +16,6 @@ export function setupInvoiceScanner() {
     fileInput.id = "invoiceFileInput";
     document.body.appendChild(fileInput);
 
-    // Safety check: ensure button exists before adding listener
     const uploadBtn = $('#uploadInvoiceBtn');
     if (uploadBtn) {
         uploadBtn.addEventListener('click', () => {
@@ -67,30 +64,58 @@ async function fileToGenerativePart(file) {
 async function processInvoiceWithGemini(file) {
     const genAI = new GoogleGenerativeAI(API_KEY);
     
-    // UPDATE THIS LINE: Use the specific pinned version "gemini-1.5-flash-001"
+    // Use the model we confirmed works for your key
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
+    // --- UPDATED PROMPT FOR BETTER TABLE EXTRACTION ---
     const prompt = `
-    Analyze this invoice image or PDF. Extract the line items.
-    Return a JSON array where each object has:
-    - "item_name": The name/description of the item.
-    - "sku": The vendor's item number/SKU (if visible).
-    - "qty": The quantity ordered (number).
-    - "unit_price": The price per unit (number).
+    You are an automated invoice data extractor. Your job is to extract the Vendor Name and a list of purchased Items from the provided image or PDF.
+
+    1. **Vendor Name**: Identify who sent the invoice (e.g., "Valor Health", "Henry Schein", "Bound Tree", etc.).
+    2. **Line Items**: Find the main table of items. Extract every row.
+       - **Description**: Look for columns like "Description", "Item Name", or "Product".
+       - **SKU**: Look for columns like "Item Code", "Material #", "Vendor #", or "Catalog #". If not found, leave empty.
+       - **Quantity**: Look for "Qty", "Quantity", "Ord", or "Shipped". Ensure this is a number.
+       - **Unit Price**: Look for "Price", "Unit Price", or "Net Price". Ensure this is a number.
+
+    **Special Handling for complex layouts:**
+    - If a row spans multiple lines (like Henry Schein PDFs), merge the description.
+    - Ignore "Freight", "Shipping", "Tax", or "Total" summary lines unless they appear as line items in the main table.
     
-    Also extract the "vendor_name" (string) for the whole invoice.
-    
-    IMPORTANT: Return ONLY the raw JSON string. Do not use Markdown code blocks.
+    **OUTPUT FORMAT**:
+    Return strictly a JSON Object with this exact structure (no markdown, no backticks):
+    {
+      "vendor_name": "String",
+      "items": [
+        {
+          "item_name": "String",
+          "sku": "String",
+          "qty": Number,
+          "unit_price": Number
+        }
+      ]
+    }
     `;
 
     const filePart = await fileToGenerativePart(file);
-    const result = await model.generateContent([prompt, filePart]);
-    const response = await result.response;
-    const text = response.text();
     
-    // Clean up potential markdown formatting
-    const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
-    return JSON.parse(jsonStr);
+    try {
+        const result = await model.generateContent([prompt, filePart]);
+        const response = await result.response;
+        const text = response.text();
+        
+        console.log("Raw AI Response:", text); // Debugging line to see what AI returns
+
+        // Clean up markdown formatting if the AI adds it
+        const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
+        return JSON.parse(jsonStr);
+    } catch (e) {
+        console.error("Gemini Error:", e);
+        if (e.message.includes("404")) {
+            alert("Model Error: 'gemini-2.5-flash' was not found. Please check your API Key permissions.");
+        }
+        throw e;
+    }
 }
 
 function renderInvoiceReview(data) {
@@ -100,27 +125,35 @@ function renderInvoiceReview(data) {
     
     $('#invoiceVendorName').textContent = data.vendor_name || "Unknown Vendor";
     
-    // Try to match items to our catalog
-    const items = Array.isArray(data) ? data : (data.items || []);
+    const items = Array.isArray(data.items) ? data.items : [];
     
+    if (items.length === 0) {
+        alert("AI could not find any items in this document. Please check the console log for details.");
+    }
+
     items.forEach((item, index) => {
-        // Simple fuzzy match by Vendor SKU or Name
+        // Fuzzy Match Logic
+        // 1. Try exact SKU match first
+        // 2. Try partial Name match
         let match = state.catalog.find(c => {
-            // Check Vendor Pricing for SKU match (if available)
-            // Note: In state.pricingAll, we need to check if pricingAll is populated
             const prices = state.pricingAll ? state.pricingAll.filter(p => p.catalogId === c.id) : [];
-            const skuMatch = prices.some(p => p.vendorItemNo === item.sku);
-            return skuMatch || c.itemName.toLowerCase().includes(item.item_name.toLowerCase());
+            const skuMatch = item.sku && prices.some(p => p.vendorItemNo === item.sku);
+            if (skuMatch) return true;
+            
+            // Loose name match
+            const cName = c.itemName.toLowerCase();
+            const iName = (item.item_name || "").toLowerCase();
+            return cName.includes(iName) || iName.includes(cName);
         });
 
         const row = document.createElement('tr');
         row.innerHTML = `
             <td>
                 <input type="text" value="${escapeHtml(item.item_name)}" class="inv-name" style="width:100%">
-                <div class="muted" style="font-size:0.8em">SKU: ${escapeHtml(item.sku)}</div>
+                <div class="muted" style="font-size:0.8em">SKU: ${escapeHtml(item.sku || '')}</div>
             </td>
-            <td>${item.qty}</td>
-            <td><input type="number" step="0.01" value="${item.unit_price}" class="inv-price" style="width:80px"></td>
+            <td>${item.qty || 0}</td>
+            <td><input type="number" step="0.01" value="${item.unit_price || 0}" class="inv-price" style="width:80px"></td>
             <td>
                 <select class="inv-action" data-index="${index}">
                     <option value="ignore">Ignore</option>
@@ -142,9 +175,8 @@ function renderInvoiceReview(data) {
     modal.style.display = 'flex';
     
     // Setup Confirm Button
-    // Remove existing listener to prevent duplicates if opened multiple times
     const confirmBtn = $('#confirmInvoiceImportBtn');
-    const newBtn = confirmBtn.cloneNode(true);
+    const newBtn = confirmBtn.cloneNode(true); // Remove old listeners
     confirmBtn.parentNode.replaceChild(newBtn, confirmBtn);
     
     newBtn.onclick = async () => {
@@ -153,12 +185,16 @@ function renderInvoiceReview(data) {
         
         let vendorId = state.vendors.find(v => v.name.toLowerCase().includes(vendorName.toLowerCase()))?.id;
         
+        // If vendor not found, we can't update pricing easily, but we can mark ordered
+        // Ideally we'd prompt to create vendor, but for now lets proceed
+        
         for (const row of rows) {
             const action = row.querySelector('.inv-action').value;
             const matchId = row.querySelector('.inv-match').value;
             const price = parseFloat(row.querySelector('.inv-price').value);
-            const skuText = row.querySelector('.inv-name').nextElementSibling.textContent;
-            const sku = skuText.replace('SKU: ','').trim();
+            // Grab SKU securely
+            const skuDiv = row.querySelector('.muted');
+            const sku = skuDiv ? skuDiv.textContent.replace('SKU: ', '').trim() : '';
 
             if (action === 'ignore' || !matchId) continue;
 
@@ -180,6 +216,7 @@ function renderInvoiceReview(data) {
                 }
             } else if (action === 'mark_ordered') {
                 // Find open request for this item
+                // Logic: Look for Open request for this Catalog ID
                 const req = state.requests.find(r => r.catalogId === matchId && r.status === 'Open');
                 if (req) {
                     await updateDoc(doc(db, "requests", req.id), { status: 'Ordered', lastOrdered: serverTimestamp() });

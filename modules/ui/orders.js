@@ -150,6 +150,8 @@ function renderOrdersByItem() {
                     </div>
                     <div class="edit-buttons" style="margin-top: 4px;">
                         ${status === 'Open' ? `<button class="btn btn-small" data-change-vendor-id="${r.id}">Change Vendor</button>` : ''}
+                        
+                        <button class="btn danger btn-small" data-delete-request-id="${r.id}" style="margin-left: 5px;">Delete</button>
                     </div>
                 </td>
             </tr>

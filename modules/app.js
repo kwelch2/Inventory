@@ -156,7 +156,18 @@ function setupOrdersPanelListeners() {
                 await updateRequestStatus(requestId, target.dataset.status);
                 return;
             }
-            
+            if (target.dataset.deleteRequestId) {
+                if (confirm("Are you sure you want to permanently delete this request?")) {
+                    try {
+                        await deleteDoc(doc(db, 'requests', target.dataset.deleteRequestId));
+                        // The realtime listener will automatically refresh the list
+                    } catch (err) {
+                        console.error("Error deleting request:", err);
+                        alert("Error deleting request.");
+                    }
+                }
+                return;
+            }
             if (target.dataset.changeVendorId) {
                 openChangeVendorModal(requestId);
                 return;
