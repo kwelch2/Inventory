@@ -2,7 +2,7 @@
 import { state } from "../state.js";
 import { $, escapeHtml } from "../helpers/utils.js";
 import { findBestVendor, updateRequestStatus } from "../firestoreApi.js";
-import { openChangeVendorModal } from "./modals.js";
+import { openChangeVendorModal, openCatalogModal } from "./modals.js";
 
 // Main render function
 export function renderOrders() {
@@ -32,11 +32,9 @@ export function getFilteredRequests() {
 
 // --- HELPER: Handle Unlisted Items ---
 function getRequestItemData(r) {
-    // Try to find in catalog
     let catItem = state.catalogMap.get(r.catalogId);
     let isUnlisted = false;
 
-    // If not in catalog, create a "Mock" item from the request data
     if (!catItem) {
         if (r.otherItemName) {
             catItem = {
@@ -49,14 +47,12 @@ function getRequestItemData(r) {
             };
             isUnlisted = true;
         } else {
-            return null; // Skip if no name at all
+            return null; // Skip invalid
         }
     }
 
-    // Get pricing/vendor info
     const vendorInfo = findBestVendor(r.catalogId, catItem.preferredVendorId, r.overrideVendorId);
     
-    // If unlisted, override the vendor name to "Custom Request" unless manually assigned
     if (isUnlisted && !r.overrideVendorId) {
         vendorInfo.vendorName = "Unlisted / Custom Request";
         vendorInfo.vendorId = "unlisted";
@@ -92,11 +88,10 @@ function renderOrdersByItem() {
     
     const tableRows = requestsToProcess.map(r => {
         const data = getRequestItemData(r);
-        if (!data) return ''; // Skip invalid
+        if (!data) return ''; 
         const { catItem, vendorInfo } = data;
         const status = r.status || 'Open';
 
-        // --- Logic for Price Display ---
         const allPrices = (state.pricingMap.get(catItem.id) || [])
             .map(p => {
                 const v = state.vendors.find(ven => ven.id === p.vendorId);
@@ -150,6 +145,8 @@ function renderOrdersByItem() {
                     <div class="edit-buttons" style="margin-top: 4px;">
                         ${status === 'Open' ? `<button class="btn btn-small" data-change-vendor-id="${r.id}">Change Vendor</button>` : ''}
                         
+                        ${catItem.isUnlisted ? `<button class="btn primary btn-small" data-add-to-catalog="${escapeHtml(catItem.itemName)}">Add to Catalog</button>` : ''}
+
                         <button class="btn danger btn-small" data-delete-request-id="${r.id}" style="margin-left: 5px;">Delete</button>
                     </div>
                 </td>
@@ -198,7 +195,7 @@ function renderOrdersByVendor() {
     const requestsByGroup = new Map();
     for (const r of requestsToProcess) {
         const data = getRequestItemData(r);
-        if (!data) continue; // Skip if invalid
+        if (!data) continue;
         
         const { catItem, vendorInfo } = data;
         const augmentedRequest = { ...r, vendorInfo, catItem };
@@ -214,15 +211,12 @@ function renderOrdersByVendor() {
                 groupName = vendorInfo.vendorName;
             }
         } else {
-            groupId = r.status; // "Ordered" or "Backordered"
+            groupId = r.status;
             groupName = r.status;
         }
 
         if (!requestsByGroup.has(groupId)) {
-            requestsByGroup.set(groupId, {
-                groupName: groupName,
-                requests: []
-            });
+            requestsByGroup.set(groupId, { groupName, requests: [] });
         }
         requestsByGroup.get(groupId).requests.push(augmentedRequest);
     }
@@ -246,33 +240,20 @@ function renderOrdersByVendor() {
 
 export function renderHistoryTable(requests) {
     if (requests.length === 0) return `<p class="muted">No history found.</p>`;
-    
-    requests.sort((a,b) => (b.receivedAt?.seconds || b.updatedAt?.seconds || 0) - (a.receivedAt?.seconds || a.updatedAt?.seconds || 0));
-
+    requests.sort((a,b) => (b.receivedAt?.seconds || 0) - (a.receivedAt?.seconds || 0));
     const rows = requests.map(r => {
         const catItem = state.catalogMap.get(r.catalogId);
         const itemName = catItem ? catItem.itemName : (r.otherItemName || 'Unknown');
-        const receivedDate = r.receivedAt ? new Date(r.receivedAt.seconds * 1000).toLocaleDateString() : (r.updatedAt ? new Date(r.updatedAt.seconds * 1000).toLocaleDateString() : 'N/A');
-        return `
-            <tr>
-                <td><strong>${escapeHtml(itemName)}</strong><br><span class="muted">${escapeHtml(r.requesterEmail)}</span></td>
-                <td>${escapeHtml(r.qty)} ${escapeHtml(catItem?.unit || '')}</td>
-                <td>${escapeHtml(r.status)}</td>
-                <td>${receivedDate}</td>
-            </tr>`;
+        const receivedDate = r.receivedAt ? new Date(r.receivedAt.seconds * 1000).toLocaleDateString() : 'N/A';
+        return `<tr><td><strong>${escapeHtml(itemName)}</strong><br><span class="muted">${escapeHtml(r.requesterEmail)}</span></td><td>${escapeHtml(r.qty)}</td><td>${escapeHtml(r.status)}</td><td>${receivedDate}</td></tr>`;
     }).join('');
-    
-    return `
-        <table>
-            <thead><tr><th>Item/Requester</th><th>Qty</th><th>Status</th><th>Date Received</th></tr></thead>
-            <tbody>${rows}</tbody>
-        </table>`;
+    return `<table><thead><tr><th>Item/Requester</th><th>Qty</th><th>Status</th><th>Date Received</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
 function renderVendorGroup(container, group, vendorId) {
     if (!group || group.requests.length === 0) return;
 
-    const isOrderableGroup = vendorId && vendorId !== 'Open' && vendorId !== 'Ordered' && vendorId !== 'Backordered' && vendorId !== 'unassigned';
+    const isOrderableGroup = vendorId && vendorId !== 'Open' && vendorId !== 'Ordered' && vendorId !== 'Backordered' && vendorId !== 'unassigned' && vendorId !== 'unlisted';
     const groupTitle = group.groupName || 'Unknown Group';
 
     const tableRows = group.requests.map(r => {
@@ -284,15 +265,8 @@ function renderVendorGroup(container, group, vendorId) {
                 const v = state.vendors.find(ven => ven.id === p.vendorId);
                 const fee = v?.serviceFee || 0;
                 const effective = (p.unitPrice || 0) * (1 + (fee/100));
-                return {
-                    ...p, 
-                    vendorName: v?.name || 'N/A',
-                    effectivePrice: effective,
-                    hasFee: fee > 0,
-                    feePercent: fee
-                };
-            })
-            .sort((a,b) => a.effectivePrice - b.effectivePrice);
+                return { ...p, vendorName: v?.name || 'N/A', effectivePrice: effective, hasFee: fee > 0, feePercent: fee };
+            }).sort((a,b) => a.effectivePrice - b.effectivePrice);
         
         const allPricesHtml = allPrices.length > 0 ? allPrices.map(p => {
             let classes = 'price-tag';
@@ -303,7 +277,7 @@ function renderVendorGroup(container, group, vendorId) {
                 : `$${p.effectivePrice.toFixed(2)}`;
 
             return `<div class="${classes}">
-                ${escapeHtml(p.vendorName)}: ${priceDisplay} (#${escapeHtml(p.vendorItemNo)}) - <em>${escapeHtml(p.vendorStatus || 'In Stock')}</em>
+                ${escapeHtml(p.vendorName)}: ${priceDisplay} (#${escapeHtml(p.vendorItemNo)})
             </div>`;
         }).join('') : '<div class="muted">No prices found.</div>';
         
@@ -317,14 +291,14 @@ function renderVendorGroup(container, group, vendorId) {
                     <br><span class="muted" style="font-size: 0.8rem;">Ref: ${escapeHtml(r.catItem.itemRef || 'N/A')}</span>
                     <button class="btn" data-toggle-details style="margin-left: 8px; padding: 2px 6px;">▼</button>
                     <br>
-                    <span class="muted">${escapeHtml(r.vendorInfo.vendorName)} (${escapeHtml(r.vendorInfo.status)})</span>
+                    <span class="muted">${escapeHtml(r.vendorInfo.vendorName)}</span>
                 </td>
                 <td>
                     <input class="quick-qty-edit" type="text" value="${escapeHtml(r.qty)}" 
                            ${isQtyEditable ? '' : 'disabled'}
                            data-request-id="${r.id}" 
                            data-original-value="${escapeHtml(r.qty)}">
-                    <span class="muted" style="margin-left: 5px;">${escapeHtml(catItem.unit || 'Each')}</span>
+                    <span class="muted" style="margin-left: 5px;">${escapeHtml(catItem.unit || '')}</span>
                 </td>
                 <td>${escapeHtml(r.vendorInfo.vendorItemNo || 'N/A')}</td>
                 <td>${r.vendorInfo.unitPrice ? `$${r.vendorInfo.unitPrice.toFixed(2)}` : 'N/A'}</td>
@@ -338,13 +312,15 @@ function renderVendorGroup(container, group, vendorId) {
                     <div class="edit-buttons" style="margin-top: 4px;">
                         ${status === 'Open' ? `<button class="btn btn-small" data-change-vendor-id="${r.id}">Change Vendor</button>` : ''}
                         
+                        ${catItem.isUnlisted ? `<button class="btn primary btn-small" data-add-to-catalog="${escapeHtml(catItem.itemName)}">Add to Catalog</button>` : ''}
+
                         <button class="btn danger btn-small" data-delete-request-id="${r.id}" style="margin-left: 5px;">Delete</button>
                     </div>
                 </td>
             </tr>
             <tr class="details-row" data-details-for="${r.id}">
                 <td colspan="${isOrderableGroup ? 7 : 6}" class="details-cell">
-                    <h4>All Vendor Pricing for ${escapeHtml(r.catItem.itemName)}</h4>
+                    <h4>All Vendor Pricing</h4>
                     ${allPricesHtml}
                 </td>
             </tr>`;
