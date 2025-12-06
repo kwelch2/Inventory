@@ -97,7 +97,6 @@ function renderOrdersByItem() {
         const status = r.status || 'Open';
 
         // --- Logic for Price Display ---
-        // (Copied from your previous preference to show fees)
         const allPrices = (state.pricingMap.get(catItem.id) || [])
             .map(p => {
                 const v = state.vendors.find(ven => ven.id === p.vendorId);
@@ -236,7 +235,7 @@ function renderOrdersByVendor() {
         }
     });
     renderVendorGroup(container, requestsByGroup.get('unassigned'), 'unassigned');
-    renderVendorGroup(container, requestsByGroup.get('unlisted'), 'unlisted'); // NEW Group for custom items
+    renderVendorGroup(container, requestsByGroup.get('unlisted'), 'unlisted'); 
     renderVendorGroup(container, requestsByGroup.get('Ordered'), 'Ordered');
     renderVendorGroup(container, requestsByGroup.get('Backordered'), 'Backordered');
 
@@ -244,10 +243,6 @@ function renderOrdersByVendor() {
          container.innerHTML = `<p class="muted">No active requests found.</p>`;
     }
 }
-
-// Re-use your existing renderHistoryTable and renderVendorGroup functions (they don't need changes if getRequestItemData works)
-// Note: Ensure you include the rest of the file content (renderHistoryTable, renderVendorGroup) when updating the file.
-// For brevity, I've focused on the logic change above. The key is using getRequestItemData() inside the loops.
 
 export function renderHistoryTable(requests) {
     if (requests.length === 0) return `<p class="muted">No history found.</p>`;
@@ -285,35 +280,32 @@ function renderVendorGroup(container, group, vendorId) {
         const catItem = r.catItem;
         
         const allPrices = (state.pricingMap.get(catItem.id) || [])
-    .map(p => {
-        const v = state.vendors.find(ven => ven.id === p.vendorId);
-        const fee = v?.serviceFee || 0;
-        const effective = (p.unitPrice || 0) * (1 + (fee/100));
-        return {
-            ...p, 
-            vendorName: v?.name || 'N/A',
-            effectivePrice: effective,
-            hasFee: fee > 0,
-            feePercent: fee
-        };
-    })
-    .sort((a,b) => a.effectivePrice - b.effectivePrice);
-        const cheapestPrice = allPrices[0];
+            .map(p => {
+                const v = state.vendors.find(ven => ven.id === p.vendorId);
+                const fee = v?.serviceFee || 0;
+                const effective = (p.unitPrice || 0) * (1 + (fee/100));
+                return {
+                    ...p, 
+                    vendorName: v?.name || 'N/A',
+                    effectivePrice: effective,
+                    hasFee: fee > 0,
+                    feePercent: fee
+                };
+            })
+            .sort((a,b) => a.effectivePrice - b.effectivePrice);
         
         const allPricesHtml = allPrices.length > 0 ? allPrices.map(p => {
-    let classes = 'price-tag';
-    if (p.vendorId === catItem.preferredVendorId) classes += ' preferred-price';
-    if (p.vendorId === cheapestPrice?.vendorId) classes += ' best-price';
-    
-    // Show base price if there is a fee, otherwise just show price
-    const priceDisplay = p.hasFee 
-        ? `$${p.effectivePrice.toFixed(2)} <span style="font-size:0.8em; color:#666;">(incl. ${p.feePercent}%)</span>`
-        : `$${p.effectivePrice.toFixed(2)}`;
+            let classes = 'price-tag';
+            if (p.vendorId === catItem.preferredVendorId) classes += ' preferred-price';
+            
+            const priceDisplay = p.hasFee 
+                ? `$${p.effectivePrice.toFixed(2)} <span style="font-size:0.8em; color:#666;">(incl. ${p.feePercent}%)</span>`
+                : `$${p.effectivePrice.toFixed(2)}`;
 
-    return `<div class="${classes}">
-        ${escapeHtml(p.vendorName)}: ${priceDisplay} (#${escapeHtml(p.vendorItemNo)}) - <em>${escapeHtml(p.vendorStatus || 'In Stock')}</em>
-    </div>`;
-}).join('') : '<div class="muted">No prices found.</div>';
+            return `<div class="${classes}">
+                ${escapeHtml(p.vendorName)}: ${priceDisplay} (#${escapeHtml(p.vendorItemNo)}) - <em>${escapeHtml(p.vendorStatus || 'In Stock')}</em>
+            </div>`;
+        }).join('') : '<div class="muted">No prices found.</div>';
         
         const isQtyEditable = status === 'Open' || status === 'Backordered';
 
@@ -345,6 +337,8 @@ function renderVendorGroup(container, group, vendorId) {
                     </div>
                     <div class="edit-buttons" style="margin-top: 4px;">
                         ${status === 'Open' ? `<button class="btn btn-small" data-change-vendor-id="${r.id}">Change Vendor</button>` : ''}
+                        
+                        <button class="btn danger btn-small" data-delete-request-id="${r.id}" style="margin-left: 5px;">Delete</button>
                     </div>
                 </td>
             </tr>
