@@ -1,3 +1,7 @@
+{
+type: uploaded file
+fileName: kwelch2/inventory/Inventory-0f4da426da455c84b1380b320053e132b5c0c323/master.html
+fullContent:
 <!doctype html>
 <html>
 <head>
@@ -79,6 +83,12 @@
     .quick-qty-edit { transition: background-color 0.2s, border-color 0.2s; width: 70px; text-align: right; padding-right: 5px; }
     .quick-qty-edit.success { background-color: var(--ok-light); border-color: var(--ok); }
     .quick-qty-edit.error { background-color: #fdecea; border-color: var(--bad); }
+    
+    /* New Style for Unit Edit */
+    .quick-unit-edit { transition: background-color 0.2s, border-color 0.2s; width: 60px; padding: 4px; font-size: 0.9rem; margin-left: 4px;}
+    .quick-unit-edit.success { background-color: var(--ok-light); border-color: var(--ok); }
+    .quick-unit-edit.error { background-color: #fdecea; border-color: var(--bad); }
+
     #export-fields-list {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -169,7 +179,6 @@
         <h2>Orders & Requests</h2>
         <div class="row">
             <button class="btn primary" id="showAddItemModal">+ Add Item to Order</button>
-            <button class="btn" id="uploadInvoiceBtn" style="background:#6f42c1; color:white; border:none;">📄 Upload Invoice (AI)</button>
             <button class="btn primary" id="generateItemOrderBtn" style="display: none;">Generate Order from Selected</button>
             
             <span class="spacer" style="flex: 1;"></span>
@@ -482,9 +491,6 @@
   </div>
 </div>
 
-<script type="module" src="./modules/app.js"></script>
-</body>
-</html>
 <script type="module" src="./modules/app.js"></script>
 </body>
 </html>
