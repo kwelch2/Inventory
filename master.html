@@ -1,7 +1,3 @@
-{
-type: uploaded file
-fileName: kwelch2/inventory/Inventory-0f4da426da455c84b1380b320053e132b5c0c323/master.html
-fullContent:
 <!doctype html>
 <html>
 <head>
@@ -80,12 +76,13 @@ fullContent:
     .view-toggle-wrap .btn:first-child { border-radius: 10px 0 0 10px; }
     .view-toggle-wrap .btn:last-child { border-radius: 0 10px 10px 0; border-right-width: 1px; }
     .view-toggle-wrap .btn.active { background: var(--accent); color: white; }
+    
+    /* Edit Inputs */
     .quick-qty-edit { transition: background-color 0.2s, border-color 0.2s; width: 70px; text-align: right; padding-right: 5px; }
     .quick-qty-edit.success { background-color: var(--ok-light); border-color: var(--ok); }
     .quick-qty-edit.error { background-color: #fdecea; border-color: var(--bad); }
     
-    /* New Style for Unit Edit */
-    .quick-unit-edit { transition: background-color 0.2s, border-color 0.2s; width: 60px; padding: 4px; font-size: 0.9rem; margin-left: 4px;}
+    .quick-unit-edit { transition: background-color 0.2s, border-color 0.2s; width: 70px; padding: 4px; margin-left: 4px; font-size: 0.9rem; }
     .quick-unit-edit.success { background-color: var(--ok-light); border-color: var(--ok); }
     .quick-unit-edit.error { background-color: #fdecea; border-color: var(--bad); }
 
@@ -451,42 +448,6 @@ fullContent:
     <div class="modal-footer">
       <button class="btn" data-close-modal="exportModal">Cancel</button>
       <button class="btn primary" id="confirmExportBtn">Export CSV</button>
-    </div>
-  </div>
-</div>
-
-<div id="invoiceLoading" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(255,255,255,0.8); z-index:2000; align-items:center; justify-content:center; flex-direction:column;">
-    <div style="font-size:2rem; margin-bottom:1rem;">🤖</div>
-    <h3>AI is reading your invoice...</h3>
-    <p>This may take a few seconds.</p>
-</div>
-
-<div id="invoiceReviewModal" class="modal">
-  <div class="modal-content" style="max-width: 900px;">
-    <div class="modal-header">
-      <h2>Review Invoice: <span id="invoiceVendorName"></span></h2>
-      <span class="close-btn" data-close-modal="invoiceReviewModal">&times;</span>
-    </div>
-    <div class="modal-body" style="display:block;">
-      <p class="muted">Review the extracted items below. Match them to your catalog to update costs or mark as ordered.</p>
-      <div style="max-height: 400px; overflow-y: auto;">
-          <table id="invoiceReviewTable" style="width:100%;">
-              <thead>
-                  <tr>
-                      <th>Item Detected</th>
-                      <th>Qty</th>
-                      <th>Price</th>
-                      <th>Action</th>
-                      <th>Matched Catalog Item</th>
-                  </tr>
-              </thead>
-              <tbody></tbody>
-          </table>
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn" data-close-modal="invoiceReviewModal">Cancel</button>
-      <button class="btn primary" id="confirmInvoiceImportBtn">Process Selected</button>
     </div>
   </div>
 </div>

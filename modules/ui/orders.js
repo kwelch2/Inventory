@@ -115,6 +115,7 @@ function renderOrdersByItem() {
         }).join('') : '<div class="muted">No prices found.</div>';
         
         const isQtyEditable = status === 'Open' || status === 'Backordered';
+        const currentUnit = r.unit || catItem.unit || '';
 
         return `
             <tr data-request-id="${r.id}">
@@ -131,7 +132,11 @@ function renderOrdersByItem() {
                            ${isQtyEditable ? '' : 'disabled'}
                            data-request-id="${r.id}" 
                            data-original-value="${escapeHtml(r.qty)}">
-                    <span class="muted" style="margin-left: 5px;">${escapeHtml(catItem.unit || '')}</span>
+                    
+                    <input class="quick-unit-edit" type="text" value="${escapeHtml(currentUnit)}"
+                           ${isQtyEditable ? '' : 'disabled'}
+                           data-request-id="${r.id}"
+                           placeholder="Unit">
                 </td>
                 <td>${vendorInfo.vendorItemNo || 'N/A'}</td>
                 <td>${vendorInfo.unitPrice ? `$${vendorInfo.unitPrice.toFixed(2)}` : 'N/A'}</td>
@@ -166,7 +171,7 @@ function renderOrdersByItem() {
                 <tr>
                     <th><input type="checkbox" class="item-select-all"></th>
                     <th>Item/Vendor</th>
-                    <th>Qty</th>
+                    <th>Qty / Unit</th>
                     <th>Vendor #</th>
                     <th>Price</th>
                     <th>Actions</th>
@@ -282,6 +287,7 @@ function renderVendorGroup(container, group, vendorId) {
         }).join('') : '<div class="muted">No prices found.</div>';
         
         const isQtyEditable = status === 'Open' || status === 'Backordered';
+        const currentUnit = r.unit || catItem.unit || '';
 
         return `
             <tr data-request-id="${r.id}">
@@ -298,7 +304,11 @@ function renderVendorGroup(container, group, vendorId) {
                            ${isQtyEditable ? '' : 'disabled'}
                            data-request-id="${r.id}" 
                            data-original-value="${escapeHtml(r.qty)}">
-                    <span class="muted" style="margin-left: 5px;">${escapeHtml(catItem.unit || '')}</span>
+                    
+                    <input class="quick-unit-edit" type="text" value="${escapeHtml(currentUnit)}"
+                           ${isQtyEditable ? '' : 'disabled'}
+                           data-request-id="${r.id}"
+                           placeholder="Unit">
                 </td>
                 <td>${escapeHtml(r.vendorInfo.vendorItemNo || 'N/A')}</td>
                 <td>${r.vendorInfo.unitPrice ? `$${r.vendorInfo.unitPrice.toFixed(2)}` : 'N/A'}</td>
@@ -345,7 +355,7 @@ function renderVendorGroup(container, group, vendorId) {
                     <tr>
                         ${isOrderableGroup ? `<th><input type="checkbox" class="vendor-select-all" data-vendor-id="${vendorId}"></th>` : ''}
                         <th>Item/Vendor</th>
-                        <th>Qty</th>
+                        <th>Qty / Unit</th>
                         <th>Vendor #</th>
                         <th>Price</th>
                         <th>Actions</th>
