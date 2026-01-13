@@ -1,16 +1,17 @@
 // modules/app.js
 import { 
   doc, updateDoc, addDoc, collection, serverTimestamp, deleteDoc, deleteField
-} from "./firebase.js"; // <--- CHANGED
+} from "./firebase.js"; 
 import { state } from "./state.js";
-import { db } from "./firebase.js"; // <--- db is still imported from here
+import { db } from "./firebase.js"; 
 import { onUserHandler, login, logout, applyPermissions } from "./auth.js";
 import { $, escapeHtml } from "./helpers/utils.js";
 import { initializeStaticData, setupRealtimeListeners, updateRequestStatus, findBestVendor } from "./firestoreApi.js";
 import { renderOrders } from "./ui/orders.js";
 import { renderCatalog, setupCatalogPanel, populateCategoryFilter } from "./ui/catalog.js";
 import { mountTabs, mountManagementTabs } from "./ui/tabs.js";
-import { setupInvoiceScanner } from "./ui/invoiceScanner.js";
+// Removed invoice scanner import
+
 import { 
     setupAddItemToOrderModal, setupCatalogModal, setupPricingModal, 
     setupChangeVendorModal, setupVendorModal, setupMgmtEditModal,
@@ -39,7 +40,7 @@ async function boot() {
     setupPrintModal();
     setupModalCloseButtons();
     setupExportModal();
-    setupInvoiceScanner();
+    // setupInvoiceScanner(); // REMOVED AI Scanner
 
     // Setup panel-specific listeners
     setupCatalogPanel();
@@ -54,7 +55,7 @@ async function boot() {
     
     await initializeStaticData();
     setupRealtimeListeners();
-    applyPermissions(state.userRole); // Apply permissions once data is loaded
+    applyPermissions(state.userRole); 
 }
 
 // --- Event Listeners ---
@@ -77,14 +78,12 @@ function setupOrdersPanelListeners() {
         });
     }
 
-    // *** FIX: Added '#' ***
     const historyToggle = $('#showHistoryToggle');
     if (historyToggle) {
         historyToggle.addEventListener('change', renderOrders);
     }
     
     // Generate Order from "View by Item"
-    // *** FIX: Added '#' ***
     const genItemOrderBtn = $('#generateItemOrderBtn');
     if (genItemOrderBtn) {
         genItemOrderBtn.addEventListener('click', () => {
@@ -114,7 +113,6 @@ function setupOrdersPanelListeners() {
 
 
     // Event delegation for Orders panel CLICK actions
-    // *** FIX: Added '#' ***
     const ordersContainer = $('#ordersGroupContainer');
     if (ordersContainer) {
         ordersContainer.addEventListener('click', async e => {
@@ -160,7 +158,6 @@ function setupOrdersPanelListeners() {
                 if (confirm("Are you sure you want to permanently delete this request?")) {
                     try {
                         await deleteDoc(doc(db, 'requests', target.dataset.deleteRequestId));
-                        // The realtime listener will automatically refresh the list
                     } catch (err) {
                         console.error("Error deleting request:", err);
                         alert("Error deleting request.");
@@ -174,17 +171,26 @@ function setupOrdersPanelListeners() {
             }
         });
 
-        // Listeners for Qty changes (blur and Enter)
+        // Listeners for Qty and Unit changes (blur and Enter)
         ordersContainer.addEventListener('blur', e => {
             if (e.target.classList.contains('quick-qty-edit')) {
                 handleQuickQtyUpdate(e.target);
             }
+            if (e.target.classList.contains('quick-unit-edit')) { // NEW: Handle unit edit
+                handleQuickUnitUpdate(e.target);
+            }
         }, true);
 
         ordersContainer.addEventListener('keydown', e => {
-            if (e.key === 'Enter' && e.target.classList.contains('quick-qty-edit')) {
-                handleQuickQtyUpdate(e.target);
-                e.target.blur();
+            if (e.key === 'Enter') {
+                if (e.target.classList.contains('quick-qty-edit')) {
+                    handleQuickQtyUpdate(e.target);
+                    e.target.blur();
+                }
+                if (e.target.classList.contains('quick-unit-edit')) { // NEW: Handle unit edit
+                    handleQuickUnitUpdate(e.target);
+                    e.target.blur();
+                }
             }
         });
     }
@@ -202,7 +208,7 @@ async function handleQuickQtyUpdate(target) {
         setTimeout(() => target.classList.remove('error'), 1000);
         return;
     }
-    if (newQty === originalQty) return; // No change
+    if (newQty === originalQty) return; 
 
     try {
         await updateDoc(doc(db, 'requests', requestId), {
@@ -221,8 +227,27 @@ async function handleQuickQtyUpdate(target) {
     }
 }
 
+// NEW: Helper for Unit Updates
+async function handleQuickUnitUpdate(target) {
+    const requestId = target.dataset.requestId;
+    const newUnit = target.value.trim();
+
+    try {
+        await updateDoc(doc(db, 'requests', requestId), {
+            unit: newUnit,
+            updatedAt: serverTimestamp()
+        });
+        target.classList.add('success');
+        setTimeout(() => target.classList.remove('success'), 1500);
+    } catch (e) {
+        console.error("Failed to update unit:", e);
+        target.classList.add('error');
+        alert("Error saving unit.");
+        setTimeout(() => target.classList.remove('error'), 1000);
+    }
+}
+
 function setupManagementPanelActions() {
-    // *** FIX: Added '#' ***
     const mgmtPanel = $('#panel-management');
     if (mgmtPanel) {
         mgmtPanel.addEventListener('click', async e => {
@@ -230,7 +255,6 @@ function setupManagementPanelActions() {
             
             // --- Add Actions ---
             if (target.id === 'addUnitBtn') {
-                // *** FIX: Added '#' ***
                 const nameInput = $('#newUnitName');
                 const name = nameInput.value.trim();
                 if (name) { 
@@ -240,7 +264,6 @@ function setupManagementPanelActions() {
                 }
             }
             else if (target.id === 'addCompBtn') {
-                // *** FIX: Added '#' ***
                 const nameInput = $('#newCompName');
                 const name = nameInput.value.trim();
                 if (name) { 
@@ -250,7 +273,6 @@ function setupManagementPanelActions() {
                 }
             }
             else if (target.id === 'addCategoryBtn') {
-                // *** FIX: Added '#' ***
                 const nameInput = $('#newCategoryName');
                 const name = nameInput.value.trim();
                 if (name) { 
@@ -293,8 +315,6 @@ function setupManagementPanelActions() {
 }
 
 // --- App Start ---
-// ***** THIS IS THE FIX *****
-// Wait for the entire HTML document to be loaded before running any script
 document.addEventListener("DOMContentLoaded", () => {
     
     const loadingContainer = $("#loading-container");
@@ -307,11 +327,10 @@ document.addEventListener("DOMContentLoaded", () => {
         if (isLoggedIn && !appInitialized) {
             boot();
         } else if (!isLoggedIn) {
-            appInitialized = false; // Reset app if user logs out
+            appInitialized = false; 
         }
     });
 
-    // Wire up login/logout buttons
     const loginBtn = $("#googleLoginBtn");
     if (loginBtn) {
         loginBtn.addEventListener("click", login);
