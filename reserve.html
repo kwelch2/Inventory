@@ -8,104 +8,135 @@
 <link rel="icon" href="https://kwelch2.github.io/Inventory/favicon.ico">
 
 <style>
-body{font-family:system-ui;background:#f7f7f7;margin:0;padding:16px}
-.wrap{max-width:900px;margin:auto}
-.card{background:#fff;border:1px solid #ddd;border-radius:12px;padding:16px;margin-bottom:16px}
-h1,h2{margin:0 0 8px}
-label{display:block;margin:6px 0}
-input,select,textarea{width:100%;padding:8px;border-radius:6px;border:1px solid #ccc}
-table{width:100%;border-collapse:collapse;margin-top:8px}
-th,td{border-bottom:1px solid #eee;padding:6px;text-align:left}
-.actions{display:flex;gap:10px}
-button{padding:10px 14px;border:none;border-radius:8px;font-weight:600;cursor:pointer}
-.save{background:#007bff;color:#fff}
-.print{background:#444;color:#fff}
-@media print{
-  .actions{display:none}
-  body{background:#fff}
+:root { --b:#ddd; --bg:#f7f7f7; }
+body { font-family: system-ui; background: var(--bg); margin: 0; padding: 16px; }
+.wrap { max-width: 1000px; margin: auto; }
+.card { background: #fff; border: 1px solid var(--b); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+h1,h2 { margin: 0 0 8px; }
+label { display: block; margin: 6px 0; }
+input, textarea { width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #ccc; }
+table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+th, td { border-bottom: 1px solid #eee; padding: 6px; text-align: left; }
+th { background: #fafafa; }
+.actions { display: flex; gap: 10px; margin-top: 12px; }
+button { padding: 10px 14px; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; }
+.save { background: #007bff; color: #fff; }
+.print { background: #444; color: #fff; }
+
+@media print {
+  .actions { display: none; }
+  body { background: #fff; }
 }
 </style>
 </head>
 
 <body>
 <div class="wrap">
+
 <h1>Reserve Shift Evaluation</h1>
 
 <div class="card">
-<label>Reserve Name <input id="reserveName"></label>
-<label>Date <input type="date" id="evalDate"></label>
-<label>Crew <input id="crew"></label>
+  <label>Reserve Name <input></label>
+  <label>Date <input type="date"></label>
+  <label>Unit / Crew <input></label>
 </div>
 
-<div class="card">
-<h2>Patient Assessment</h2>
-<table>
-<tr><th>Assessment Element</th><th>Observed</th><th>Prompted</th><th>Missed</th></tr>
 <script>
-const assessItems = [
-"Scene size-up & safety",
-"Chief complaint identified",
-"HPI obtained",
-"Pertinent positives identified",
-"Pertinent negatives verbalized",
-"Reassessment performed"
-];
-document.write(assessItems.map(i=>`
-<tr>
-<td>${i}</td>
-<td><input type="radio" name="${i}" value="observed"></td>
-<td><input type="radio" name="${i}" value="prompted"></td>
-<td><input type="radio" name="${i}" value="missed"></td>
-</tr>`).join(''));
+function section(title, items) {
+  return `
+  <div class="card">
+    <h2>${title}</h2>
+    <table>
+      <tr><th>Element</th><th>Observed</th><th>Prompted</th><th>Missed</th></tr>
+      ${items.map(i=>`
+        <tr>
+          <td>${i}</td>
+          <td><input type="radio" name="${i}"></td>
+          <td><input type="radio" name="${i}"></td>
+          <td><input type="radio" name="${i}"></td>
+        </tr>`).join('')}
+    </table>
+  </div>`;
+}
+
+document.write(section("Patient Assessment – Process Execution", [
+  "Scene size-up & safety considered",
+  "Chief complaint identified",
+  "History of present illness obtained",
+  "Pertinent positives identified",
+  "Pertinent negatives verbalized",
+  "Reassessment performed when indicated"
+]));
+
+document.write(section("Clinical Decision-Making", [
+  "Identified patient priority / acuity",
+  "Recognized need for intervention vs monitor",
+  "Selected appropriate treatment plan",
+  "Adjusted plan based on patient response"
+]));
+
+document.write(section("Treatment & Skills Execution", [
+  "Appropriate treatments initiated",
+  "Skills performed correctly",
+  "Equipment selected and used appropriately",
+  "Treatments prioritized appropriately"
+]));
+
+document.write(section("Transport & Monitoring", [
+  "Transport decision appropriate",
+  "Patient monitored appropriately",
+  "Reassessments performed en route",
+  "Changes recognized and addressed"
+]));
+
+document.write(section("Call Flow & Scene Management", [
+  "Logical flow from arrival to transfer",
+  "Communicated plan to partner / crew",
+  "Maintained situational awareness",
+  "Appropriate demeanor and patient interaction"
+]));
 </script>
-</table>
+
+<div class="card">
+<h2>Skills Performed This Shift</h2>
+<label><input type="checkbox"> Vital signs / monitoring</label>
+<label><input type="checkbox"> Blood glucose</label>
+<label><input type="checkbox"> Oxygen / airway adjuncts</label>
+<label><input type="checkbox"> Medication administration</label>
+<label><input type="checkbox"> Splinting / wound care</label>
+<label><input type="checkbox"> Patient movement / cot</label>
+<label><input type="checkbox"> Documentation / PCR</label>
+<label><input type="checkbox"> Radio report / handoff</label>
 </div>
 
 <div class="card">
-<h2>Skills Performed</h2>
-<label><input type="checkbox"> Vitals / BG</label>
-<label><input type="checkbox"> Oxygen</label>
-<label><input type="checkbox"> Medications</label>
-<label><input type="checkbox"> Splinting / Bandaging</label>
-<label><input type="checkbox"> Cot / Patient movement</label>
-<label><input type="checkbox"> Documentation</label>
-<label><input type="checkbox"> Radio / Handoff</label>
-</div>
-
-<div class="card">
-<h2>Skills to Work On</h2>
-<label><input type="checkbox"> Assessment flow</label>
-<label><input type="checkbox"> Decision making</label>
-<label><input type="checkbox"> Scene organization</label>
-<label><input type="checkbox"> Treatment prioritization</label>
-<label><input type="checkbox"> Documentation</label>
-<label><input type="checkbox"> Communication</label>
+<h2>Overall Clinical Readiness</h2>
+<label><input type="radio" name="ready"> Not Ready – requires continuous prompting</label>
+<label><input type="radio" name="ready"> Developing – routine calls with guidance</label>
+<label><input type="radio" name="ready"> Competent – independent on routine calls</label>
+<label><input type="radio" name="ready"> Advanced for Level – anticipates needs under stress</label>
 </div>
 
 <div class="card">
 <h2>Notes</h2>
-<label>Strengths <textarea rows="3"></textarea></label>
-<label>Focus for Next Shift <textarea rows="3"></textarea></label>
-</div>
-
-<div class="card">
-<h2>Overall Readiness</h2>
-<label><input type="radio" name="ready"> Not Ready</label>
-<label><input type="radio" name="ready"> Developing</label>
-<label><input type="radio" name="ready"> Competent</label>
-<label><input type="radio" name="ready"> Advanced for Level</label>
+<label>Strengths observed this shift
+  <textarea rows="3"></textarea>
+</label>
+<label>Focus areas for next shift
+  <textarea rows="3"></textarea>
+</label>
 </div>
 
 <div class="actions">
-<button class="save" onclick="saveEval()">Save</button>
-<button class="print" onclick="window.print()">Print</button>
+  <button class="save" onclick="saveEval()">Save</button>
+  <button class="print" onclick="window.print()">Print</button>
 </div>
 
 </div>
 
 <script>
 function saveEval(){
-  alert("Save logic hooks to Firestore here when ready.");
+  alert("Save hook placeholder – Firestore wiring comes next.");
 }
 </script>
 
