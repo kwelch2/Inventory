@@ -1,0 +1,174 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reserve Evaluation – GC EMS</title>
+
+<link rel="icon" type="image/x-icon" href="https://kwelch2.github.io/Inventory/favicon.ico">
+
+<style>
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;padding:16px;background:#f7f7f7}
+    .wrap{max-width:900px;margin:0 auto}
+    h1{margin-bottom:12px}
+    label{display:block;margin:6px 0}
+    select, input{padding:8px;border:1px solid #ccc;border-radius:6px;width:100%}
+    button{padding:10px 14px;border-radius:6px;border:none;background:#007bff;color:#fff;font-weight:600;cursor:pointer}
+    .section{background:#fff;padding:12px;border-radius:8px;margin-bottom:16px;border:1px solid #ddd}
+</style>
+
+</head>
+<body>
+
+<div class="wrap">
+    <h1>Reserve Shift Evaluation</h1>
+
+    <div>
+        <a href="master.html">Back to Admin</a>
+    </div>
+
+    <form id="evalForm">
+
+      <div class="section">
+        <h2>Shift Info</h2>
+
+        <label>Reserve Name
+            <input type="text" id="reserveName" required>
+        </label>
+
+        <label>Date
+            <input type="date" id="evalDate" required>
+        </label>
+
+        <label>Low Acuity Calls
+            <input type="number" id="lowCount" value="0" min="0">
+        </label>
+
+        <label>Moderate Acuity Calls
+            <input type="number" id="modCount" value="0" min="0">
+        </label>
+
+        <label>High Acuity Calls
+            <input type="number" id="highCount" value="0" min="0">
+        </label>
+      </div>
+
+      <div class="section">
+        <h2>Assessment Process</h2>
+
+        <label>Scene size-up
+            <select class="assess">
+                <option value="observed">Observed</option>
+                <option value="prompted">Prompted</option>
+                <option value="missed">Missed</option>
+            </select>
+        </label>
+
+        <label>Primary impression
+            <select class="assess">
+                <option value="observed">Observed</option>
+                <option value="prompted">Prompted</option>
+                <option value="missed">Missed</option>
+            </select>
+        </label>
+
+        <label>Life threats considered
+            <select class="assess">
+                <option value="observed">Observed</option>
+                <option value="prompted">Prompted</option>
+                <option value="missed">Missed</option>
+            </select>
+        </label>
+
+        <label>Focused history obtained
+            <select class="assess">
+                <option value="observed">Observed</option>
+                <option value="prompted">Prompted</option>
+                <option value="missed">Missed</option>
+            </select>
+        </label>
+
+        <label>Pertinent positives/negatives
+            <select class="assess">
+                <option value="observed">Observed</option>
+                <option value="prompted">Prompted</option>
+                <option value="missed">Missed</option>
+            </select>
+        </label>
+
+        <label>Reassessment
+            <select class="assess">
+                <option value="observed">Observed</option>
+                <option value="prompted">Prompted</option>
+                <option value="missed">Missed</option>
+            </select>
+        </label>
+      </div>
+
+      <div class="section">
+        <h2>Overall Determination</h2>
+        <label>Final Determination
+            <select id="determination" required>
+                <option value="ready">Ready for increased responsibility</option>
+                <option value="guided">Continue with guided exposure</option>
+                <option value="restricted">Restrict from high-acuity lead</option>
+                <option value="remedial">Remedial training required</option>
+            </select>
+        </label>
+      </div>
+
+      <button type="submit">Save Evaluation</button>
+    </form>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+    import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+
+    // ** Reuse the config already in this app **
+    // This matches how your other pages initialize
+    const firebaseConfig = {
+        apiKey: "AIzaSyD7pMc-AHXb1cApzSfImkWvIjM9iwCoym4",
+        authDomain: "supplies-ems.firebaseapp.com",
+        projectId: "supplies-ems",
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    const evalForm = document.getElementById('evalForm');
+
+    evalForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const reserveName = document.getElementById('reserveName').value.trim();
+        const evalDate = document.getElementById('evalDate').value;
+        const lowCount = Number(document.getElementById('lowCount').value);
+        const modCount = Number(document.getElementById('modCount').value);
+        const highCount = Number(document.getElementById('highCount').value);
+
+        // Build assessment array
+        const assessmentEls = document.querySelectorAll('.assess');
+        const assessment = Array.from(assessmentEls).map(sel => sel.value);
+
+        const determination = document.getElementById('determination').value;
+
+        try {
+            await addDoc(collection(db, "reserveEvals"), {
+                reserveName,
+                evalDate,
+                acuitySummary: { lowCount, modCount, highCount },
+                assessment,
+                determination,
+                timestamp: serverTimestamp()
+            });
+            alert("Evaluation saved");
+            evalForm.reset();
+        } catch (err) {
+            alert("Error saving evaluation: " + err.message);
+        }
+    });
+</script>
+
+</body>
+</html>
