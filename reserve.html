@@ -1,173 +1,112 @@
 <!doctype html>
 <html>
 <head>
-<meta charset="utf-8" />
+<meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Reserve Evaluation – GC EMS</title>
+<title>Reserve Shift Evaluation</title>
 
-<link rel="icon" type="image/x-icon" href="https://kwelch2.github.io/Inventory/favicon.ico">
+<link rel="icon" href="https://kwelch2.github.io/Inventory/favicon.ico">
 
 <style>
-    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;padding:16px;background:#f7f7f7}
-    .wrap{max-width:900px;margin:0 auto}
-    h1{margin-bottom:12px}
-    label{display:block;margin:6px 0}
-    select, input{padding:8px;border:1px solid #ccc;border-radius:6px;width:100%}
-    button{padding:10px 14px;border-radius:6px;border:none;background:#007bff;color:#fff;font-weight:600;cursor:pointer}
-    .section{background:#fff;padding:12px;border-radius:8px;margin-bottom:16px;border:1px solid #ddd}
+body{font-family:system-ui;background:#f7f7f7;margin:0;padding:16px}
+.wrap{max-width:900px;margin:auto}
+.card{background:#fff;border:1px solid #ddd;border-radius:12px;padding:16px;margin-bottom:16px}
+h1,h2{margin:0 0 8px}
+label{display:block;margin:6px 0}
+input,select,textarea{width:100%;padding:8px;border-radius:6px;border:1px solid #ccc}
+table{width:100%;border-collapse:collapse;margin-top:8px}
+th,td{border-bottom:1px solid #eee;padding:6px;text-align:left}
+.actions{display:flex;gap:10px}
+button{padding:10px 14px;border:none;border-radius:8px;font-weight:600;cursor:pointer}
+.save{background:#007bff;color:#fff}
+.print{background:#444;color:#fff}
+@media print{
+  .actions{display:none}
+  body{background:#fff}
+}
 </style>
-
 </head>
+
 <body>
-
 <div class="wrap">
-    <h1>Reserve Shift Evaluation</h1>
+<h1>Reserve Shift Evaluation</h1>
 
-    <div>
-        <a href="master.html">Back to Admin</a>
-    </div>
-
-    <form id="evalForm">
-
-      <div class="section">
-        <h2>Shift Info</h2>
-
-        <label>Reserve Name
-            <input type="text" id="reserveName" required>
-        </label>
-
-        <label>Date
-            <input type="date" id="evalDate" required>
-        </label>
-
-        <label>Low Acuity Calls
-            <input type="number" id="lowCount" value="0" min="0">
-        </label>
-
-        <label>Moderate Acuity Calls
-            <input type="number" id="modCount" value="0" min="0">
-        </label>
-
-        <label>High Acuity Calls
-            <input type="number" id="highCount" value="0" min="0">
-        </label>
-      </div>
-
-      <div class="section">
-        <h2>Assessment Process</h2>
-
-        <label>Scene size-up
-            <select class="assess">
-                <option value="observed">Observed</option>
-                <option value="prompted">Prompted</option>
-                <option value="missed">Missed</option>
-            </select>
-        </label>
-
-        <label>Primary impression
-            <select class="assess">
-                <option value="observed">Observed</option>
-                <option value="prompted">Prompted</option>
-                <option value="missed">Missed</option>
-            </select>
-        </label>
-
-        <label>Life threats considered
-            <select class="assess">
-                <option value="observed">Observed</option>
-                <option value="prompted">Prompted</option>
-                <option value="missed">Missed</option>
-            </select>
-        </label>
-
-        <label>Focused history obtained
-            <select class="assess">
-                <option value="observed">Observed</option>
-                <option value="prompted">Prompted</option>
-                <option value="missed">Missed</option>
-            </select>
-        </label>
-
-        <label>Pertinent positives/negatives
-            <select class="assess">
-                <option value="observed">Observed</option>
-                <option value="prompted">Prompted</option>
-                <option value="missed">Missed</option>
-            </select>
-        </label>
-
-        <label>Reassessment
-            <select class="assess">
-                <option value="observed">Observed</option>
-                <option value="prompted">Prompted</option>
-                <option value="missed">Missed</option>
-            </select>
-        </label>
-      </div>
-
-      <div class="section">
-        <h2>Overall Determination</h2>
-        <label>Final Determination
-            <select id="determination" required>
-                <option value="ready">Ready for increased responsibility</option>
-                <option value="guided">Continue with guided exposure</option>
-                <option value="restricted">Restrict from high-acuity lead</option>
-                <option value="remedial">Remedial training required</option>
-            </select>
-        </label>
-      </div>
-
-      <button type="submit">Save Evaluation</button>
-    </form>
+<div class="card">
+<label>Reserve Name <input id="reserveName"></label>
+<label>Date <input type="date" id="evalDate"></label>
+<label>Crew <input id="crew"></label>
 </div>
 
-<script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-    import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+<div class="card">
+<h2>Patient Assessment</h2>
+<table>
+<tr><th>Assessment Element</th><th>Observed</th><th>Prompted</th><th>Missed</th></tr>
+<script>
+const assessItems = [
+"Scene size-up & safety",
+"Chief complaint identified",
+"HPI obtained",
+"Pertinent positives identified",
+"Pertinent negatives verbalized",
+"Reassessment performed"
+];
+document.write(assessItems.map(i=>`
+<tr>
+<td>${i}</td>
+<td><input type="radio" name="${i}" value="observed"></td>
+<td><input type="radio" name="${i}" value="prompted"></td>
+<td><input type="radio" name="${i}" value="missed"></td>
+</tr>`).join(''));
+</script>
+</table>
+</div>
 
-    // ** Reuse the config already in this app **
-    // This matches how your other pages initialize
-    const firebaseConfig = {
-        apiKey: "AIzaSyD7pMc-AHXb1cApzSfImkWvIjM9iwCoym4",
-        authDomain: "supplies-ems.firebaseapp.com",
-        projectId: "supplies-ems",
-    };
+<div class="card">
+<h2>Skills Performed</h2>
+<label><input type="checkbox"> Vitals / BG</label>
+<label><input type="checkbox"> Oxygen</label>
+<label><input type="checkbox"> Medications</label>
+<label><input type="checkbox"> Splinting / Bandaging</label>
+<label><input type="checkbox"> Cot / Patient movement</label>
+<label><input type="checkbox"> Documentation</label>
+<label><input type="checkbox"> Radio / Handoff</label>
+</div>
 
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
+<div class="card">
+<h2>Skills to Work On</h2>
+<label><input type="checkbox"> Assessment flow</label>
+<label><input type="checkbox"> Decision making</label>
+<label><input type="checkbox"> Scene organization</label>
+<label><input type="checkbox"> Treatment prioritization</label>
+<label><input type="checkbox"> Documentation</label>
+<label><input type="checkbox"> Communication</label>
+</div>
 
-    const evalForm = document.getElementById('evalForm');
+<div class="card">
+<h2>Notes</h2>
+<label>Strengths <textarea rows="3"></textarea></label>
+<label>Focus for Next Shift <textarea rows="3"></textarea></label>
+</div>
 
-    evalForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
+<div class="card">
+<h2>Overall Readiness</h2>
+<label><input type="radio" name="ready"> Not Ready</label>
+<label><input type="radio" name="ready"> Developing</label>
+<label><input type="radio" name="ready"> Competent</label>
+<label><input type="radio" name="ready"> Advanced for Level</label>
+</div>
 
-        const reserveName = document.getElementById('reserveName').value.trim();
-        const evalDate = document.getElementById('evalDate').value;
-        const lowCount = Number(document.getElementById('lowCount').value);
-        const modCount = Number(document.getElementById('modCount').value);
-        const highCount = Number(document.getElementById('highCount').value);
+<div class="actions">
+<button class="save" onclick="saveEval()">Save</button>
+<button class="print" onclick="window.print()">Print</button>
+</div>
 
-        // Build assessment array
-        const assessmentEls = document.querySelectorAll('.assess');
-        const assessment = Array.from(assessmentEls).map(sel => sel.value);
+</div>
 
-        const determination = document.getElementById('determination').value;
-
-        try {
-            await addDoc(collection(db, "reserveEvals"), {
-                reserveName,
-                evalDate,
-                acuitySummary: { lowCount, modCount, highCount },
-                assessment,
-                determination,
-                timestamp: serverTimestamp()
-            });
-            alert("Evaluation saved");
-            evalForm.reset();
-        } catch (err) {
-            alert("Error saving evaluation: " + err.message);
-        }
-    });
+<script>
+function saveEval(){
+  alert("Save logic hooks to Firestore here when ready.");
+}
 </script>
 
 </body>
