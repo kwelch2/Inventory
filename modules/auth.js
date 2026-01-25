@@ -11,6 +11,10 @@ export const auth = getAuth(app);
 const INACTIVITY_LIMIT = 24 * 60 * 60 * 1000; // 24 hours
 let inactivityTimeout;
 
+/**
+ * Resets the inactivity timeout timer.
+ * Called on user activity to prevent automatic logout.
+ */
 export function resetInactivityTimer() {
     clearTimeout(inactivityTimeout);
     if (state.user) {
@@ -21,8 +25,13 @@ export function resetInactivityTimer() {
         }, INACTIVITY_LIMIT);
     }
 }
-['mousemove', 'keydown', 'click', 'touchstart'].forEach(evt => window.addEventListener('evt', resetInactivityTimer));
+// Listen for user activity to reset inactivity timer
+['mousemove', 'keydown', 'click', 'touchstart'].forEach(evt => window.addEventListener(evt, resetInactivityTimer));
 
+/**
+ * Initiates Google OAuth login flow.
+ * Restricts login to gemfireems.org domain.
+ */
 export function login() {
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({
@@ -32,10 +41,26 @@ export function login() {
     signInWithPopup(auth, provider).catch((error) => console.error("Popup Sign-in Error:", error));
 }
 
+/**
+ * Signs out the current user and cleans up active listeners.
+ */
 export function logout() {
+    // Cleanup any active Firestore listeners before logout
+    if (state.unsubscribers && state.unsubscribers.length > 0) {
+        state.unsubscribers.forEach(unsubscribe => {
+            if (typeof unsubscribe === 'function') {
+                unsubscribe();
+            }
+        });
+        state.unsubscribers = [];
+    }
     return signOut(auth);
 }
 
+/**
+ * Applies UI permissions based on user role.
+ * @param {string} role - User role ('Admin' or 'Staff')
+ */
 export function applyPermissions(role) {
     const isAdmin = (role === 'Admin');
     document.querySelectorAll('.btn.danger').forEach(btn => {
@@ -43,6 +68,10 @@ export function applyPermissions(role) {
     });
 }
 
+/**
+ * Sets up authentication state listener.
+ * @param {Function} callback - Called with true/false when auth state changes
+ */
 export function onUserHandler(callback) {
     onAuthStateChanged(auth, async (user) => {
         if (user) {

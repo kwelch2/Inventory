@@ -9,6 +9,10 @@ import { renderCatalog, populateCategoryFilter } from "./ui/catalog.js";
 import { renderOrders } from "./ui/orders.js";
 import { renderUnits, renderCompartments, renderCategories, renderVendors } from "./ui/management.js";
 
+/**
+ * Initializes static/reference data from Firestore.
+ * This data is loaded once on login and refreshed manually.
+ */
 export async function initializeStaticData() {
     try {
         const [catSnap, venSnap, unitSnap, compSnap, catMgmtSnap] = await Promise.all([
@@ -42,38 +46,69 @@ export async function initializeStaticData() {
     }
 }
 
+/**
+ * Sets up real-time listeners for dynamic data (requests and pricing).
+ * Stores unsubscribe functions in state for proper cleanup on logout.
+ */
 export function setupRealtimeListeners() {
-    onSnapshot(collection(db, "requests"), (reqSnap) => {
-        state.requests = reqSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-        renderOrders();
-    });
-
-    onSnapshot(collection(db, "vendorPricing"), (priceSnap) => {
-        state.pricingAll = priceSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-        state.pricingMap.clear();
-        state.pricingAll.forEach(p => {
-            if (!state.pricingMap.has(p.catalogId)) state.pricingMap.set(p.catalogId, []);
-            state.pricingMap.get(p.catalogId).push(p);
+    // Clear any existing listeners first
+    if (state.unsubscribers && state.unsubscribers.length > 0) {
+        state.unsubscribers.forEach(unsubscribe => {
+            if (typeof unsubscribe === 'function') {
+                unsubscribe();
+            }
         });
-        renderOrders(); 
-        renderCatalog();
-    });
+        state.unsubscribers = [];
+    }
+
+    // Setup requests listener
+    const unsubscribeRequests = onSnapshot(
+        collection(db, "requests"), 
+        (reqSnap) => {
+            state.requests = reqSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+            renderOrders();
+        },
+        (error) => {
+            console.error("Requests listener error:", error);
+        }
+    );
+
+    // Setup vendor pricing listener
+    const unsubscribePricing = onSnapshot(
+        collection(db, "vendorPricing"), 
+        (priceSnap) => {
+            state.pricingAll = priceSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+            state.pricingMap.clear();
+            state.pricingAll.forEach(p => {
+                if (!state.pricingMap.has(p.catalogId)) state.pricingMap.set(p.catalogId, []);
+                state.pricingMap.get(p.catalogId).push(p);
+            });
+            renderOrders(); 
+            renderCatalog();
+        },
+        (error) => {
+            console.error("Vendor pricing listener error:", error);
+        }
+    );
+
+    // Store unsubscribe functions for cleanup
+    state.unsubscribers = [unsubscribeRequests, unsubscribePricing];
 }
 
+/**
+ * Finds the best vendor for a catalog item based on pricing and availability.
+ * @param {string} catalogId - The catalog item ID
+ * @param {string} preferredVendorId - Optional preferred vendor ID
+ * @param {string} overrideVendorId - Optional manual override vendor ID
+ * @returns {Object} Vendor information with pricing
+ */
 export function findBestVendor(catalogId, preferredVendorId, overrideVendorId) {
-    // Helper to calculate price with fee
-    const getEffectivePrice = (p) => {
-        const vendor = state.vendorMap.get(p.vendorId); // Currently storing name strings in map? 
-        // We need the full vendor object to get the fee. 
-        // Let's find it from state.vendors array for safety:
-        const vendorObj = state.vendors.find(v => v.id === p.vendorId);
-        const feePercent = vendorObj?.serviceFee || 0;
-        return (p.unitPrice || 0) * (1 + (feePercent / 100));
-    };
+    // Create a vendor lookup map for efficient access
+    const vendorLookup = new Map(state.vendors.map(v => [v.id, v]));
 
     const prices = (state.pricingMap.get(catalogId) || [])
         .map(p => {
-            const vendorObj = state.vendors.find(v => v.id === p.vendorId);
+            const vendorObj = vendorLookup.get(p.vendorId);
             const fee = vendorObj?.serviceFee || 0;
             return {
                 ...p, 
@@ -157,6 +192,11 @@ export function findBestVendor(catalogId, preferredVendorId, overrideVendorId) {
     return { vendorId: 'unassigned', vendorName: 'Unassigned / No Pricing', vendorItemNo: 'N/A', unitPrice: 0, status: 'No Pricing' };
 }
 
+/**
+ * Updates the status of a supply request.
+ * @param {string} requestId - The request document ID
+ * @param {string} newStatus - The new status value
+ */
 export async function updateRequestStatus(requestId, newStatus) {
     if (!requestId || !newStatus) return;
     
