@@ -5,6 +5,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 import { db } from "./firebase.js";
 import { state } from "./state.js";
+import { CONFIG } from "./config.js";
 import { renderCatalog, populateCategoryFilter } from "./ui/catalog.js";
 import { renderOrders } from "./ui/orders.js";
 import { renderUnits, renderCompartments, renderCategories, renderVendors } from "./ui/management.js";
@@ -16,11 +17,11 @@ import { renderUnits, renderCompartments, renderCategories, renderVendors } from
 export async function initializeStaticData() {
     try {
         const [catSnap, venSnap, unitSnap, compSnap, catMgmtSnap] = await Promise.all([
-            getDocs(collection(db, "catalog")),
-            getDocs(collection(db, "vendors")),
-            getDocs(collection(db, "units")),
-            getDocs(collection(db, "compartments")),
-            getDocs(collection(db, "categories"))
+            getDocs(collection(db, CONFIG.COLLECTIONS.CATALOG)),
+            getDocs(collection(db, CONFIG.COLLECTIONS.VENDORS)),
+            getDocs(collection(db, CONFIG.COLLECTIONS.UNITS)),
+            getDocs(collection(db, CONFIG.COLLECTIONS.COMPARTMENTS)),
+            getDocs(collection(db, CONFIG.COLLECTIONS.CATEGORIES))
         ]);
         
         state.catalog = catSnap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -63,7 +64,7 @@ export function setupRealtimeListeners() {
 
     // Setup requests listener
     const unsubscribeRequests = onSnapshot(
-        collection(db, "requests"), 
+        collection(db, CONFIG.COLLECTIONS.REQUESTS), 
         (reqSnap) => {
             state.requests = reqSnap.docs.map(d => ({ id: d.id, ...d.data() }));
             renderOrders();
@@ -75,7 +76,7 @@ export function setupRealtimeListeners() {
 
     // Setup vendor pricing listener
     const unsubscribePricing = onSnapshot(
-        collection(db, "vendorPricing"), 
+        collection(db, CONFIG.COLLECTIONS.PRICING), 
         (priceSnap) => {
             state.pricingAll = priceSnap.docs.map(d => ({ id: d.id, ...d.data() }));
             state.pricingMap.clear();
@@ -113,11 +114,11 @@ export function findBestVendor(catalogId, preferredVendorId, overrideVendorId) {
             return {
                 ...p, 
                 vendorName: vendorObj?.name || 'Unknown Vendor',
-                effectivePrice: (p.unitPrice || 0) * (1 + (fee / 100)), // Calculate once
+                effectivePrice: (p.unitPrice || 0) * (1 + (fee / 100)),
                 hasFee: fee > 0
             };
         })
-        .sort((a,b) => a.effectivePrice - b.effectivePrice); // Sort by EFFECTIVE price
+        .sort((a,b) => a.effectivePrice - b.effectivePrice);
 
     // 1. Check for manual override
     if (overrideVendorId) {
@@ -127,7 +128,7 @@ export function findBestVendor(catalogId, preferredVendorId, overrideVendorId) {
                 vendorId: overridePrice.vendorId,
                 vendorName: overridePrice.vendorName,
                 vendorItemNo: overridePrice.vendorItemNo || 'N/A',
-                unitPrice: overridePrice.effectivePrice, // Return effective price
+                unitPrice: overridePrice.effectivePrice,
                 status: 'Manual Override'
             };
         }
@@ -143,25 +144,24 @@ export function findBestVendor(catalogId, preferredVendorId, overrideVendorId) {
     const preferredPrice = preferredVendorId ? prices.find(p => p.vendorId === preferredVendorId) : null;
     
     // 2. Try Preferred Vendor if in stock
-    if (preferredPrice && (preferredPrice.vendorStatus === 'In Stock' || !preferredPrice.vendorStatus)) {
+    if (preferredPrice && (preferredPrice.vendorStatus === CONFIG.VENDOR_STATUS.IN_STOCK || !preferredPrice.vendorStatus)) {
         return {
             vendorId: preferredPrice.vendorId,
             vendorName: preferredPrice.vendorName,
             vendorItemNo: preferredPrice.vendorItemNo || 'N/A',
-            unitPrice: preferredPrice.effectivePrice, // Use Effective
+            unitPrice: preferredPrice.effectivePrice,
             status: 'Preferred'
         };
     }
     
     // 3. Find cheapest vendor that is "In Stock"
-    // (Prices are already sorted by effective price)
-    const cheapestInStock = prices.find(p => p.vendorStatus === 'In Stock' || !p.vendorStatus);
+    const cheapestInStock = prices.find(p => p.vendorStatus === CONFIG.VENDOR_STATUS.IN_STOCK || !p.vendorStatus);
     if (cheapestInStock) {
         return {
             vendorId: cheapestInStock.vendorId,
             vendorName: cheapestInStock.vendorName,
             vendorItemNo: cheapestInStock.vendorItemNo || 'N/A',
-            unitPrice: cheapestInStock.effectivePrice, // Use Effective
+            unitPrice: cheapestInStock.effectivePrice,
             status: 'Cheapest'
         };
     }
@@ -172,7 +172,7 @@ export function findBestVendor(catalogId, preferredVendorId, overrideVendorId) {
             vendorId: preferredPrice.vendorId,
             vendorName: preferredPrice.vendorName,
             vendorItemNo: preferredPrice.vendorItemNo || 'N/A',
-            unitPrice: preferredPrice.effectivePrice, // Use Effective
+            unitPrice: preferredPrice.effectivePrice,
             status: `Preferred (${preferredPrice.vendorStatus || 'N/A'})`
         };
     }
@@ -184,7 +184,7 @@ export function findBestVendor(catalogId, preferredVendorId, overrideVendorId) {
             vendorId: cheapestOverall.vendorId,
             vendorName: cheapestOverall.vendorName,
             vendorItemNo: cheapestOverall.vendorItemNo || 'N/A',
-            unitPrice: cheapestOverall.effectivePrice, // Use Effective
+            unitPrice: cheapestOverall.effectivePrice,
             status: `Cheapest (${cheapestOverall.vendorStatus || 'N/A'})`
         };
     }
@@ -202,19 +202,19 @@ export async function updateRequestStatus(requestId, newStatus) {
     
     const updatePayload = { status: newStatus, updatedAt: serverTimestamp() };
     
-    if (newStatus === 'Received' || newStatus === 'Completed') {
+    if (newStatus === CONFIG.REQUEST_STATUS.RECEIVED || newStatus === CONFIG.REQUEST_STATUS.COMPLETED) {
         updatePayload.receivedAt = serverTimestamp();
-        updatePayload.overrideVendorId = deleteField(); // Clear override when received
+        updatePayload.overrideVendorId = deleteField();
     } 
-    else if (newStatus === 'Open') {
-         updatePayload.overrideVendorId = deleteField(); // Clear override if sent back to Open
+    else if (newStatus === CONFIG.REQUEST_STATUS.OPEN) {
+         updatePayload.overrideVendorId = deleteField();
     }
-    else if (newStatus === 'Ordered') {
+    else if (newStatus === CONFIG.REQUEST_STATUS.ORDERED) {
         updatePayload.lastOrdered = serverTimestamp();
     }
     
     try {
-        await updateDoc(doc(db, 'requests', requestId), updatePayload);
+        await updateDoc(doc(db, CONFIG.COLLECTIONS.REQUESTS, requestId), updatePayload);
     } catch(e) {
         console.error("Status update failed:", e);
         alert("Could not update status.");
