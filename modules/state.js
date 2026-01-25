@@ -14,5 +14,7 @@ export const state = {
     vendorMap: new Map(), 
     categoryMap: new Map(), 
     pricingMap: new Map(),
-    orderViewMode: 'vendor' // 'vendor' or 'item'
+    orderViewMode: 'vendor', // 'vendor' or 'item'
+    // Firestore listener unsubscribe functions for cleanup
+    unsubscribers: []
 };

@@ -5,18 +5,23 @@ import {
 } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 import { db } from "./firebase.js";
 import { state } from "./state.js";
+import { CONFIG } from "./config.js";
 import { renderCatalog, populateCategoryFilter } from "./ui/catalog.js";
 import { renderOrders } from "./ui/orders.js";
 import { renderUnits, renderCompartments, renderCategories, renderVendors } from "./ui/management.js";
 
+/**
+ * Initializes static/reference data from Firestore.
+ * This data is loaded once on login and refreshed manually.
+ */
 export async function initializeStaticData() {
     try {
         const [catSnap, venSnap, unitSnap, compSnap, catMgmtSnap] = await Promise.all([
-            getDocs(collection(db, "catalog")),
-            getDocs(collection(db, "vendors")),
-            getDocs(collection(db, "units")),
-            getDocs(collection(db, "compartments")),
-            getDocs(collection(db, "categories"))
+            getDocs(collection(db, CONFIG.COLLECTIONS.CATALOG)),
+            getDocs(collection(db, CONFIG.COLLECTIONS.VENDORS)),
+            getDocs(collection(db, CONFIG.COLLECTIONS.UNITS)),
+            getDocs(collection(db, CONFIG.COLLECTIONS.COMPARTMENTS)),
+            getDocs(collection(db, CONFIG.COLLECTIONS.CATEGORIES))
         ]);
         
         state.catalog = catSnap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -42,47 +47,78 @@ export async function initializeStaticData() {
     }
 }
 
+/**
+ * Sets up real-time listeners for dynamic data (requests and pricing).
+ * Stores unsubscribe functions in state for proper cleanup on logout.
+ */
 export function setupRealtimeListeners() {
-    onSnapshot(collection(db, "requests"), (reqSnap) => {
-        state.requests = reqSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-        renderOrders();
-    });
-
-    onSnapshot(collection(db, "vendorPricing"), (priceSnap) => {
-        state.pricingAll = priceSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-        state.pricingMap.clear();
-        state.pricingAll.forEach(p => {
-            if (!state.pricingMap.has(p.catalogId)) state.pricingMap.set(p.catalogId, []);
-            state.pricingMap.get(p.catalogId).push(p);
+    // Clear any existing listeners first
+    if (state.unsubscribers && state.unsubscribers.length > 0) {
+        state.unsubscribers.forEach(unsubscribe => {
+            if (typeof unsubscribe === 'function') {
+                unsubscribe();
+            }
         });
-        renderOrders(); 
-        renderCatalog();
-    });
+        state.unsubscribers = [];
+    }
+
+    // Setup requests listener
+    const unsubscribeRequests = onSnapshot(
+        collection(db, CONFIG.COLLECTIONS.REQUESTS), 
+        (reqSnap) => {
+            state.requests = reqSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+            renderOrders();
+        },
+        (error) => {
+            console.error("Requests listener error:", error);
+        }
+    );
+
+    // Setup vendor pricing listener
+    const unsubscribePricing = onSnapshot(
+        collection(db, CONFIG.COLLECTIONS.PRICING), 
+        (priceSnap) => {
+            state.pricingAll = priceSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+            state.pricingMap.clear();
+            state.pricingAll.forEach(p => {
+                if (!state.pricingMap.has(p.catalogId)) state.pricingMap.set(p.catalogId, []);
+                state.pricingMap.get(p.catalogId).push(p);
+            });
+            renderOrders(); 
+            renderCatalog();
+        },
+        (error) => {
+            console.error("Vendor pricing listener error:", error);
+        }
+    );
+
+    // Store unsubscribe functions for cleanup
+    state.unsubscribers = [unsubscribeRequests, unsubscribePricing];
 }
 
+/**
+ * Finds the best vendor for a catalog item based on pricing and availability.
+ * @param {string} catalogId - The catalog item ID
+ * @param {string} preferredVendorId - Optional preferred vendor ID
+ * @param {string} overrideVendorId - Optional manual override vendor ID
+ * @returns {Object} Vendor information with pricing
+ */
 export function findBestVendor(catalogId, preferredVendorId, overrideVendorId) {
-    // Helper to calculate price with fee
-    const getEffectivePrice = (p) => {
-        const vendor = state.vendorMap.get(p.vendorId); // Currently storing name strings in map? 
-        // We need the full vendor object to get the fee. 
-        // Let's find it from state.vendors array for safety:
-        const vendorObj = state.vendors.find(v => v.id === p.vendorId);
-        const feePercent = vendorObj?.serviceFee || 0;
-        return (p.unitPrice || 0) * (1 + (feePercent / 100));
-    };
+    // Create a vendor lookup map for efficient access
+    const vendorLookup = new Map(state.vendors.map(v => [v.id, v]));
 
     const prices = (state.pricingMap.get(catalogId) || [])
         .map(p => {
-            const vendorObj = state.vendors.find(v => v.id === p.vendorId);
+            const vendorObj = vendorLookup.get(p.vendorId);
             const fee = vendorObj?.serviceFee || 0;
             return {
                 ...p, 
                 vendorName: vendorObj?.name || 'Unknown Vendor',
-                effectivePrice: (p.unitPrice || 0) * (1 + (fee / 100)), // Calculate once
+                effectivePrice: (p.unitPrice || 0) * (1 + (fee / 100)),
                 hasFee: fee > 0
             };
         })
-        .sort((a,b) => a.effectivePrice - b.effectivePrice); // Sort by EFFECTIVE price
+        .sort((a,b) => a.effectivePrice - b.effectivePrice);
 
     // 1. Check for manual override
     if (overrideVendorId) {
@@ -92,7 +128,7 @@ export function findBestVendor(catalogId, preferredVendorId, overrideVendorId) {
                 vendorId: overridePrice.vendorId,
                 vendorName: overridePrice.vendorName,
                 vendorItemNo: overridePrice.vendorItemNo || 'N/A',
-                unitPrice: overridePrice.effectivePrice, // Return effective price
+                unitPrice: overridePrice.effectivePrice,
                 status: 'Manual Override'
             };
         }
@@ -108,25 +144,24 @@ export function findBestVendor(catalogId, preferredVendorId, overrideVendorId) {
     const preferredPrice = preferredVendorId ? prices.find(p => p.vendorId === preferredVendorId) : null;
     
     // 2. Try Preferred Vendor if in stock
-    if (preferredPrice && (preferredPrice.vendorStatus === 'In Stock' || !preferredPrice.vendorStatus)) {
+    if (preferredPrice && (preferredPrice.vendorStatus === CONFIG.VENDOR_STATUS.IN_STOCK || !preferredPrice.vendorStatus)) {
         return {
             vendorId: preferredPrice.vendorId,
             vendorName: preferredPrice.vendorName,
             vendorItemNo: preferredPrice.vendorItemNo || 'N/A',
-            unitPrice: preferredPrice.effectivePrice, // Use Effective
+            unitPrice: preferredPrice.effectivePrice,
             status: 'Preferred'
         };
     }
     
     // 3. Find cheapest vendor that is "In Stock"
-    // (Prices are already sorted by effective price)
-    const cheapestInStock = prices.find(p => p.vendorStatus === 'In Stock' || !p.vendorStatus);
+    const cheapestInStock = prices.find(p => p.vendorStatus === CONFIG.VENDOR_STATUS.IN_STOCK || !p.vendorStatus);
     if (cheapestInStock) {
         return {
             vendorId: cheapestInStock.vendorId,
             vendorName: cheapestInStock.vendorName,
             vendorItemNo: cheapestInStock.vendorItemNo || 'N/A',
-            unitPrice: cheapestInStock.effectivePrice, // Use Effective
+            unitPrice: cheapestInStock.effectivePrice,
             status: 'Cheapest'
         };
     }
@@ -137,7 +172,7 @@ export function findBestVendor(catalogId, preferredVendorId, overrideVendorId) {
             vendorId: preferredPrice.vendorId,
             vendorName: preferredPrice.vendorName,
             vendorItemNo: preferredPrice.vendorItemNo || 'N/A',
-            unitPrice: preferredPrice.effectivePrice, // Use Effective
+            unitPrice: preferredPrice.effectivePrice,
             status: `Preferred (${preferredPrice.vendorStatus || 'N/A'})`
         };
     }
@@ -149,7 +184,7 @@ export function findBestVendor(catalogId, preferredVendorId, overrideVendorId) {
             vendorId: cheapestOverall.vendorId,
             vendorName: cheapestOverall.vendorName,
             vendorItemNo: cheapestOverall.vendorItemNo || 'N/A',
-            unitPrice: cheapestOverall.effectivePrice, // Use Effective
+            unitPrice: cheapestOverall.effectivePrice,
             status: `Cheapest (${cheapestOverall.vendorStatus || 'N/A'})`
         };
     }
@@ -157,24 +192,29 @@ export function findBestVendor(catalogId, preferredVendorId, overrideVendorId) {
     return { vendorId: 'unassigned', vendorName: 'Unassigned / No Pricing', vendorItemNo: 'N/A', unitPrice: 0, status: 'No Pricing' };
 }
 
+/**
+ * Updates the status of a supply request.
+ * @param {string} requestId - The request document ID
+ * @param {string} newStatus - The new status value
+ */
 export async function updateRequestStatus(requestId, newStatus) {
     if (!requestId || !newStatus) return;
     
     const updatePayload = { status: newStatus, updatedAt: serverTimestamp() };
     
-    if (newStatus === 'Received' || newStatus === 'Completed') {
+    if (newStatus === CONFIG.REQUEST_STATUS.RECEIVED || newStatus === CONFIG.REQUEST_STATUS.COMPLETED) {
         updatePayload.receivedAt = serverTimestamp();
-        updatePayload.overrideVendorId = deleteField(); // Clear override when received
+        updatePayload.overrideVendorId = deleteField();
     } 
-    else if (newStatus === 'Open') {
-         updatePayload.overrideVendorId = deleteField(); // Clear override if sent back to Open
+    else if (newStatus === CONFIG.REQUEST_STATUS.OPEN) {
+         updatePayload.overrideVendorId = deleteField();
     }
-    else if (newStatus === 'Ordered') {
+    else if (newStatus === CONFIG.REQUEST_STATUS.ORDERED) {
         updatePayload.lastOrdered = serverTimestamp();
     }
     
     try {
-        await updateDoc(doc(db, 'requests', requestId), updatePayload);
+        await updateDoc(doc(db, CONFIG.COLLECTIONS.REQUESTS, requestId), updatePayload);
     } catch(e) {
         console.error("Status update failed:", e);
         alert("Could not update status.");
