@@ -1,19 +1,67 @@
-// Lightweight DOM selector helper
+/**
+ * Lightweight DOM selector helper
+ * @param {string} selector - CSS selector
+ * @returns {Element|null}
+ */
 export function $(selector) {
     return document.querySelector(selector);
 }
 
-// Selector for multiple elements (optional but useful)
+/**
+ * Selector for multiple elements
+ * @param {string} selector - CSS selector
+ * @returns {NodeList}
+ */
 export function $all(selector) {
     return document.querySelectorAll(selector);
 }
 
-// Escape HTML to prevent accidental injection in UI text
+/**
+ * Escape HTML to prevent XSS injection in UI text
+ * @param {string} str - String to escape
+ * @returns {string}
+ */
 export function escapeHtml(str = "") {
     return String(str).replace(/[&<>"']/g, m => (
         { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]
     ));
 }
+
+/**
+ * Validates and sanitizes user input for safe use
+ * @param {string} input - User input to validate
+ * @param {Object} options - Validation options
+ * @returns {string} Sanitized input
+ */
+export function sanitizeInput(input, options = {}) {
+    const { 
+        maxLength = 500, 
+        allowNewlines = false,
+        trim = true 
+    } = options;
+    
+    let sanitized = String(input || '');
+    
+    if (trim) {
+        sanitized = sanitized.trim();
+    }
+    
+    if (!allowNewlines) {
+        sanitized = sanitized.replace(/[\r\n]/g, ' ');
+    }
+    
+    if (maxLength > 0) {
+        sanitized = sanitized.substring(0, maxLength);
+    }
+    
+    return sanitized;
+}
+
+/**
+ * Sanitizes a CSV field value
+ * @param {*} value - Value to sanitize for CSV
+ * @returns {string}
+ */
 function sanitizeCsvValue(value) {
     const stringValue = String(value == null ? '' : value);
     // If the value contains a comma, newline, or quote, wrap it in double quotes.
@@ -28,6 +76,7 @@ function sanitizeCsvValue(value) {
  * Converts an array of objects into a CSV string.
  * @param {Array<Object>} data - The array of data to convert.
  * @param {Array<string>} columns - The specific columns to include, in order.
+ * @returns {string}
  */
 export function exportToCsv(data, columns) {
     const headers = columns.join(',');
@@ -54,5 +103,24 @@ export function downloadCsv(csvString, filename) {
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+        URL.revokeObjectURL(url); // Clean up object URL
     }
+}
+
+/**
+ * Debounces a function call
+ * @param {Function} func - Function to debounce
+ * @param {number} wait - Wait time in milliseconds
+ * @returns {Function}
+ */
+export function debounce(func, wait = 300) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
 }

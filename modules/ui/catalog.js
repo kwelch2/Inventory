@@ -1,22 +1,25 @@
 // modules/ui/catalog.js
 import { state } from "../state.js";
-import { $, escapeHtml, exportToCsv, downloadCsv } from "../helpers/utils.js";
+import { $, escapeHtml, exportToCsv, downloadCsv, debounce } from "../helpers/utils.js";
 import { openCatalogModal, openPricingModal, openExportModal } from "./modals.js";
 
+/**
+ * Renders the catalog table with filtering and sorting
+ */
 export function renderCatalog() {
     const container = $("#catalogTableContainer");
     if (!container) return; 
     
     const query = $('#catSearch').value.toLowerCase();
-    const categoryFilter = $('#catFilterCategory') ? $('#catFilterCategory').value : 'all'; // Get filter value
+    const categoryFilter = $('#catFilterCategory') ? $('#catFilterCategory').value : 'all';
     
     const filtered = state.catalog.filter(i => {
         const searchMatch = (i.itemName || '').toLowerCase().includes(query) || 
             (Array.isArray(i.itemNameAlt) ? i.itemNameAlt.join(' ') : (i.itemNameAlt || '')).toLowerCase().includes(query);
         
-        const categoryMatch = (categoryFilter === 'all' || i.category === categoryFilter); // Check category
+        const categoryMatch = (categoryFilter === 'all' || i.category === categoryFilter);
         
-        return searchMatch && categoryMatch; // Must match both
+        return searchMatch && categoryMatch;
     });
 
     filtered.sort((a, b) => {
@@ -94,9 +97,12 @@ const pricesHtml = allPrices.length > 0 ? allPrices.map(p => {
         </table>`;
 }
 
+/**
+ * Populates the category filter dropdown
+ */
 export function populateCategoryFilter() {
     const catSelect = $("#catFilterCategory");
-    if (!catSelect) return; // Guard clause
+    if (!catSelect) return;
     
     // Preserve selected value if it exists
     const currentVal = catSelect.value;
@@ -111,7 +117,9 @@ export function populateCategoryFilter() {
     catSelect.value = currentVal || 'all';
 }
 
-// Setup event listeners for the catalog panel
+/**
+ * Sets up event listeners for the catalog panel
+ */
 export function setupCatalogPanel() {
     $('#catalogTableContainer').addEventListener('click', e => {
         const target = e.target;
@@ -132,7 +140,9 @@ export function setupCatalogPanel() {
         }
     });
 
-    $('#catSearch').addEventListener('input', renderCatalog);
+    // Debounce search input for better performance
+    const debouncedRender = debounce(renderCatalog, 300);
+    $('#catSearch').addEventListener('input', debouncedRender);
     
     const catFilter = $('#catFilterCategory');
     if (catFilter) {
@@ -141,7 +151,7 @@ export function setupCatalogPanel() {
     
     $('#showCatalogModal').addEventListener('click', () => openCatalogModal());
 
-    // --- NEW: Wire up the Export Button to open the modal ---
+    // Wire up the Export Button to open the modal
     $('#exportLabelsCsvBtn').addEventListener('click', () => {
         openExportModal();
     });
