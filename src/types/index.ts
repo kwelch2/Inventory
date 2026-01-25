@@ -47,8 +47,8 @@ export interface OrderRequest {
   status: 'Open' | 'Ordered' | 'Backordered' | 'Received' | 'Cancelled';
   vendorId?: string;
   vendorOverride?: string;
-  createdAt?: any;
-  updatedAt?: any;
+  createdAt?: Date | { seconds: number; nanoseconds: number };
+  updatedAt?: Date | { seconds: number; nanoseconds: number };
 }
 
 export interface Category {

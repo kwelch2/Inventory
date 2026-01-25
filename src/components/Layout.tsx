@@ -20,6 +20,7 @@ export const Layout = ({ children, showNav = true }: LayoutProps) => {
       navigate('/');
     } catch (error) {
       console.error('Error signing out:', error);
+      alert('Failed to sign out. Please try again.');
     }
   };
 

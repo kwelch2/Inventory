@@ -16,9 +16,10 @@ export const LoginPage = () => {
   const handleLogin = async () => {
     try {
       await signInWithGoogle();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Login failed:', error);
-      alert('Login failed. Please try again.');
+      const errorMessage = error?.message || 'An unknown error occurred';
+      alert(`Login failed: ${errorMessage}. Please try again.`);
     }
   };
 

@@ -12,6 +12,7 @@
   --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.15);
   --header-height: 70px;
   --transition: all 0.3s ease;
+  --menu-icon-offset: 8px;
 }
 
 .layout {
@@ -124,7 +125,7 @@
 }
 
 .menu-toggle.active span:nth-child(1) {
-  transform: translateY(8px) rotate(45deg);
+  transform: translateY(var(--menu-icon-offset)) rotate(45deg);
 }
 
 .menu-toggle.active span:nth-child(2) {
@@ -132,7 +133,7 @@
 }
 
 .menu-toggle.active span:nth-child(3) {
-  transform: translateY(-8px) rotate(-45deg);
+  transform: translateY(calc(-1 * var(--menu-icon-offset))) rotate(-45deg);
 }
 
 /* Main Content */
