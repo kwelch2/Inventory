@@ -1,101 +1,17 @@
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>EMS Supplies – Dashboard</title>
-  <style>
-    body {
-      font-family: system-ui, sans-serif;
-      margin: 0;
-      background: #f7f7f7;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      min-height: 100vh;
-      text-align: center;
-    }
-
-    .logo {
-      max-width: 220px;
-      margin-bottom: 2rem;
-      cursor: pointer;
-    }
-
-    .btn {
-      display: inline-block;
-      margin: 0.5rem;
-      padding: 1rem 2rem;
-      font-size: 1.2rem;
-      color: #fff;
-      background: #0077cc;
-      border: none;
-      border-radius: 8px;
-      text-decoration: none;
-      transition: background 0.2s ease;
-    }
-    .btn:hover, .btn:active {
-      background: #005fa3;
-    }
-
-    /* Top-right admin link */
-    .admin-top {
-      position: absolute;
-      top: 10px;
-      right: 15px;
-      font-size: 0.9rem;
-    }
-    .admin-top a {
-      color: #666;
-      text-decoration: none;
-      padding: 6px 10px;
-      border-radius: 6px;
-      background: rgba(240,240,240,0.8);
-      transition: background 0.2s;
-    }
-    .admin-top a:hover {
-      background: rgba(220,220,220,1);
-    }
-
-    /* Mobile layout spacing */
-    @media (max-width: 600px) {
-      .btn {
-        width: 80%;
-        font-size: 1.1rem;
-      }
-    }
-  </style>
-</head>
-<body>
-
-  <!-- Small top admin/login link -->
-  <div class="admin-top">
-    <a href="https://supplies-ems.web.app/master.html">🔒 Admin / Login supplies</a>
-  </div>
-
-  <!-- Logo -->
-  <img src="Logo-1.jpg" alt="EMS Logo" class="logo" id="logo">
-
-  <!-- Main buttons -->
-  <a href="https://supplies-ems.web.app/expiry.html" class="btn">Expiring Supplies</a>
-  <a href="https://supplies-ems.web.app/requests.html" class="btn">Supply Requests</a>
-  <a href="https://chores-ems.gemfireems.org/" class="btn">EMS-Chores</a>
-  <a href="https://chores-ems.gemfireems.org/issues/" class="btn">EMS-Issues</a>
-
-  <script>
-    // Optional: Easter egg click to reveal admin link (still works)
-    let clickCount = 0;
-    const logo = document.getElementById('logo');
-    logo.addEventListener('click', () => {
-      clickCount++;
-      if (clickCount >= 4) {
-        alert('Admin shortcut: https://supplies-ems.web.app/master.html');
-        clickCount = 0;
-      }
-      setTimeout(() => { clickCount = 0; }, 1000);
-    });
-  </script>
-
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>EMS Supplies – Dashboard</title>
+    <meta name="description" content="EMS Supplies Inventory Management System" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
 </html>
