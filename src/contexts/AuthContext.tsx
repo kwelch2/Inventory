@@ -33,10 +33,44 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setUser(user);
       setLoading(false);
+      
+      // Set login timestamp when user logs in
+      if (user) {
+        const loginTime = Date.now();
+        localStorage.setItem('loginTime', loginTime.toString());
+      } else {
+        localStorage.removeItem('loginTime');
+      }
     });
 
     return unsubscribe;
   }, []);
+
+  // Auto-logout after 12 hours of inactivity
+  useEffect(() => {
+    if (!user) return;
+
+    const checkSessionTimeout = () => {
+      const loginTime = localStorage.getItem('loginTime');
+      if (loginTime) {
+        const twelveHours = 12 * 60 * 60 * 1000; // 12 hours in milliseconds
+        const timeSinceLogin = Date.now() - parseInt(loginTime, 10);
+        
+        if (timeSinceLogin > twelveHours) {
+          console.log('Session expired after 12 hours');
+          firebaseSignOut(auth);
+        }
+      }
+    };
+
+    // Check immediately
+    checkSessionTimeout();
+
+    // Check every 5 minutes
+    const interval = setInterval(checkSessionTimeout, 5 * 60 * 1000);
+
+    return () => clearInterval(interval);
+  }, [user]);
 
   const signInWithGoogle = async () => {
     try {

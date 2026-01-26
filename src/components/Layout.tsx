@@ -82,12 +82,18 @@ export const Layout = ({ children, showNav = true }: LayoutProps) => {
                 EMS-Issues
               </a>
               
-              {user && (
+              {user ? (
                 <div className="user-section">
                   <span className="user-email">{user.email}</span>
                   <button className="btn btn-outline" onClick={handleSignOut}>
                     Logout
                   </button>
+                </div>
+              ) : (
+                <div className="user-section">
+                  <Link to="/login" className="btn btn-primary" onClick={closeMenu}>
+                    Admin Login
+                  </Link>
                 </div>
               )}
             </nav>
