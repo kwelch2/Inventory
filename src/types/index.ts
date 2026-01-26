@@ -12,6 +12,9 @@ export interface CatalogItem {
   barcodes?: string[];
   active?: boolean;
   pricing?: VendorPrice[];
+  expirationDate?: Date | { seconds: number; nanoseconds: number };
+  lotNumber?: string;
+  quantity?: number;
 }
 
 export interface VendorPrice {
