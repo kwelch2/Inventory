@@ -2,7 +2,6 @@ import { useState, useMemo } from 'react';
 import { doc, updateDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useInventoryData } from '../hooks/useInventoryData';
-import type { OrderRequest } from '../types';
 import './CommonPages.css';
 import './RequestsPage.css';
 

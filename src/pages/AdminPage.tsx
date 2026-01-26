@@ -9,6 +9,24 @@ import './AdminPage.css';
 
 type AdminTab = 'overview' | 'catalog' | 'vendors' | 'categories' | 'requests';
 
+interface FormData {
+  itemName?: string;
+  itemRef?: string;
+  category?: string;
+  unit?: string;
+  packSize?: number | string;
+  parLevel?: number | string;
+  active?: boolean;
+  name?: string;
+  phone?: string;
+  email?: string;
+  webUrl?: string;
+  notes?: string;
+  // Allow any property for compatibility with data models
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  [key: string]: any;
+}
+
 export const AdminPage = () => {
   const { user, loading } = useAuth();
   const { catalog, vendors, categories, requests, loading: dataLoading } = useInventoryData();
@@ -17,7 +35,7 @@ export const AdminPage = () => {
   const [editingItem, setEditingItem] = useState<CatalogItem | Vendor | Category | null>(null);
 
   // Form states
-  const [formData, setFormData] = useState<any>({});
+  const [formData, setFormData] = useState<FormData>({});
 
   if (loading) {
     return (
@@ -49,7 +67,7 @@ export const AdminPage = () => {
   const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
     const checked = (e.target as HTMLInputElement).checked;
-    setFormData((prev: any) => ({
+    setFormData((prev: FormData) => ({
       ...prev,
       [name]: type === 'checkbox' ? checked : value
     }));
@@ -134,9 +152,11 @@ export const AdminPage = () => {
     }
   };
 
-  const startEdit = (item: any) => {
+  const startEdit = (item: CatalogItem | Vendor | Category) => {
     setEditingItem(item);
-    setFormData(item);
+    // Convert item to FormData type - all values are compatible
+    const data: FormData = { ...item };
+    setFormData(data);
     setShowAddForm(false);
   };
 
@@ -276,7 +296,7 @@ export const AdminPage = () => {
                       <input
                         type="text"
                         name="itemName"
-                        value={formData.itemName || ''}
+                        value={String(formData.itemName || '')}
                         onChange={handleFormChange}
                         required
                       />
@@ -286,7 +306,7 @@ export const AdminPage = () => {
                       <input
                         type="text"
                         name="itemRef"
-                        value={formData.itemRef || ''}
+                        value={String(formData.itemRef || '')}
                         onChange={handleFormChange}
                       />
                     </div>
@@ -296,7 +316,7 @@ export const AdminPage = () => {
                       <label>Category</label>
                       <select
                         name="category"
-                        value={formData.category || ''}
+                        value={String(formData.category || '')}
                         onChange={handleFormChange}
                       >
                         <option value="">Select category...</option>
@@ -310,7 +330,7 @@ export const AdminPage = () => {
                       <input
                         type="text"
                         name="unit"
-                        value={formData.unit || ''}
+                        value={String(formData.unit || '')}
                         onChange={handleFormChange}
                       />
                     </div>
@@ -321,7 +341,7 @@ export const AdminPage = () => {
                       <input
                         type="number"
                         name="packSize"
-                        value={formData.packSize || ''}
+                        value={formData.packSize !== undefined ? String(formData.packSize) : ''}
                         onChange={handleFormChange}
                       />
                     </div>
@@ -330,7 +350,7 @@ export const AdminPage = () => {
                       <input
                         type="number"
                         name="parLevel"
-                        value={formData.parLevel || ''}
+                        value={formData.parLevel !== undefined ? String(formData.parLevel) : ''}
                         onChange={handleFormChange}
                       />
                     </div>
@@ -340,7 +360,7 @@ export const AdminPage = () => {
                       <input
                         type="checkbox"
                         name="active"
-                        checked={formData.active ?? true}
+                        checked={Boolean(formData.active ?? true)}
                         onChange={handleFormChange}
                       />
                       Active
@@ -418,7 +438,7 @@ export const AdminPage = () => {
                     <input
                       type="text"
                       name="name"
-                      value={formData.name || ''}
+                      value={String(formData.name || '')}
                       onChange={handleFormChange}
                       required
                     />
@@ -429,7 +449,7 @@ export const AdminPage = () => {
                       <input
                         type="tel"
                         name="phone"
-                        value={formData.phone || ''}
+                        value={String(formData.phone || '')}
                         onChange={handleFormChange}
                       />
                     </div>
@@ -438,7 +458,7 @@ export const AdminPage = () => {
                       <input
                         type="email"
                         name="email"
-                        value={formData.email || ''}
+                        value={String(formData.email || '')}
                         onChange={handleFormChange}
                       />
                     </div>
@@ -448,7 +468,7 @@ export const AdminPage = () => {
                     <input
                       type="url"
                       name="webUrl"
-                      value={formData.webUrl || ''}
+                      value={String(formData.webUrl || '')}
                       onChange={handleFormChange}
                     />
                   </div>
@@ -456,7 +476,7 @@ export const AdminPage = () => {
                     <label>Notes</label>
                     <textarea
                       name="notes"
-                      value={formData.notes || ''}
+                      value={String(formData.notes || '')}
                       onChange={handleFormChange}
                       rows={3}
                     />
@@ -513,7 +533,7 @@ export const AdminPage = () => {
                     <input
                       type="text"
                       name="name"
-                      value={formData.name || ''}
+                      value={String(formData.name || '')}
                       onChange={handleFormChange}
                       required
                     />

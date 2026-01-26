@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { collection, onSnapshot, query, QueryConstraint } from 'firebase/firestore';
 import { db } from '../config/firebase';
 
@@ -10,10 +10,10 @@ export function useFirestoreCollection<T>(
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
-  useEffect(() => {
-    setLoading(true);
-    setError(null);
+  // Memoize constraints to avoid re-subscriptions on every render
+  const constraintsKey = useMemo(() => JSON.stringify(constraints), [constraints]);
 
+  useEffect(() => {
     const collectionRef = collection(db, collectionName);
     const q = constraints.length > 0 ? query(collectionRef, ...constraints) : collectionRef;
 
@@ -26,6 +26,7 @@ export function useFirestoreCollection<T>(
         })) as T[];
         setData(items);
         setLoading(false);
+        setError(null);
       },
       (err) => {
         console.error(`Error fetching ${collectionName}:`, err);
@@ -35,7 +36,8 @@ export function useFirestoreCollection<T>(
     );
 
     return () => unsubscribe();
-  }, [collectionName, ...constraints.map(c => JSON.stringify(c))]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [collectionName, constraintsKey]);
 
   return { data, loading, error };
 }
