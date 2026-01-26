@@ -19,11 +19,11 @@ export const RequestsPage = () => {
     let filtered = [...requests];
 
     // Filter by history
-    const historyStatuses = ['Received', 'Cancelled'];
+    const historyStatuses = ['Received', 'Cancelled', 'Completed', 'Closed'];
     if (showHistory) {
-      filtered = filtered.filter(r => historyStatuses.includes(r.status));
+      filtered = filtered.filter(r => r.status && historyStatuses.includes(r.status));
     } else {
-      filtered = filtered.filter(r => !historyStatuses.includes(r.status));
+      filtered = filtered.filter(r => !r.status || !historyStatuses.includes(r.status));
     }
 
     // Filter by status
@@ -41,6 +41,10 @@ export const RequestsPage = () => {
         : 0;
       return bTime - aTime;
     });
+
+    if (showHistory) {
+      filtered = filtered.slice(0, 50);
+    }
 
     return filtered;
   }, [requests, statusFilter, showHistory]);
@@ -225,34 +229,40 @@ export const RequestsPage = () => {
                 </tr>
               </thead>
               <tbody>
-                {filteredRequests.map(request => (
-                  <tr key={request.id}>
-                    <td>{getItemName(request.itemId)}</td>
-                    <td>{request.quantity}</td>
-                    <td>
-                      <span className={`status-badge status-${request.status.toLowerCase()}`}>
-                        {request.status}
-                      </span>
-                    </td>
-                    <td>{getVendorName(request.vendorId)}</td>
-                    <td>{formatDate(request.createdAt)}</td>
-                    <td>
-                      {!showHistory && (
-                        <select
-                          className="status-select"
-                          value={request.status}
-                          onChange={(e) => handleStatusChange(request.id, e.target.value)}
-                        >
-                          <option value="Open">Open</option>
-                          <option value="Ordered">Ordered</option>
-                          <option value="Backordered">Backordered</option>
-                          <option value="Received">Received</option>
-                          <option value="Cancelled">Cancelled</option>
-                        </select>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                {filteredRequests.map(request => {
+                  const statusLabel = request.status || 'Unknown';
+                  const statusClass = String(statusLabel).toLowerCase().replace(/\s+/g, '-');
+                  const editableStatus = request.status || 'Open';
+
+                  return (
+                    <tr key={request.id}>
+                      <td>{getItemName(request.itemId)}</td>
+                      <td>{request.quantity}</td>
+                      <td>
+                        <span className={`status-badge status-${statusClass}`}>
+                          {statusLabel}
+                        </span>
+                      </td>
+                      <td>{getVendorName(request.vendorId)}</td>
+                      <td>{formatDate(request.createdAt)}</td>
+                      <td>
+                        {!showHistory && (
+                          <select
+                            className="status-select"
+                            value={editableStatus}
+                            onChange={(e) => handleStatusChange(request.id, e.target.value)}
+                          >
+                            <option value="Open">Open</option>
+                            <option value="Ordered">Ordered</option>
+                            <option value="Backordered">Backordered</option>
+                            <option value="Received">Received</option>
+                            <option value="Cancelled">Cancelled</option>
+                          </select>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
