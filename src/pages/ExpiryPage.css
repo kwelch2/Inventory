@@ -1,0 +1,216 @@
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.stat-card {
+  background: white;
+  padding: 1.5rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  text-align: center;
+}
+
+.stat-card.alert {
+  border-left: 4px solid #d32f2f;
+}
+
+.stat-card.warning {
+  border-left: 4px solid #f57c00;
+}
+
+.stat-card.caution {
+  border-left: 4px solid #fbc02d;
+}
+
+.stat-value {
+  display: block;
+  font-size: 2rem;
+  font-weight: bold;
+  color: #0066cc;
+  margin-bottom: 0.5rem;
+}
+
+.stat-label {
+  display: block;
+  font-size: 0.9rem;
+  color: #666;
+}
+
+.controls-section {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.filter-buttons {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.filter-btn {
+  padding: 0.5rem 1rem;
+  border: 1px solid #ddd;
+  background: white;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.filter-btn:hover {
+  background: #f5f5f5;
+}
+
+.filter-btn.active {
+  background: #0066cc;
+  color: white;
+  border-color: #0066cc;
+}
+
+.search-box input {
+  padding: 0.5rem 1rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 1rem;
+  width: 250px;
+}
+
+.table-container {
+  overflow-x: auto;
+}
+
+.expiry-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.expiry-table th,
+.expiry-table td {
+  padding: 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid #eee;
+}
+
+.expiry-table th {
+  background: #f5f5f5;
+  font-weight: 600;
+}
+
+.expiry-table tbody tr:hover {
+  background: #f9f9f9;
+}
+
+.expiry-row-expired {
+  background-color: #ffebee !important;
+}
+
+.expiry-row-critical {
+  background-color: #fff3e0 !important;
+}
+
+.expiry-row-warning {
+  background-color: #fffde7 !important;
+}
+
+.days-badge {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.days-expired {
+  background: #ffcdd2;
+  color: #c62828;
+}
+
+.days-critical {
+  background: #ffe0b2;
+  color: #e65100;
+}
+
+.days-warning {
+  background: #fff9c4;
+  color: #f57f17;
+}
+
+.days-caution {
+  background: #e1f5fe;
+  color: #01579b;
+}
+
+.days-good {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.status-expired {
+  background: #d32f2f;
+  color: white;
+}
+
+.status-critical {
+  background: #f57c00;
+  color: white;
+}
+
+.status-warning {
+  background: #fbc02d;
+  color: #333;
+}
+
+.status-caution {
+  background: #29b6f6;
+  color: white;
+}
+
+.status-good {
+  background: #66bb6a;
+  color: white;
+}
+
+.muted {
+  color: #666;
+  text-align: center;
+  padding: 2rem;
+}
+
+@media (max-width: 768px) {
+  .controls-section {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .filter-buttons {
+    width: 100%;
+    justify-content: center;
+  }
+  
+  .search-box input {
+    width: 100%;
+  }
+  
+  .expiry-table {
+    font-size: 0.875rem;
+  }
+  
+  .expiry-table th,
+  .expiry-table td {
+    padding: 0.5rem;
+  }
+}
