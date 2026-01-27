@@ -9,7 +9,6 @@ import './AdminPage.css';
 
 type AdminTab = 'orders' | 'catalog' | 'settings';
 type OrderView = 'item' | 'vendor';
-type OrderStatusFilter = 'All' | 'Open' | 'Ordered' | 'Backordered';
 
 export const AdminPage = () => {
   const { user, loading } = useAuth();
@@ -18,14 +17,15 @@ export const AdminPage = () => {
   
   // Orders tab state
   const [orderView, setOrderView] = useState<OrderView>('item');
-  const [orderStatusFilter, setOrderStatusFilter] = useState<OrderStatusFilter>('All');
-  const [showOrderHistory, setShowOrderHistory] = useState(false);
   const [selectedRequests, setSelectedRequests] = useState<Set<string>>(new Set());
   const [editingQty, setEditingQty] = useState<{ id: string; qty: string; unit: string } | null>(null);
   const [editingVendorOverride, setEditingVendorOverride] = useState<{ id: string; vendorId: string } | null>(null);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [showOrderPreview, setShowOrderPreview] = useState(false);
   const [orderPreviewData, setOrderPreviewData] = useState<{ vendorId: string; vendorName: string; items: any[] } | null>(null);
+  const [includePricing, setIncludePricing] = useState(false);
+  const [expandHistorySection, setExpandHistorySection] = useState(false);
+  const [vendorFilter, setVendorFilter] = useState<string>('all');
   
   // Catalog tab state
   const [catalogSearch, setCatalogSearch] = useState('');
@@ -157,18 +157,43 @@ export const AdminPage = () => {
   };
 
   // ===================== ORDER FUNCTIONS =====================
+  // Separate requests into sections
+  const openRequests = useMemo(() => {
+    return requests
+      .filter(r => (r.status || 'Open') === 'Open')
+      .sort((a, b) => getItemName(a).localeCompare(getItemName(b)));
+  }, [requests, catalog]);
+
+  const orderedRequests = useMemo(() => {
+    return requests
+      .filter(r => r.status === 'Ordered')
+      .sort((a, b) => getItemName(a).localeCompare(getItemName(b)));
+  }, [requests, catalog]);
+
+  const backorderRequests = useMemo(() => {
+    return requests
+      .filter(r => r.status === 'Backordered')
+      .sort((a, b) => getItemName(a).localeCompare(getItemName(b)));
+  }, [requests, catalog]);
+
+  const historyRequests = useMemo(() => {
+    const historyStatuses = ['Received', 'Completed', 'Closed', 'Cancelled'];
+    return requests
+      .filter(r => historyStatuses.includes(r.status || ''))
+      .sort((a, b) => {
+        const aDate = a.receivedAt && typeof a.receivedAt === 'object' && 'seconds' in a.receivedAt ? a.receivedAt.seconds : 0;
+        const bDate = b.receivedAt && typeof b.receivedAt === 'object' && 'seconds' in b.receivedAt ? b.receivedAt.seconds : 0;
+        return bDate - aDate; // Most recent first
+      });
+  }, [requests]);
+
+  // Legacy filtered requests for backward compatibility
   const filteredRequests = useMemo(() => {
     const historyStatuses = ['Received', 'Completed', 'Closed', 'Cancelled'];
     let filtered = [...requests];
 
-    if (showOrderHistory) {
-      filtered = filtered.filter(r => historyStatuses.includes(r.status || ''));
-    } else {
-      filtered = filtered.filter(r => !historyStatuses.includes(r.status || ''));
-      if (orderStatusFilter !== 'All') {
-        filtered = filtered.filter(r => (r.status || 'Open') === orderStatusFilter);
-      }
-    }
+    // Filter out history requests (they're shown in separate section)
+    filtered = filtered.filter(r => !historyStatuses.includes(r.status || ''));
 
     // Sort by status priority then by item name
     const sortOrder: Record<string, number> = { Open: 1, Backordered: 2, Ordered: 3 };
@@ -182,15 +207,23 @@ export const AdminPage = () => {
     });
 
     return filtered;
-  }, [requests, orderStatusFilter, showOrderHistory, catalog]);
+  }, [requests, catalog]);
 
-  const requestsByVendor = useMemo(() => {
-    const groups = new Map<string, { vendorName: string; requests: any[] }>();
-    
-    filteredRequests.forEach(r => {
-      if (showOrderHistory) return;
-      
-      // Get pricing using the request's catalogId directly
+  // Group requests by vendor AND status for vendor view sections
+  const requestsByVendorAndStatus = useMemo(() => {
+    const grouped = new Map<string, {
+      vendorName: string;
+      open: any[];
+      ordered: any[];
+      backordered: any[];
+      history: any[];
+    }>();
+
+    const historyStatuses = ['Received', 'Completed', 'Closed', 'Cancelled'];
+    const allRequests = [...requests];
+
+    allRequests.forEach(r => {
+      // Get vendor info
       const prices = r.catalogId ? pricingMap.get(r.catalogId) || [] : [];
       const bestPrice = prices.length > 0 ? prices.sort((a, b) => (a.unitPrice || Infinity) - (b.unitPrice || Infinity))[0] : null;
       
@@ -208,14 +241,27 @@ export const AdminPage = () => {
         vendorName = 'Unlisted / Custom';
       }
 
-      if (!groups.has(vendorId)) {
-        groups.set(vendorId, { vendorName, requests: [] });
+      if (!grouped.has(vendorId)) {
+        grouped.set(vendorId, { vendorName, open: [], ordered: [], backordered: [], history: [] });
       }
-      groups.get(vendorId)!.requests.push(r);
+
+      const group = grouped.get(vendorId)!;
+      const status = r.status || 'Open';
+
+      if (historyStatuses.includes(status)) {
+        group.history.push(r);
+      } else if (status === 'Ordered') {
+        group.ordered.push(r);
+      } else if (status === 'Backordered') {
+        group.backordered.push(r);
+      } else {
+        group.open.push(r);
+      }
     });
 
-    return groups;
-  }, [filteredRequests, pricingMap, vendorMap, showOrderHistory]);
+    return grouped;
+  }, [requests, pricingMap, vendorMap]);
+
 
   const handleStatusChange = async (requestId: string, newStatus: string) => {
     try {
@@ -349,51 +395,6 @@ export const AdminPage = () => {
     setShowOrderPreview(true);
   };
 
-  const generateOrderText = () => {
-    if (!orderPreviewData) return '';
-    
-    const vendor = vendorMap.get(orderPreviewData.vendorId);
-    const today = new Date().toLocaleDateString();
-    
-    let text = `ORDER - ${orderPreviewData.vendorName}\n`;
-    text += `Date: ${today}\n`;
-    text += `${'='.repeat(50)}\n\n`;
-    
-    if (vendor?.accountNumber) {
-      text += `Account #: ${vendor.accountNumber}\n\n`;
-    }
-    
-    text += `ITEMS:\n`;
-    text += `${'─'.repeat(50)}\n`;
-    
-    let total = 0;
-    orderPreviewData.items.forEach((item, idx) => {
-      const qty = item.qty || item.quantity || '1';
-      const unit = item.unit || '';
-      const lineTotal = (parseFloat(qty) || 1) * (item.unitPrice || 0);
-      total += lineTotal;
-      
-      text += `${idx + 1}. ${item.itemName}\n`;
-      text += `   Qty: ${qty} ${unit}\n`;
-      if (item.vendorOrderNumber) {
-        text += `   Item #: ${item.vendorOrderNumber}\n`;
-      }
-      if (item.unitPrice) {
-        text += `   Price: $${item.unitPrice.toFixed(2)} ea = $${lineTotal.toFixed(2)}\n`;
-      }
-      text += `\n`;
-    });
-    
-    text += `${'─'.repeat(50)}\n`;
-    text += `SUBTOTAL: $${total.toFixed(2)}\n`;
-    if (vendor?.serviceFee) {
-      const fee = total * (vendor.serviceFee / 100);
-      text += `Service Fee (${vendor.serviceFee}%): $${fee.toFixed(2)}\n`;
-      text += `TOTAL: $${(total + fee).toFixed(2)}\n`;
-    }
-    
-    return text;
-  };
 
   const handlePrintOrder = () => {
     if (!orderPreviewData) return;
@@ -410,14 +411,26 @@ export const AdminPage = () => {
       const catalogItem = item.catalogId ? catalogByCatalogId.get(item.catalogId) : null;
       const itemRef = catalogItem?.itemRef || 'N/A';
       
-      return `
-        <tr>
-          <td>${item.itemName}</td>
-          <td>${itemRef}</td>
-          <td>${item.vendorOrderNumber || 'N/A'}</td>
-          <td>${item.qty || item.quantity || '1'} ${item.unit || ''}</td>
-        </tr>
-      `;
+      if (includePricing) {
+        return `
+          <tr>
+            <td>${item.itemName}</td>
+            <td>${itemRef}</td>
+            <td>${item.vendorOrderNumber || 'N/A'}</td>
+            <td>${item.qty || item.quantity || '1'} ${item.unit || ''}</td>
+            <td>$${item.unitPrice ? item.unitPrice.toFixed(2) : '0.00'}</td>
+          </tr>
+        `;
+      } else {
+        return `
+          <tr>
+            <td>${item.itemName}</td>
+            <td>${itemRef}</td>
+            <td>${item.vendorOrderNumber || 'N/A'}</td>
+            <td>${item.qty || item.quantity || '1'} ${item.unit || ''}</td>
+          </tr>
+        `;
+      }
     }).join('');
     
     printWindow.document.write(`
@@ -561,6 +574,7 @@ export const AdminPage = () => {
                 <th>Ref #</th>
                 <th>Vendor Item #</th>
                 <th>Quantity Needed</th>
+                ${includePricing ? '<th>Unit Price</th>' : ''}
               </tr>
             </thead>
             <tbody>
@@ -593,67 +607,79 @@ export const AdminPage = () => {
     const dateStr = today.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
     const email = vendor?.email || '';
     
-    // Generate HTML formatted email body
-    let htmlBody = `<div style="font-family: Arial, sans-serif; max-width: 800px;">`;
-    htmlBody += `<h2 style="color: #0066cc;">EMS Order Request</h2>`;
-    htmlBody += `<p><strong>From:</strong> Gem County FIRE-EMS<br>`;
-    htmlBody += `<strong>Date:</strong> ${dateStr}<br>`;
-    htmlBody += `<strong>Requested By:</strong> ${user?.email || ''}</p>`;
+    // Generate plain text formatted email body (Gmail URL doesn't support HTML)
+    let textBody = `EMS ORDER REQUEST\n`;
+    textBody += `${'='.repeat(60)}\n\n`;
+    textBody += `From: Gem County FIRE-EMS\n`;
+    textBody += `      Station 4: 330 E. Main st\n`;
+    textBody += `      Emmett, Idaho 83617\n`;
+    textBody += `      Phone: 208-365-3684\n\n`;
+    textBody += `Date: ${dateStr}\n`;
+    textBody += `Requested By: ${user?.email || ''}\n`;
     
     if (vendor?.accountNumber) {
-      htmlBody += `<p><strong>Account #:</strong> ${vendor.accountNumber}</p>`;
+      textBody += `Account #: ${vendor.accountNumber}\n`;
     }
     
-    htmlBody += `<h3 style="margin-top: 20px;">Order Items:</h3>`;
-    htmlBody += `<table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%;">`;
-    htmlBody += `<thead style="background-color: #f0f0f0;">`;
-    htmlBody += `<tr>`;
-    htmlBody += `<th style="text-align: left;">Item Name</th>`;
-    htmlBody += `<th style="text-align: left;">Ref #</th>`;
-    htmlBody += `<th style="text-align: left;">Vendor Item #</th>`;
-    htmlBody += `<th style="text-align: left;">Quantity</th>`;
-    htmlBody += `<th style="text-align: left;">UOI</th>`;
-    htmlBody += `</tr>`;
-    htmlBody += `</thead>`;
-    htmlBody += `<tbody>`;
+    textBody += `\n${'='.repeat(60)}\n`;
+    textBody += `ORDER FOR: ${orderPreviewData.vendorName}\n`;
+    textBody += `${'='.repeat(60)}\n\n`;
+    
+    // Create table header with pricing option
+    if (includePricing) {
+      textBody += `ITEM NAME                          | REF #      | VENDOR #   | QTY  | UOI  | PRICE    \n`;
+      textBody += `${'-'.repeat(100)}\n`;
+    } else {
+      textBody += `ITEM NAME                          | REF #      | VENDOR #   | QTY  | UOI\n`;
+      textBody += `${'-'.repeat(95)}\n`;
+    }
     
     orderPreviewData.items.forEach(item => {
       const catalogItem = item.catalogId ? catalogByCatalogId.get(item.catalogId) : null;
       const itemRef = catalogItem?.itemRef || 'N/A';
       const qty = item.qty || item.quantity || '1';
       const uoi = item.unit || '';
+      const vendorNum = item.vendorOrderNumber || 'N/A';
       
-      htmlBody += `<tr>`;
-      htmlBody += `<td>${item.itemName}</td>`;
-      htmlBody += `<td>${itemRef}</td>`;
-      htmlBody += `<td>${item.vendorOrderNumber || 'N/A'}</td>`;
-      htmlBody += `<td>${qty}</td>`;
-      htmlBody += `<td>${uoi}</td>`;
-      htmlBody += `</tr>`;
+      // Format with padding for alignment
+      const nameCol = item.itemName.padEnd(35).substring(0, 35);
+      const refCol = itemRef.padEnd(11).substring(0, 11);
+      const vendorCol = vendorNum.padEnd(11).substring(0, 11);
+      const qtyCol = qty.padEnd(5).substring(0, 5);
+      const uoiCol = uoi.padEnd(5).substring(0, 5);
+      
+      if (includePricing) {
+        const price = item.unitPrice ? `$${item.unitPrice.toFixed(2)}` : 'N/A';
+        textBody += `${nameCol}| ${refCol}| ${vendorCol}| ${qtyCol}| ${uoiCol}| ${price}\n`;
+      } else {
+        textBody += `${nameCol}| ${refCol}| ${vendorCol}| ${qtyCol}| ${uoi}\n`;
+      }
     });
     
-    htmlBody += `</tbody>`;
-    htmlBody += `</table>`;
-    htmlBody += `<p style="margin-top: 20px; color: #666; font-size: 12px;">Please confirm receipt of this order and provide an estimated delivery date.</p>`;
-    htmlBody += `<p style="color: #666; font-size: 12px;">Thank you,<br>Gem County FIRE-EMS<br>Station 4: 330 E. Main st<br>Emmett, Idaho 83617<br>Phone: 208-365-3684</p>`;
-    htmlBody += `</div>`;
+    if (includePricing) {
+      const subtotal = orderPreviewData.items.reduce((sum, item) => {
+        const qty = parseFloat(item.qty || item.quantity || '1') || 1;
+        return sum + (qty * (item.unitPrice || 0));
+      }, 0);
+      const fee = vendor?.serviceFee ? subtotal * (vendor.serviceFee / 100) : 0;
+      
+      textBody += `\n${'='.repeat(60)}\n`;
+      textBody += `SUBTOTAL: $${subtotal.toFixed(2)}\n`;
+      if (vendor?.serviceFee) {
+        textBody += `Service Fee (${vendor.serviceFee}%): $${fee.toFixed(2)}\n`;
+        textBody += `TOTAL: $${(subtotal + fee).toFixed(2)}\n`;
+      }
+    }
+    
+    textBody += `\n${'='.repeat(60)}\n\n`;
+    textBody += `Thank you,`;
     
     const subject = encodeURIComponent(`EMS Order - ${orderPreviewData.vendorName} - ${dateStr}`);
-    const encodedBody = encodeURIComponent(htmlBody);
+    const encodedBody = encodeURIComponent(textBody);
     
-    // Open Gmail compose with authuser parameter for account selection
-    // Note: Users can switch accounts in Gmail if needed
+    // Open Gmail compose - when Gmail opens, you can select your work account
     const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${email}&su=${subject}&body=${encodedBody}`;
     window.open(gmailUrl, '_blank');
-  };
-
-  const handleCopyOrder = () => {
-    const text = generateOrderText();
-    navigator.clipboard.writeText(text).then(() => {
-      alert('Order copied to clipboard!');
-    }).catch(() => {
-      alert('Failed to copy. Here is the order:\n\n' + text);
-    });
   };
 
   const handleMarkOrdered = async () => {
@@ -683,6 +709,172 @@ export const AdminPage = () => {
       else next.add(id);
       return next;
     });
+  };
+
+  // Helper to render order table rows with consistent logic
+  const renderOrderRow = (r: any, rowClassName: string = '') => {
+    const itemName = getItemName(r);
+    const status = r.status || 'Open';
+    const isEditable = status === 'Open' || status === 'Backordered';
+    const prices = getItemPricing(r.catalogId);
+    const { vendorId: effectiveVendorId, vendor: effectiveVendor } = getEffectiveVendor(r);
+    const effectivePrice = prices.find(p => p.vendorId === effectiveVendorId) || prices[0];
+    const catalogItem = r.catalogId ? catalogByCatalogId.get(r.catalogId) : null;
+    const defaultUnit = catalogItem?.unit || '';
+    const isExpanded = expandedRows.has(r.id);
+
+    return (
+      <React.Fragment key={r.id}>
+        <tr className={rowClassName}>
+          <td>
+            <input
+              type="checkbox"
+              checked={selectedRequests.has(r.id)}
+              onChange={(e) => {
+                const next = new Set(selectedRequests);
+                if (e.target.checked) next.add(r.id);
+                else next.delete(r.id);
+                setSelectedRequests(next);
+              }}
+            />
+          </td>
+          <td>
+            <strong>{itemName}</strong>
+            {r.otherItemName && <span className="tag unlisted-tag">Unlisted</span>}
+            <button className="btn-expand" onClick={() => toggleRowExpand(r.id)}>
+              {isExpanded ? '▲' : '▼'}
+            </button>
+            <br />
+            {editingVendorOverride?.id === r.id && editingVendorOverride ? (
+              <div className="vendor-edit-inline">
+                <select
+                  value={editingVendorOverride.vendorId}
+                  onChange={(e) => setEditingVendorOverride({ id: editingVendorOverride.id, vendorId: e.target.value })}
+                  autoFocus
+                >
+                  <option value="">Auto (Best Price)</option>
+                  {prices.map(p => {
+                    const v = vendorMap.get(p.vendorId);
+                    return (
+                      <option key={p.vendorId} value={p.vendorId}>
+                        {v?.name || 'Unknown'} - ${p.unitPrice?.toFixed(2) || '?'}
+                      </option>
+                    );
+                  })}
+                  {prices.length === 0 && vendors.map(v => (
+                    <option key={v.id} value={v.id}>{v.name}</option>
+                  ))}
+                </select>
+                <button className="btn btn-small" onClick={() => handleVendorOverride(r.id, editingVendorOverride.vendorId)}>✓</button>
+                <button className="btn btn-small" onClick={() => setEditingVendorOverride(null)}>✗</button>
+              </div>
+            ) : (
+              <span
+                className={`vendor-link ${isEditable ? 'editable' : ''} ${r.overrideVendorId ? 'override' : ''}`}
+                onClick={() => isEditable && setEditingVendorOverride({ id: r.id, vendorId: r.overrideVendorId || '' })}
+                title={isEditable ? 'Click to change vendor' : ''}
+              >
+                {effectiveVendor?.name || 'Unassigned'}
+                {r.overrideVendorId && <span className="override-badge">Override</span>}
+              </span>
+            )}
+          </td>
+          <td>
+            {editingQty?.id === r.id && editingQty ? (
+              <div className="qty-edit-inline">
+                <input
+                  type="text"
+                  value={editingQty.qty}
+                  onChange={(e) => setEditingQty({ id: editingQty.id, qty: e.target.value, unit: editingQty.unit })}
+                  style={{ width: '50px' }}
+                  autoFocus
+                />
+                <select
+                  value={editingQty.unit}
+                  onChange={(e) => setEditingQty({ id: editingQty.id, qty: editingQty.qty, unit: e.target.value })}
+                  style={{ width: '80px' }}
+                >
+                  <option value="">UOI...</option>
+                  <option value="Each">Each</option>
+                  <option value="Box">Box</option>
+                  <option value="Case">Case</option>
+                  <option value="Kit">Kit</option>
+                  <option value="Brick">Brick</option>
+                  <option value="Bag">Bag</option>
+                  <option value="Bottle">Bottle</option>
+                  <option value="Pack">Pack</option>
+                  <option value="Vial">Vial</option>
+                  <option value="Tube">Tube</option>
+                  <option value="Roll">Roll</option>
+                  <option value="Pair">Pair</option>
+                </select>
+                <button className="btn btn-small" onClick={() => handleQtyUpdate(r.id, editingQty.qty, editingQty.unit)}>✓</button>
+                <button className="btn btn-small" onClick={() => setEditingQty(null)}>✗</button>
+              </div>
+            ) : (
+              <span
+                className={`qty-display ${isEditable ? 'editable' : ''}`}
+                onClick={() => isEditable && setEditingQty({ id: r.id, qty: r.qty || r.quantity || '', unit: r.unit || defaultUnit })}
+                title={isEditable ? 'Click to edit' : ''}
+              >
+                {r.qty || r.quantity || '—'} {r.unit || ''}
+              </span>
+            )}
+          </td>
+          <td>{effectivePrice?.vendorOrderNumber || 'N/A'}</td>
+          <td>{effectivePrice?.unitPrice ? `$${effectivePrice.unitPrice.toFixed(2)}` : 'N/A'}</td>
+          <td>
+            <div className="status-buttons">
+              {['Open', 'Ordered', 'Backordered'].map(s => (
+                <button
+                  key={s}
+                  className={`btn btn-status ${status === s ? 'active' : ''}`}
+                  onClick={() => handleStatusChange(r.id, s)}
+                >
+                  {s}
+                </button>
+              ))}
+              <button
+                className="btn btn-status-receive"
+                onClick={() => handleStatusChange(r.id, 'Received')}
+              >
+                Received
+              </button>
+            </div>
+            <div className="edit-buttons">
+              <button className="btn btn-small btn-danger" onClick={() => handleDeleteRequest(r.id)}>Delete</button>
+            </div>
+          </td>
+        </tr>
+        {isExpanded && (
+          <tr className="details-row">
+            <td colSpan={6}>
+              <div className="vendor-pricing-details">
+                <h4>All Vendor Pricing</h4>
+                {prices.length > 0 ? (
+                  <div className="price-tags">
+                    {prices.map((p, idx) => {
+                      const vendor = vendorMap.get(p.vendorId);
+                      const fee = vendor?.serviceFee || 0;
+                      const effectivePrice = (p.unitPrice || 0) * (1 + fee / 100);
+                      return (
+                        <span key={idx} className="price-tag">
+                          {vendor?.name || 'Unknown'}: ${effectivePrice.toFixed(2)}
+                          {fee > 0 && <span className="fee-note"> (incl. {fee}%)</span>}
+                          <span className="vendor-item-no"> #{p.vendorOrderNumber || 'N/A'}</span>
+                        </span>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="muted">No pricing information available.</p>
+                )}
+              </div>
+            </td>
+          </tr>
+        )}
+      </React.Fragment>
+    );
   };
 
   const openNewRequest = () => {
@@ -720,6 +912,19 @@ export const AdminPage = () => {
           return;
         }
         data.catalogId = newRequestForm.catalogId;
+        
+        // Check for existing orders/backorders
+        const existingOrdered = requests.find(r => 
+          r.catalogId === newRequestForm.catalogId && 
+          (r.status === 'Ordered' || r.status === 'Backordered')
+        );
+        if (existingOrdered) {
+          const itemName = catalog.find(c => c.id === newRequestForm.catalogId)?.itemName || 'This item';
+          const confirmMsg = `⚠️ WARNING: ${itemName} already has a ${existingOrdered.status} request.\n\nYou may be placing a duplicate order from another vendor.\n\nDo you want to continue?`;
+          if (!confirm(confirmMsg)) {
+            return;
+          }
+        }
       }
 
       if (newRequestForm.qty) {
@@ -1041,412 +1246,489 @@ export const AdminPage = () => {
                 </div>
               </div>
 
-              <div className="toolbar">
-                <div className="filter-buttons">
-                  {!showOrderHistory && (['All', 'Open', 'Ordered', 'Backordered'] as OrderStatusFilter[]).map(status => (
-                    <button
-                      key={status}
-                      className={`filter-btn ${orderStatusFilter === status ? 'active' : ''}`}
-                      onClick={() => setOrderStatusFilter(status)}
-                    >
-                      {status}
-                    </button>
-                  ))}
-                </div>
-                <div className="toolbar-right">
-                  {!showOrderHistory && selectedRequests.size > 0 && (
-                    <button className="btn btn-primary" onClick={() => openOrderPreview()}>
-                      📋 Generate Order ({selectedRequests.size})
-                    </button>
-                  )}
-                  <label className="toggle-label">
-                    <input
-                      type="checkbox"
-                      checked={showOrderHistory}
-                      onChange={(e) => setShowOrderHistory(e.target.checked)}
-                    />
-                    Show History
-                  </label>
-                </div>
-              </div>
-
-              {showOrderHistory ? (
-                // History view
-                <div className="table-container">
-                  <table className="admin-table">
-                    <thead>
-                      <tr>
-                        <th>Item / Requester</th>
-                        <th>Qty</th>
-                        <th>Status</th>
-                        <th>Date Received</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredRequests.length === 0 ? (
-                        <tr><td colSpan={4} className="muted">No history found.</td></tr>
-                      ) : (
-                        filteredRequests.map(r => (
-                          <tr key={r.id}>
-                            <td>
-                              <strong>{getItemName(r)}</strong>
-                              <br /><span className="muted">{r.requesterEmail || ''}</span>
-                            </td>
-                            <td>{r.qty || r.quantity || ''}</td>
-                            <td><span className={`status-badge status-${(r.status || '').toLowerCase()}`}>{r.status}</span></td>
-                            <td>{r.receivedAt && typeof r.receivedAt === 'object' && 'seconds' in r.receivedAt
-                              ? new Date(r.receivedAt.seconds * 1000).toLocaleDateString()
-                              : 'N/A'}</td>
-                          </tr>
-                        ))
+              {orderView === 'item' ? (
+                <>
+                  <div className="toolbar">
+                    <div className="filter-buttons">
+                      {/* Sections replace filter buttons */}
+                    </div>
+                    <div className="toolbar-right">
+                      {selectedRequests.size > 0 && (
+                        <button className="btn btn-primary" onClick={() => openOrderPreview()}>
+                          📋 Generate Order ({selectedRequests.size})
+                        </button>
                       )}
-                    </tbody>
-                  </table>
-                </div>
-              ) : orderView === 'item' ? (
-                // Item view
-                <div className="table-container">
-                  <table className="admin-table orders-table">
-                    <thead>
-                      <tr>
-                        <th style={{ width: '30px' }}>
-                          <input
-                            type="checkbox"
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setSelectedRequests(new Set(filteredRequests.map(r => r.id)));
-                              } else {
-                                setSelectedRequests(new Set());
-                              }
-                            }}
-                          />
-                        </th>
-                        <th>Item / Vendor</th>
-                        <th>Qty / UOI</th>
-                        <th>Vendor #</th>
-                        <th>Price</th>
-                        <th>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredRequests.length === 0 ? (
-                        <tr><td colSpan={6} className="muted">No active requests found.</td></tr>
-                      ) : (
-                        filteredRequests.map(r => {
-                          const itemName = getItemName(r);
-                          const status = r.status || 'Open';
-                          const isEditable = status === 'Open' || status === 'Backordered';
-                          const prices = getItemPricing(r.catalogId);
-                          const { vendorId: effectiveVendorId, vendor: effectiveVendor } = getEffectiveVendor(r);
-                          const effectivePrice = prices.find(p => p.vendorId === effectiveVendorId) || prices[0];
-                          const catalogItem = r.catalogId ? catalogByCatalogId.get(r.catalogId) : null;
-                          const defaultUnit = catalogItem?.unit || '';
-                          const isExpanded = expandedRows.has(r.id);
+                    </div>
+                  </div>
 
-                          return (
-                            <React.Fragment key={r.id}>
-                              <tr>
-                                <td>
-                                  <input
-                                    type="checkbox"
-                                    checked={selectedRequests.has(r.id)}
-                                    onChange={(e) => {
-                                      const next = new Set(selectedRequests);
-                                      if (e.target.checked) next.add(r.id);
-                                      else next.delete(r.id);
-                                      setSelectedRequests(next);
-                                    }}
-                                  />
-                                </td>
-                                <td>
-                                  <strong>{itemName}</strong>
-                                  {r.otherItemName && <span className="tag unlisted-tag">Unlisted</span>}
-                                  <button className="btn-expand" onClick={() => toggleRowExpand(r.id)}>
-                                    {isExpanded ? '▲' : '▼'}
-                                  </button>
-                                  <br />
-                                  {editingVendorOverride?.id === r.id ? (
-                                    <div className="vendor-edit-inline">
-                                      <select
-                                        value={editingVendorOverride.vendorId}
-                                        onChange={(e) => setEditingVendorOverride({ ...editingVendorOverride, vendorId: e.target.value })}
-                                        autoFocus
-                                      >
-                                        <option value="">Auto (Best Price)</option>
-                                        {prices.map(p => {
-                                          const v = vendorMap.get(p.vendorId);
-                                          return (
-                                            <option key={p.vendorId} value={p.vendorId}>
-                                              {v?.name || 'Unknown'} - ${p.unitPrice?.toFixed(2) || '?'}
-                                            </option>
-                                          );
-                                        })}
-                                        {/* Also show all vendors for unlisted items */}
-                                        {prices.length === 0 && vendors.map(v => (
-                                          <option key={v.id} value={v.id}>{v.name}</option>
-                                        ))}
-                                      </select>
-                                      <button className="btn btn-small" onClick={() => handleVendorOverride(r.id, editingVendorOverride.vendorId)}>✓</button>
-                                      <button className="btn btn-small" onClick={() => setEditingVendorOverride(null)}>✗</button>
-                                    </div>
-                                  ) : (
-                                    <span
-                                      className={`vendor-link ${isEditable ? 'editable' : ''} ${r.overrideVendorId ? 'override' : ''}`}
-                                      onClick={() => isEditable && setEditingVendorOverride({ id: r.id, vendorId: r.overrideVendorId || '' })}
-                                      title={isEditable ? 'Click to change vendor' : ''}
-                                    >
-                                      {effectiveVendor?.name || 'Unassigned'}
-                                      {r.overrideVendorId && <span className="override-badge">Override</span>}
-                                    </span>
-                                  )}
-                                </td>
-                                <td>
-                                  {editingQty?.id === r.id && editingQty ? (
-                                    <div className="qty-edit-inline">
-                                      <input
-                                        type="text"
-                                        value={editingQty.qty}
-                                        onChange={(e) => setEditingQty({ id: editingQty.id, qty: e.target.value, unit: editingQty.unit })}
-                                        style={{ width: '50px' }}
-                                        autoFocus
-                                      />
-                                      <select
-                                        value={editingQty.unit}
-                                        onChange={(e) => setEditingQty({ id: editingQty.id, qty: editingQty.qty, unit: e.target.value })}
-                                        style={{ width: '80px' }}
-                                      >
-                                        <option value="">UOI...</option>
-                                        <option value="Each">Each</option>
-                                        <option value="Box">Box</option>
-                                        <option value="Case">Case</option>
-                                        <option value="Kit">Kit</option>
-                                        <option value="Brick">Brick</option>
-                                        <option value="Bag">Bag</option>
-                                        <option value="Bottle">Bottle</option>
-                                        <option value="Pack">Pack</option>
-                                        <option value="Vial">Vial</option>
-                                        <option value="Tube">Tube</option>
-                                        <option value="Roll">Roll</option>
-                                        <option value="Pair">Pair</option>
-                                      </select>
-                                      <button className="btn btn-small" onClick={() => handleQtyUpdate(r.id, editingQty.qty, editingQty.unit)}>✓</button>
-                                      <button className="btn btn-small" onClick={() => setEditingQty(null)}>✗</button>
-                                    </div>
-                                  ) : (
-                                    <span
-                                      className={`qty-display ${isEditable ? 'editable' : ''}`}
-                                      onClick={() => isEditable && setEditingQty({ id: r.id, qty: r.qty || r.quantity || '', unit: r.unit || defaultUnit })}
-                                      title={isEditable ? 'Click to edit' : ''}
-                                    >
-                                      {r.qty || r.quantity || '—'} {r.unit || ''}
-                                    </span>
-                                  )}
-                                </td>
-                                <td>{effectivePrice?.vendorOrderNumber || 'N/A'}</td>
-                                <td>{effectivePrice?.unitPrice ? `$${effectivePrice.unitPrice.toFixed(2)}` : 'N/A'}</td>
-                                <td>
-                                  <div className="status-buttons">
-                                    {['Open', 'Ordered', 'Backordered'].map(s => (
-                                      <button
-                                        key={s}
-                                        className={`btn btn-status ${status === s ? 'active' : ''}`}
-                                        onClick={() => handleStatusChange(r.id, s)}
-                                      >
-                                        {s}
-                                      </button>
-                                    ))}
-                                    <button
-                                      className="btn btn-status-receive"
-                                      onClick={() => handleStatusChange(r.id, 'Received')}
-                                    >
-                                      Received
-                                    </button>
-                                  </div>
-                                  <div className="edit-buttons">
-                                    <button className="btn btn-small btn-danger" onClick={() => handleDeleteRequest(r.id)}>Delete</button>
-                                  </div>
-                                </td>
-                              </tr>
-                              {isExpanded && (
-                                <tr className="details-row">
-                                  <td colSpan={6}>
-                                    <div className="vendor-pricing-details">
-                                      <h4>All Vendor Pricing</h4>
-                                      {prices.length > 0 ? (
-                                        <div className="price-tags">
-                                          {prices.map((p, idx) => {
-                                            const vendor = vendorMap.get(p.vendorId);
-                                            const fee = vendor?.serviceFee || 0;
-                                            const effectivePrice = (p.unitPrice || 0) * (1 + fee / 100);
-                                            return (
-                                              <span key={idx} className="price-tag">
-                                                {vendor?.name || 'Unknown'}: ${effectivePrice.toFixed(2)}
-                                                {fee > 0 && <span className="fee-note"> (incl. {fee}%)</span>}
-                                                <span className="vendor-item-no"> #{p.vendorOrderNumber || 'N/A'}</span>
-                                              </span>
-                                            );
-                                          })}
-                                        </div>
-                                      ) : (
-                                        <p className="muted">No pricing information available.</p>
-                                      )}
-                                    </div>
-                                  </td>
-                                </tr>
-                              )}
-                            </React.Fragment>
-                          );
-                        })
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                // Vendor view
-                <div className="vendor-groups">
-                  {requestsByVendor.size === 0 ? (
-                    <p className="muted">No active requests found.</p>
-                  ) : (
-                    Array.from(requestsByVendor.entries()).map(([vendorId, group]) => {
-                      const groupSelected = group.requests.filter(r => selectedRequests.has(r.id)).length;
-                      
-                      return (
-                        <div key={vendorId} className="vendor-group">
-                          <div className="vendor-group-header">
-                            <h3>{group.vendorName} ({group.requests.length})</h3>
-                            <div className="vendor-group-actions">
-                              {vendorId !== 'unassigned' && vendorId !== 'unlisted' && groupSelected > 0 && (
-                                <button
-                                  className="btn btn-primary btn-small"
-                                  onClick={() => openOrderPreview(vendorId, group.vendorName)}
-                                >
-                                  📋 Generate Order ({groupSelected})
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                          <table className="admin-table">
+                  {/* OPEN ORDERS SECTION */}
+                  {openRequests.length > 0 && (
+                    <div className="orders-section">
+                      <div className="orders-section-header section-open">
+                        <h3>
+                          📝 Open Orders
+                          <span className="count-badge">{openRequests.length}</span>
+                        </h3>
+                      </div>
+                      <div className="orders-section-content">
+                        <div className="table-container">
+                          <table className="admin-table orders-table">
                             <thead>
                               <tr>
                                 <th style={{ width: '30px' }}>
                                   <input
                                     type="checkbox"
-                                    checked={group.requests.every(r => selectedRequests.has(r.id))}
                                     onChange={(e) => {
-                                      const next = new Set(selectedRequests);
-                                      group.requests.forEach(r => {
-                                        if (e.target.checked) next.add(r.id);
-                                        else next.delete(r.id);
-                                      });
-                                      setSelectedRequests(next);
+                                      if (e.target.checked) {
+                                        setSelectedRequests(new Set(openRequests.map(r => r.id)));
+                                      } else {
+                                        setSelectedRequests(new Set());
+                                      }
                                     }}
                                   />
                                 </th>
-                                <th>Item</th>
+                                <th>Item / Vendor</th>
                                 <th>Qty / UOI</th>
                                 <th>Vendor #</th>
                                 <th>Price</th>
-                                <th>Status</th>
+                                <th>Actions</th>
                               </tr>
                             </thead>
                             <tbody>
-                              {group.requests.map(r => {
-                                const itemName = getItemName(r);
-                                const status = r.status || 'Open';
-                                const isEditable = status === 'Open' || status === 'Backordered';
-                                const prices = getItemPricing(r.catalogId);
-                                const vendorPrice = prices.find(p => p.vendorId === vendorId) || prices[0];
-                                const catalogItem = r.catalogId ? catalogByCatalogId.get(r.catalogId) : null;
-                                const defaultUnit = catalogItem?.unit || '';
-
-                                return (
-                                  <tr key={r.id}>
-                                    <td>
-                                      <input
-                                        type="checkbox"
-                                        checked={selectedRequests.has(r.id)}
-                                        onChange={(e) => {
-                                          const next = new Set(selectedRequests);
-                                          if (e.target.checked) next.add(r.id);
-                                          else next.delete(r.id);
-                                          setSelectedRequests(next);
-                                        }}
-                                      />
-                                    </td>
-                                    <td><strong>{itemName}</strong></td>
-                                    <td>
-                                      {editingQty?.id === r.id && editingQty ? (
-                                        <div className="qty-edit-inline">
-                                          <input
-                                            type="text"
-                                            value={editingQty.qty}
-                                            onChange={(e) => setEditingQty({ id: editingQty.id, qty: e.target.value, unit: editingQty.unit })}
-                                            style={{ width: '50px' }}
-                                            autoFocus
-                                          />
-                                          <select
-                                            value={editingQty.unit}
-                                            onChange={(e) => setEditingQty({ id: editingQty.id, qty: editingQty.qty, unit: e.target.value })}
-                                            style={{ width: '80px' }}
-                                          >
-                                            <option value="">UOI...</option>
-                                            <option value="Each">Each</option>
-                                            <option value="Box">Box</option>
-                                            <option value="Case">Case</option>
-                                            <option value="Kit">Kit</option>
-                                            <option value="Brick">Brick</option>
-                                            <option value="Bag">Bag</option>
-                                            <option value="Bottle">Bottle</option>
-                                            <option value="Pack">Pack</option>
-                                            <option value="Vial">Vial</option>
-                                            <option value="Tube">Tube</option>
-                                            <option value="Roll">Roll</option>
-                                            <option value="Pair">Pair</option>
-                                          </select>
-                                          <button className="btn btn-small" onClick={() => handleQtyUpdate(r.id, editingQty.qty, editingQty.unit)}>✓</button>
-                                          <button className="btn btn-small" onClick={() => setEditingQty(null)}>✗</button>
-                                        </div>
-                                      ) : (
-                                        <span
-                                          className={`qty-display ${isEditable ? 'editable' : ''}`}
-                                          onClick={() => isEditable && setEditingQty({ id: r.id, qty: r.qty || r.quantity || '', unit: r.unit || defaultUnit })}
-                                          title={isEditable ? 'Click to edit' : ''}
-                                        >
-                                          {r.qty || r.quantity || '—'} {r.unit || ''}
-                                        </span>
-                                      )}
-                                    </td>
-                                    <td>{vendorPrice?.vendorOrderNumber || 'N/A'}</td>
-                                    <td>{vendorPrice?.unitPrice ? `$${vendorPrice.unitPrice.toFixed(2)}` : 'N/A'}</td>
-                                    <td>
-                                      <div className="status-buttons">
-                                        {['Open', 'Ordered', 'Backordered'].map(s => (
-                                          <button
-                                            key={s}
-                                            className={`btn btn-status ${status === s ? 'active' : ''}`}
-                                            onClick={() => handleStatusChange(r.id, s)}
-                                          >
-                                            {s}
-                                          </button>
-                                        ))}
-                                        <button
-                                          className="btn btn-status-receive"
-                                          onClick={() => handleStatusChange(r.id, 'Received')}
-                                        >
-                                          Received
-                                        </button>
-                                      </div>
-                                    </td>
-                                  </tr>
-                                );
-                              })}
+                              {openRequests.map(r => renderOrderRow(r, ''))}
                             </tbody>
                           </table>
                         </div>
-                      );
-                    })
+                      </div>
+                    </div>
                   )}
-                </div>
+
+                  {/* ORDERED SECTION */}
+                  {orderedRequests.length > 0 && (
+                    <div className="orders-section">
+                      <div className="orders-section-header section-ordered">
+                        <h3>
+                          📦 Ordered
+                          <span className="count-badge">{orderedRequests.length}</span>
+                        </h3>
+                      </div>
+                      <div className="orders-section-content">
+                        <div className="table-container">
+                          <table className="admin-table orders-table">
+                            <thead>
+                              <tr>
+                                <th style={{ width: '30px' }}>
+                                  <input
+                                    type="checkbox"
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setSelectedRequests(new Set(orderedRequests.map(r => r.id)));
+                                      } else {
+                                        setSelectedRequests(new Set());
+                                      }
+                                    }}
+                                  />
+                                </th>
+                                <th>Item / Vendor</th>
+                                <th>Qty / UOI</th>
+                                <th>Vendor #</th>
+                                <th>Price</th>
+                                <th>Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {orderedRequests.map(r => renderOrderRow(r, 'row-ordered'))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* BACKORDER SECTION */}
+                  {backorderRequests.length > 0 && (
+                    <div className="orders-section">
+                      <div className="orders-section-header section-backordered">
+                        <h3>
+                          ⚠️ Backordered
+                          <span className="count-badge">{backorderRequests.length}</span>
+                        </h3>
+                      </div>
+                      <div className="orders-section-content">
+                        <div className="table-container">
+                          <table className="admin-table orders-table">
+                            <thead>
+                              <tr>
+                                <th style={{ width: '30px' }}>
+                                  <input
+                                    type="checkbox"
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setSelectedRequests(new Set(backorderRequests.map(r => r.id)));
+                                      } else {
+                                        setSelectedRequests(new Set());
+                                      }
+                                    }}
+                                  />
+                                </th>
+                                <th>Item / Vendor</th>
+                                <th>Qty / UOI</th>
+                                <th>Vendor #</th>
+                                <th>Price</th>
+                                <th>Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {backorderRequests.map(r => renderOrderRow(r, 'row-backordered'))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* HISTORY SECTION - Collapsible */}
+                  {historyRequests.length > 0 && (
+                    <div className="orders-section">
+                      <div 
+                        className="orders-section-header section-history clickable"
+                        onClick={() => setExpandHistorySection(!expandHistorySection)}
+                      >
+                        <h3>
+                          📋 History
+                          <span className="count-badge">{historyRequests.length}</span>
+                        </h3>
+                        <span className="expand-icon">{expandHistorySection ? '▼' : '▶'}</span>
+                      </div>
+                      {expandHistorySection && (
+                        <div className="orders-section-content">
+                          <div className="table-container">
+                            <table className="admin-table">
+                              <thead>
+                                <tr>
+                                  <th>Item / Requester</th>
+                                  <th>Qty</th>
+                                  <th>Status</th>
+                                  <th>Date Received</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {historyRequests.map(r => (
+                                  <tr key={r.id}>
+                                    <td>
+                                      <strong>{getItemName(r)}</strong>
+                                      <br /><span className="muted">{r.requesterEmail || ''}</span>
+                                    </td>
+                                    <td>{r.qty || r.quantity || ''}</td>
+                                    <td><span className={`status-badge status-${(r.status || '').toLowerCase()}`}>{r.status}</span></td>
+                                    <td>{r.receivedAt && typeof r.receivedAt === 'object' && 'seconds' in r.receivedAt
+                                      ? new Date(r.receivedAt.seconds * 1000).toLocaleDateString()
+                                      : 'N/A'}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {openRequests.length === 0 && orderedRequests.length === 0 && backorderRequests.length === 0 && (
+                    <div className="table-container">
+                      <p className="muted" style={{ textAlign: 'center', padding: '2rem' }}>No active orders found.</p>
+                    </div>
+                  )}
+                </>
+              ) : (
+                // Vendor view - sectioned by status within each vendor
+                <>
+                  <div className="toolbar">
+                    <div className="filter-buttons">
+                      <label style={{ marginRight: '10px' }}>Filter by Vendor:</label>
+                      <select
+                        value={vendorFilter}
+                        onChange={(e) => setVendorFilter(e.target.value)}
+                        style={{ minWidth: '200px' }}
+                      >
+                        <option value="all">All Vendors</option>
+                        {Array.from(requestsByVendorAndStatus.entries())
+                          .sort((a, b) => a[1].vendorName.localeCompare(b[1].vendorName))
+                          .map(([vendorId, group]) => {
+                            const totalCount = group.open.length + group.ordered.length + group.backordered.length;
+                            return (
+                              <option key={vendorId} value={vendorId}>
+                                {group.vendorName} ({totalCount})
+                              </option>
+                            );
+                          })}
+                      </select>
+                    </div>
+                    <div className="toolbar-right">
+                      {selectedRequests.size > 0 && (
+                        <button className="btn btn-primary" onClick={() => openOrderPreview()}>
+                          📋 Generate Order ({selectedRequests.size})
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {requestsByVendorAndStatus.size === 0 ? (
+                    <div className="table-container">
+                      <p className="muted" style={{ textAlign: 'center', padding: '2rem' }}>No requests found.</p>
+                    </div>
+                  ) : (
+                    <>
+                      {/* OPEN ORDERS SECTION - Grouped by Vendor */}
+                      {Array.from(requestsByVendorAndStatus.entries())
+                        .filter(([vendorId, group]) => {
+                          if (vendorFilter !== 'all' && vendorId !== vendorFilter) return false;
+                          return group.open.length > 0;
+                        })
+                        .sort((a, b) => a[1].vendorName.localeCompare(b[1].vendorName))
+                        .length > 0 && (
+                        <div className="orders-section">
+                          <div className="orders-section-header section-open">
+                            <h3>📝 Open Orders</h3>
+                          </div>
+                          <div className="orders-section-content">
+                            {Array.from(requestsByVendorAndStatus.entries())
+                              .filter(([vendorId, group]) => {
+                                if (vendorFilter !== 'all' && vendorId !== vendorFilter) return false;
+                                return group.open.length > 0;
+                              })
+                              .sort((a, b) => a[1].vendorName.localeCompare(b[1].vendorName))
+                              .map(([vendorId, group]) => {
+                                const selectedCount = group.open.filter(r => selectedRequests.has(r.id)).length;
+                                
+                                return (
+                                  <div key={vendorId} style={{ marginBottom: '1.5rem' }}>
+                                    <div style={{ 
+                                      backgroundColor: '#f8f9fa', 
+                                      padding: '0.75rem 1rem', 
+                                      borderLeft: '4px solid #0066cc',
+                                      marginBottom: '0.5rem',
+                                      display: 'flex',
+                                      justifyContent: 'space-between',
+                                      alignItems: 'center'
+                                    }}>
+                                      <h4 style={{ margin: 0, color: '#0066cc', fontSize: '16px' }}>
+                                        🏢 {group.vendorName}
+                                        <span className="count-badge" style={{ marginLeft: '10px' }}>
+                                          {group.open.length}
+                                        </span>
+                                      </h4>
+                                      {vendorId !== 'unassigned' && vendorId !== 'unlisted' && selectedCount > 0 && (
+                                        <button
+                                          className="btn btn-primary btn-small"
+                                          onClick={() => openOrderPreview(vendorId, group.vendorName)}
+                                        >
+                                          📋 Generate Order ({selectedCount})
+                                        </button>
+                                      )}
+                                    </div>
+                                    <div className="table-container">
+                                      <table className="admin-table orders-table">
+                                        <thead>
+                                          <tr>
+                                            <th style={{ width: '30px' }}>
+                                              <input
+                                                type="checkbox"
+                                                checked={group.open.every(r => selectedRequests.has(r.id))}
+                                                onChange={(e) => {
+                                                  const next = new Set(selectedRequests);
+                                                  group.open.forEach(r => {
+                                                    if (e.target.checked) next.add(r.id);
+                                                    else next.delete(r.id);
+                                                  });
+                                                  setSelectedRequests(next);
+                                                }}
+                                              />
+                                            </th>
+                                            <th>Item / Requester</th>
+                                            <th>Qty / UOI</th>
+                                            <th>Vendor #</th>
+                                            <th>Price</th>
+                                            <th>Actions</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {group.open.map(r => renderOrderRow(r, ''))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* ORDERED & BACKORDERED SECTION - Combined, Backorder first */}
+                      {Array.from(requestsByVendorAndStatus.entries())
+                        .filter(([vendorId, group]) => {
+                          if (vendorFilter !== 'all' && vendorId !== vendorFilter) return false;
+                          return group.ordered.length > 0 || group.backordered.length > 0;
+                        })
+                        .length > 0 && (
+                        <div className="orders-section">
+                          <div className="orders-section-header" style={{ borderLeft: '4px solid #ff9800' }}>
+                            <h3>📦 Ordered & Backordered Items</h3>
+                          </div>
+                          <div className="orders-section-content">
+                            {Array.from(requestsByVendorAndStatus.entries())
+                              .filter(([vendorId, group]) => {
+                                if (vendorFilter !== 'all' && vendorId !== vendorFilter) return false;
+                                return group.ordered.length > 0 || group.backordered.length > 0;
+                              })
+                              .sort((a, b) => a[1].vendorName.localeCompare(b[1].vendorName))
+                              .map(([vendorId, group]) => {
+                                // Combine backordered (first) and ordered (second)
+                                const combinedItems = [...group.backordered, ...group.ordered];
+                                const selectedCount = combinedItems.filter(r => selectedRequests.has(r.id)).length;
+                                
+                                return (
+                                  <div key={vendorId} style={{ marginBottom: '1.5rem' }}>
+                                    <div style={{ 
+                                      backgroundColor: '#f8f9fa', 
+                                      padding: '0.75rem 1rem', 
+                                      borderLeft: '4px solid #ff9800',
+                                      marginBottom: '0.5rem',
+                                      display: 'flex',
+                                      justifyContent: 'space-between',
+                                      alignItems: 'center'
+                                    }}>
+                                      <h4 style={{ margin: 0, color: '#ff9800', fontSize: '16px' }}>
+                                        🏢 {group.vendorName}
+                                        <span className="count-badge" style={{ marginLeft: '10px' }}>
+                                          {combinedItems.length}
+                                        </span>
+                                        {group.backordered.length > 0 && (
+                                          <span style={{ marginLeft: '10px', fontSize: '14px', color: '#d32f2f' }}>
+                                            ⚠️ {group.backordered.length} backordered
+                                          </span>
+                                        )}
+                                      </h4>
+                                      {vendorId !== 'unassigned' && vendorId !== 'unlisted' && selectedCount > 0 && (
+                                        <button
+                                          className="btn btn-primary btn-small"
+                                          onClick={() => openOrderPreview(vendorId, group.vendorName)}
+                                        >
+                                          📋 Generate Order ({selectedCount})
+                                        </button>
+                                      )}
+                                    </div>
+                                    <div className="table-container">
+                                      <table className="admin-table orders-table">
+                                        <thead>
+                                          <tr>
+                                            <th style={{ width: '30px' }}>
+                                              <input
+                                                type="checkbox"
+                                                checked={combinedItems.every(r => selectedRequests.has(r.id))}
+                                                onChange={(e) => {
+                                                  const next = new Set(selectedRequests);
+                                                  combinedItems.forEach(r => {
+                                                    if (e.target.checked) next.add(r.id);
+                                                    else next.delete(r.id);
+                                                  });
+                                                  setSelectedRequests(next);
+                                                }}
+                                              />
+                                            </th>
+                                            <th>Item / Requester</th>
+                                            <th>Qty / UOI</th>
+                                            <th>Vendor #</th>
+                                            <th>Price</th>
+                                            <th>Actions</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {combinedItems.map(r => {
+                                            const rowClass = r.status === 'Backordered' ? 'row-backordered' : 'row-ordered';
+                                            return renderOrderRow(r, rowClass);
+                                          })}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* HISTORY SECTION - Collapsible */}
+                      {(() => {
+                        const allHistory = Array.from(requestsByVendorAndStatus.entries())
+                          .filter(([vendorId, group]) => {
+                            if (vendorFilter !== 'all' && vendorId !== vendorFilter) return false;
+                            return group.history.length > 0;
+                          })
+                          .flatMap(([, group]) => 
+                            group.history.map(r => ({ ...r, vendorName: group.vendorName }))
+                          )
+                          .sort((a, b) => {
+                            const aDate = a.receivedAt && typeof a.receivedAt === 'object' && 'seconds' in a.receivedAt
+                              ? a.receivedAt.seconds
+                              : 0;
+                            const bDate = b.receivedAt && typeof b.receivedAt === 'object' && 'seconds' in b.receivedAt
+                              ? b.receivedAt.seconds
+                              : 0;
+                            return bDate - aDate; // Most recent first
+                          });
+                        
+                        return allHistory.length > 0 && (
+                          <div className="orders-section">
+                            <div 
+                              className="orders-section-header section-history clickable"
+                              onClick={() => setExpandHistorySection(!expandHistorySection)}
+                            >
+                              <h3>
+                                📋 History
+                                <span className="count-badge">{allHistory.length}</span>
+                              </h3>
+                              <span className="expand-icon">{expandHistorySection ? '▼' : '▶'}</span>
+                            </div>
+                            {expandHistorySection && (
+                              <div className="orders-section-content">
+                                <div className="table-container">
+                                  <table className="admin-table">
+                                    <thead>
+                                      <tr>
+                                        <th>Item / Requester</th>
+                                        <th>Vendor</th>
+                                        <th>Qty</th>
+                                        <th>Status</th>
+                                        <th>Date Received</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {allHistory.map(r => (
+                                        <tr key={r.id}>
+                                          <td>
+                                            <strong>{getItemName(r)}</strong>
+                                            <br /><span className="muted">{r.requesterEmail || ''}</span>
+                                          </td>
+                                          <td>{r.vendorName}</td>
+                                          <td>{r.qty || r.quantity || ''} {r.unit || ''}</td>
+                                          <td><span className={`status-badge status-${(r.status || '').toLowerCase()}`}>{r.status}</span></td>
+                                          <td>{r.receivedAt && typeof r.receivedAt === 'object' && 'seconds' in r.receivedAt
+                                            ? new Date(r.receivedAt.seconds * 1000).toLocaleDateString()
+                                            : 'N/A'}</td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </>
+                  )}
+                </>
               )}
             </div>
           )}
@@ -2220,14 +2502,19 @@ export const AdminPage = () => {
             </div>
             <div className="modal-footer order-preview-footer">
               <div className="order-actions-left">
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginRight: '16px' }}>
+                  <input 
+                    type="checkbox" 
+                    checked={includePricing} 
+                    onChange={(e) => setIncludePricing(e.target.checked)}
+                  />
+                  <span>Include Pricing</span>
+                </label>
                 <button className="btn btn-success" onClick={handleMarkOrdered}>
                   ✓ Mark as Ordered
                 </button>
               </div>
               <div className="order-actions-right">
-                <button className="btn" onClick={handleCopyOrder}>
-                  📋 Copy
-                </button>
                 <button className="btn" onClick={handlePrintOrder}>
                   🖨️ Print
                 </button>

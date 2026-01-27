@@ -255,7 +255,7 @@ export const ExpiryPage = () => {
     });
   };
 
-  const handleSaveNewItem = async () => {
+  const handleSaveNewItem = async (closeAfter: boolean = false) => {
     // Validation
     if (!newItem.isCustom && !newItem.catalogId) {
       alert('Please select an item from the catalog');
@@ -320,8 +320,21 @@ export const ExpiryPage = () => {
 
     try {
       await addDoc(collection(db, 'inventory'), payload);
-      handleCloseAddModal();
-      alert('Item added successfully!');
+      setNewItem(prev => ({
+        catalogId: '',
+        customItemName: '',
+        unitId: prev.unitId,
+        compartment: prev.compartment,
+        expiryDate: '',
+        quantity: 1,
+        note: '',
+        isCustom: prev.isCustom
+      }));
+      setItemSearchTerm('');
+      setItemSearchFocused(false);
+      if (closeAfter) {
+        handleCloseAddModal();
+      }
     } catch (error) {
       console.error('Error adding item:', error);
       alert('Failed to add item: ' + (error as Error).message);
@@ -352,7 +365,7 @@ export const ExpiryPage = () => {
       <div className="page-header">
         <h1>Expiring Supplies</h1>
         <p className="page-subtitle">
-          Monitoring expiration dates. Highlight upcoming expirations in pink or circle them in red, and record them here.
+          Monitoring expiration dates. Highlight upcoming expirations in pink or circle them in red 90 days out, and record them here.
         </p>
       </div>
 
@@ -764,8 +777,9 @@ export const ExpiryPage = () => {
             </div>
 
             <div className="modal-footer">
-              <button className="btn btn-cancel" onClick={handleCloseAddModal}>Cancel</button>
-              <button className="btn btn-primary" onClick={handleSaveNewItem}>Save Item</button>
+              <button className="btn btn-cancel" onClick={handleCloseAddModal}>Close</button>
+              <button className="btn btn-save" onClick={() => handleSaveNewItem(true)}>Save & Close</button>
+              <button className="btn btn-primary" onClick={() => handleSaveNewItem(false)}>Save Item</button>
             </div>
           </div>
         </div>

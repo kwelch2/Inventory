@@ -281,6 +281,85 @@
   background: #f9f9f9;
 }
 
+/* Row coloring for order statuses */
+.admin-table tbody tr.row-ordered {
+  background-color: #fff9e6;
+}
+
+.admin-table tbody tr.row-ordered:hover {
+  background-color: #fff4d6;
+}
+
+.admin-table tbody tr.row-backordered {
+  background-color: #ffe6e6;
+}
+
+.admin-table tbody tr.row-backordered:hover {
+  background-color: #ffd6d6;
+}
+
+/* Section headers */
+.orders-section {
+  margin-bottom: 2rem;
+}
+
+.orders-section-header {
+  background: #f5f5f5;
+  padding: 0.75rem 1rem;
+  border-left: 4px solid #0066cc;
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  user-select: none;
+}
+
+.orders-section-header.clickable:hover {
+  background: #eeeeee;
+}
+
+.orders-section-header h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  color: #333;
+}
+
+.orders-section-header .count-badge {
+  background: #0066cc;
+  color: white;
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  margin-left: 0.5rem;
+}
+
+.orders-section-header .expand-icon {
+  font-size: 1.2rem;
+  color: #666;
+}
+
+.orders-section-header.section-open {
+  border-left-color: #4CAF50;
+}
+
+.orders-section-header.section-ordered {
+  border-left-color: #FF9800;
+}
+
+.orders-section-header.section-backordered {
+  border-left-color: #f44336;
+}
+
+.orders-section-header.section-history {
+  border-left-color: #9e9e9e;
+}
+
+.orders-section-content {
+  margin-bottom: 1.5rem;
+}
+
 .status-badge {
   display: inline-block;
   padding: 0.25rem 0.75rem;
