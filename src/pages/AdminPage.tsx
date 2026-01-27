@@ -4,7 +4,7 @@ import { doc, updateDoc, addDoc, collection, deleteDoc, serverTimestamp } from '
 import { db } from '../config/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useInventoryData } from '../hooks/useInventoryData';
-import type { CatalogItem, Vendor, Category, Compartment } from '../types';
+import type { CatalogItem, Vendor, Category } from '../types';
 import './AdminPage.css';
 
 type AdminTab = 'overview' | 'catalog' | 'vendors' | 'categories' | 'compartments' | 'requests';
