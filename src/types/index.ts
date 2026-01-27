@@ -19,7 +19,8 @@ export interface CatalogItem {
 
 export interface VendorPrice {
   id?: string;
-  itemId: string;
+  catalogId: string;  // Links to CatalogItem.catalogId field
+  itemId?: string;    // Legacy field, prefer catalogId
   vendorId: string;
   vendorOrderNumber?: string;
   unitPrice?: number;
@@ -48,11 +49,13 @@ export interface OrderRequest {
   catalogId?: string; // Primary field for catalog items
   itemId?: string; // Legacy support
   otherItemName?: string; // For unlisted items
-  quantity: string;
+  quantity?: string;
   qty?: string; // Alternative quantity field
+  unit?: string; // Unit of measure (Box, Each, etc.)
   status?: 'Open' | 'Ordered' | 'Backordered' | 'Received' | 'Cancelled' | 'Completed' | 'Closed';
   vendorId?: string;
   vendorOverride?: string;
+  overrideVendorId?: string; // Override vendor selection
   notes?: string;
   receivedAt?: Date | { seconds: number; nanoseconds: number };
   createdAt?: Date | { seconds: number; nanoseconds: number };
