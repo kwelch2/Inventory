@@ -4,10 +4,10 @@ import { doc, updateDoc, addDoc, collection, deleteDoc, serverTimestamp } from '
 import { db } from '../config/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useInventoryData } from '../hooks/useInventoryData';
-import type { CatalogItem, Vendor, Category } from '../types';
+import type { CatalogItem, Vendor, Category, Compartment } from '../types';
 import './AdminPage.css';
 
-type AdminTab = 'overview' | 'catalog' | 'vendors' | 'categories' | 'requests';
+type AdminTab = 'overview' | 'catalog' | 'vendors' | 'categories' | 'compartments' | 'requests';
 
 interface FormData {
   itemName?: string;
@@ -29,7 +29,7 @@ interface FormData {
 
 export const AdminPage = () => {
   const { user, loading } = useAuth();
-  const { catalog, vendors, categories, requests, loading: dataLoading } = useInventoryData();
+  const { catalog, vendors, categories, compartments, requests, loading: dataLoading } = useInventoryData();
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingItem, setEditingItem] = useState<CatalogItem | Vendor | Category | null>(null);
@@ -152,6 +152,33 @@ export const AdminPage = () => {
     }
   };
 
+  const handleAddCompartment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await addDoc(collection(db, 'compartments'), {
+        name: formData.name,
+        createdAt: serverTimestamp()
+      });
+      setFormData({});
+      setShowAddForm(false);
+      alert('Compartment added successfully!');
+    } catch (error) {
+      console.error('Error adding compartment:', error);
+      alert('Failed to add compartment');
+    }
+  };
+
+  const handleDeleteCompartment = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this compartment?')) return;
+    try {
+      await deleteDoc(doc(db, 'compartments', id));
+      alert('Compartment deleted successfully!');
+    } catch (error) {
+      console.error('Error deleting compartment:', error);
+      alert('Failed to delete compartment');
+    }
+  };
+
   const startEdit = (item: CatalogItem | Vendor | Category) => {
     setEditingItem(item);
     // Convert item to FormData type - all values are compatible
@@ -170,7 +197,8 @@ export const AdminPage = () => {
     activeItems: catalog.filter(item => item.active !== false).length,
     totalVendors: vendors.length,
     openRequests: requests.filter(r => r.status === 'Open').length,
-    totalCategories: categories.length
+    totalCategories: categories.length,
+    totalCompartments: compartments.length
   };
 
   return (
@@ -204,6 +232,12 @@ export const AdminPage = () => {
           onClick={() => setActiveTab('categories')}
         >
           Categories
+        </button>
+        <button 
+          className={`tab-btn ${activeTab === 'compartments' ? 'active' : ''}`}
+          onClick={() => setActiveTab('compartments')}
+        >
+          Compartments
         </button>
         <button 
           className={`tab-btn ${activeTab === 'requests' ? 'active' : ''}`}
@@ -265,6 +299,17 @@ export const AdminPage = () => {
                   <div className="stat-item">
                     <span className="stat-value">{stats.totalCategories}</span>
                     <span className="stat-label">Categories</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="admin-card">
+                <h2>📦 Compartments</h2>
+                <p>Storage compartments</p>
+                <div className="stats">
+                  <div className="stat-item">
+                    <span className="stat-value">{stats.totalCompartments}</span>
+                    <span className="stat-label">Compartments</span>
                   </div>
                 </div>
               </div>
@@ -547,6 +592,56 @@ export const AdminPage = () => {
                   <div key={category.id} className="category-card">
                     <h3>{category.name}</h3>
                     <p>{catalog.filter(item => item.category === category.id).length} items</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'compartments' && (
+            <div className="content-card">
+              <div className="section-header">
+                <h2>Compartment Management</h2>
+                <button 
+                  className="btn btn-primary"
+                  onClick={() => {
+                    setShowAddForm(!showAddForm);
+                    setFormData({});
+                  }}
+                >
+                  {showAddForm ? 'Cancel' : '+ Add Compartment'}
+                </button>
+              </div>
+
+              {showAddForm && (
+                <form onSubmit={handleAddCompartment} className="admin-form">
+                  <h3>Add New Compartment</h3>
+                  <div className="form-group">
+                    <label>Compartment Name *</label>
+                    <input
+                      type="text"
+                      name="name"
+                      value={String(formData.name || '')}
+                      onChange={handleFormChange}
+                      placeholder="e.g., Airway Bag, Jump Bag, etc."
+                      required
+                    />
+                  </div>
+                  <button type="submit" className="btn btn-primary">Add Compartment</button>
+                </form>
+              )}
+
+              <div className="categories-grid">
+                {compartments.sort((a, b) => a.name.localeCompare(b.name)).map(compartment => (
+                  <div key={compartment.id} className="category-card">
+                    <h3>{compartment.name}</h3>
+                    <button 
+                      className="btn btn-delete"
+                      onClick={() => handleDeleteCompartment(compartment.id)}
+                      style={{ marginTop: '0.5rem' }}
+                    >
+                      Delete
+                    </button>
                   </div>
                 ))}
               </div>

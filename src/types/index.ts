@@ -45,13 +45,20 @@ export interface Vendor {
 
 export interface OrderRequest {
   id: string;
-  itemId: string;
+  catalogId?: string; // Primary field for catalog items
+  itemId?: string; // Legacy support
+  otherItemName?: string; // For unlisted items
   quantity: string;
-  status: 'Open' | 'Ordered' | 'Backordered' | 'Received' | 'Cancelled';
+  qty?: string; // Alternative quantity field
+  status?: 'Open' | 'Ordered' | 'Backordered' | 'Received' | 'Cancelled' | 'Completed' | 'Closed';
   vendorId?: string;
   vendorOverride?: string;
+  notes?: string;
+  receivedAt?: Date | { seconds: number; nanoseconds: number };
   createdAt?: Date | { seconds: number; nanoseconds: number };
   updatedAt?: Date | { seconds: number; nanoseconds: number };
+  lastOrdered?: Date | { seconds: number; nanoseconds: number };
+  requesterEmail?: string;
 }
 
 export interface Category {
@@ -67,6 +74,20 @@ export interface Unit {
 export interface Compartment {
   id: string;
   name: string;
+}
+
+export interface InventoryItem {
+  id: string;
+  catalogId?: string;
+  itemName?: string; // For custom/unlisted items
+  unitId: string;
+  compartment?: string;
+  expiryDate?: Date | { seconds: number; nanoseconds: number };
+  quantity?: number;
+  status?: 'Pending' | 'OK' | 'Replaced' | '';
+  crewStatus?: string; // Note field
+  createdAt?: Date | { seconds: number; nanoseconds: number };
+  updatedAt?: Date | { seconds: number; nanoseconds: number };
 }
 
 export interface UserProfile {

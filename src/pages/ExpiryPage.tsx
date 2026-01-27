@@ -1,66 +1,120 @@
 import { useState, useMemo } from 'react';
 import { useInventoryData } from '../hooks/useInventoryData';
-import type { CatalogItem } from '../types';
+import { db } from '../config/firebase';
+import { doc, updateDoc, serverTimestamp, collection, addDoc } from 'firebase/firestore';
+import type { InventoryItem } from '../types';
 import './CommonPages.css';
 import './ExpiryPage.css';
 
-type ExpiryFilter = 'All' | 'Expired' | 'Next7Days' | 'Next30Days' | 'Next90Days';
+type ExpiryFilter = '30' | '60' | '90' | 'ALL';
 
 export const ExpiryPage = () => {
-  const { catalog, loading } = useInventoryData();
-  const [expiryFilter, setExpiryFilter] = useState<ExpiryFilter>('All');
+  const { catalog, inventory, units, compartments, loading } = useInventoryData();
+  const [rangeFilter, setRangeFilter] = useState<ExpiryFilter>('90');
+  const [unitFilter, setUnitFilter] = useState<string>('ALL');
   const [searchTerm, setSearchTerm] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editValues, setEditValues] = useState<{ unitId: string; compartment: string; quantity: number }>({ unitId: '', compartment: '', quantity: 1 });
+  
+  // Add Item Modal State
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [itemSearchTerm, setItemSearchTerm] = useState('');
+  const [itemSearchFocused, setItemSearchFocused] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [newItem, setNewItem] = useState({
+    catalogId: '',
+    customItemName: '',
+    unitId: '',
+    compartment: '',
+    expiryDate: '',
+    quantity: 1,
+    note: '',
+    isCustom: false
+  });
 
-  const getExpirationDate = (item: CatalogItem): Date | null => {
-    if (!item.expirationDate) return null;
+  const getExpiryDate = (item: InventoryItem): Date | null => {
+    if (!item.expiryDate) return null;
     
-    if (typeof item.expirationDate === 'object' && 'seconds' in item.expirationDate) {
-      return new Date(item.expirationDate.seconds * 1000);
+    if (typeof item.expiryDate === 'object' && 'seconds' in item.expiryDate) {
+      return new Date(item.expiryDate.seconds * 1000);
     }
     
-    return item.expirationDate instanceof Date ? item.expirationDate : null;
+    return item.expiryDate instanceof Date ? item.expiryDate : null;
   };
 
   const getDaysUntilExpiry = (expiryDate: Date): number => {
     const now = new Date();
+    now.setHours(0, 0, 0, 0);
     const diffTime = expiryDate.getTime() - now.getTime();
     return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   };
 
-  const getExpiryStatus = (daysUntilExpiry: number): string => {
-    if (daysUntilExpiry < 0) return 'expired';
-    if (daysUntilExpiry <= 7) return 'critical';
-    if (daysUntilExpiry <= 30) return 'warning';
-    if (daysUntilExpiry <= 90) return 'caution';
-    return 'good';
+  // Helper to generate search variations for terms like "3ml" -> ["3ml", "3 ml"]
+  const getSearchVariations = (term: string): string[] => {
+    const variations = [term];
+    // Check if term is like "3ml", "20g", etc. (number followed by letters)
+    const numberLetterPattern = /^(\d+)([a-z]+)$/i;
+    const match = term.match(numberLetterPattern);
+    if (match) {
+      // Add version with space: "3ml" -> "3 ml"
+      variations.push(`${match[1]} ${match[2]}`);
+    }
+    // Check if term is like "3 ml" (number space letters)
+    const spacedPattern = /^(\d+)\s+([a-z]+)$/i;
+    const spacedMatch = term.match(spacedPattern);
+    if (spacedMatch) {
+      // Add version without space: "3 ml" -> "3ml"
+      variations.push(`${spacedMatch[1]}${spacedMatch[2]}`);
+    }
+    return variations;
   };
 
-  const filteredItems = useMemo(() => {
-    let items = catalog
-      .map(item => ({
-        ...item,
-        expirationDate: getExpirationDate(item),
-      }))
-      .filter(item => item.expirationDate !== null)
-      .map(item => ({
-        ...item,
-        daysUntilExpiry: getDaysUntilExpiry(item.expirationDate!),
-      }));
+  const getRowClass = (days: number): string => {
+    if (days <= 0) return 'bad';
+    if (days <= 30) return 'warn';
+    return '';
+  };
 
-    // Apply expiry filter
-    switch (expiryFilter) {
-      case 'Expired':
-        items = items.filter(item => item.daysUntilExpiry < 0);
-        break;
-      case 'Next7Days':
-        items = items.filter(item => item.daysUntilExpiry >= 0 && item.daysUntilExpiry <= 7);
-        break;
-      case 'Next30Days':
-        items = items.filter(item => item.daysUntilExpiry >= 0 && item.daysUntilExpiry <= 30);
-        break;
-      case 'Next90Days':
-        items = items.filter(item => item.daysUntilExpiry >= 0 && item.daysUntilExpiry <= 90);
-        break;
+  const catalogMap = useMemo(() => {
+    return new Map(catalog.map(item => [item.id, item]));
+  }, [catalog]);
+
+  const unitsMap = useMemo(() => {
+    return new Map(units.map(unit => [unit.id, unit]));
+  }, [units]);
+
+  const filteredItems = useMemo(() => {
+    let items = inventory
+      .filter(item => {
+        const status = (item.status || '').toLowerCase();
+        return status !== 'ok' && status !== 'replaced';
+      })
+      .map(item => {
+        const expiryDate = getExpiryDate(item);
+        if (!expiryDate) return null;
+        
+        const daysToExpire = getDaysUntilExpiry(expiryDate);
+        const catalogItem = item.catalogId ? catalogMap.get(item.catalogId) : null;
+        const itemName = catalogItem ? catalogItem.itemName : (item.itemName || 'Unknown Item');
+        const unit = unitsMap.get(item.unitId);
+        
+        return {
+          ...item,
+          expiryDate,
+          daysToExpire,
+          itemName,
+          unitName: unit?.name || 'Unknown',
+        };
+      })
+      .filter((item): item is NonNullable<typeof item> => item !== null);
+
+    // Apply range filter
+    const withinDays = rangeFilter === 'ALL' ? 99999 : parseInt(rangeFilter, 10);
+    items = items.filter(item => item.daysToExpire <= withinDays);
+
+    // Apply unit filter
+    if (unitFilter !== 'ALL') {
+      items = items.filter(item => item.unitId === unitFilter);
     }
 
     // Apply search filter
@@ -68,42 +122,221 @@ export const ExpiryPage = () => {
       const search = searchTerm.toLowerCase();
       items = items.filter(item => 
         item.itemName.toLowerCase().includes(search) ||
-        item.itemRef?.toLowerCase().includes(search) ||
-        item.lotNumber?.toLowerCase().includes(search)
+        (item.compartment || '').toLowerCase().includes(search)
       );
     }
 
-    // Sort by expiration date (earliest first)
-    items.sort((a, b) => a.daysUntilExpiry - b.daysUntilExpiry);
+    // Sort by days to expire, then by unit, then by item name
+    items.sort((a, b) => {
+      if (a.daysToExpire !== b.daysToExpire) {
+        return a.daysToExpire - b.daysToExpire;
+      }
+      if (a.unitName !== b.unitName) {
+        return a.unitName.localeCompare(b.unitName);
+      }
+      return a.itemName.localeCompare(b.itemName);
+    });
 
     return items;
-  }, [catalog, expiryFilter, searchTerm]);
+  }, [inventory, catalogMap, unitsMap, rangeFilter, unitFilter, searchTerm]);
 
-  const stats = useMemo(() => {
-    const itemsWithExpiry = catalog.filter(item => getExpirationDate(item) !== null);
-    const expiredCount = itemsWithExpiry.filter(item => {
-      const expDate = getExpirationDate(item);
-      return expDate && getDaysUntilExpiry(expDate) < 0;
-    }).length;
-    const next7DaysCount = itemsWithExpiry.filter(item => {
-      const expDate = getExpirationDate(item);
-      if (!expDate) return false;
-      const days = getDaysUntilExpiry(expDate);
-      return days >= 0 && days <= 7;
-    }).length;
-    const next30DaysCount = itemsWithExpiry.filter(item => {
-      const expDate = getExpirationDate(item);
-      if (!expDate) return false;
-      const days = getDaysUntilExpiry(expDate);
-      return days >= 0 && days <= 30;
-    }).length;
+  const historyItems = useMemo(() => {
+    return inventory
+      .filter(item => item.status === 'OK' || item.status === 'Replaced')
+      .map(item => {
+        const catalogItem = item.catalogId ? catalogMap.get(item.catalogId) : null;
+        const itemName = catalogItem ? catalogItem.itemName : (item.itemName || 'Unknown Item');
+        const unit = unitsMap.get(item.unitId);
+        const expiryDate = getExpiryDate(item);
+        
+        return {
+          ...item,
+          itemName,
+          unitName: unit?.name || 'Unknown',
+          expiryDate
+        };
+      })
+      .sort((a, b) => {
+        const aTime = a.updatedAt && typeof a.updatedAt === 'object' && 'seconds' in a.updatedAt 
+          ? a.updatedAt.seconds 
+          : 0;
+        const bTime = b.updatedAt && typeof b.updatedAt === 'object' && 'seconds' in b.updatedAt 
+          ? b.updatedAt.seconds 
+          : 0;
+        return bTime - aTime; // Most recent first
+      })
+      .slice(0, 50);
+  }, [inventory, catalogMap, unitsMap]);
 
-    return { expiredCount, next7DaysCount, next30DaysCount };
-  }, [catalog]);
+  const handleUpdateStatus = async (id: string, newStatus: 'Pending' | 'OK' | 'Replaced') => {
+    try {
+      await updateDoc(doc(db, 'inventory', id), {
+        status: newStatus,
+        updatedAt: serverTimestamp()
+      });
+    } catch (error) {
+      console.error('Error updating status:', error);
+      alert('Failed to update status');
+    }
+  };
 
-  const formatDate = (date: Date | null): string => {
-    if (!date) return 'N/A';
+  const handleStartEdit = (item: any) => {
+    setEditingId(item.id);
+    setEditValues({
+      unitId: item.unitId,
+      compartment: item.compartment || '',
+      quantity: item.quantity || 1
+    });
+  };
+
+  const handleCancelEdit = () => {
+    setEditingId(null);
+    setEditValues({ unitId: '', compartment: '', quantity: 1 });
+  };
+
+  const handleSaveEdit = async (id: string) => {
+    if (isNaN(editValues.quantity) || editValues.quantity < 0) {
+      alert('Please enter a valid quantity');
+      return;
+    }
+
+    try {
+      await updateDoc(doc(db, 'inventory', id), {
+        unitId: editValues.unitId,
+        compartment: editValues.compartment,
+        quantity: editValues.quantity,
+        updatedAt: serverTimestamp()
+      });
+      setEditingId(null);
+    } catch (error) {
+      console.error('Error updating item:', error);
+      alert('Failed to update item');
+    }
+  };
+
+  const formatDate = (date: Date): string => {
     return date.toLocaleDateString();
+  };
+
+  const formatDateTime = (timestamp: any): string => {
+    if (!timestamp) return 'N/A';
+    const date = timestamp.seconds ? new Date(timestamp.seconds * 1000) : new Date(timestamp);
+    return date.toLocaleString();
+  };
+
+  const handleOpenAddModal = () => {
+    setNewItem({
+      catalogId: '',
+      customItemName: '',
+      unitId: unitFilter !== 'ALL' ? unitFilter : '',
+      compartment: '',
+      expiryDate: '',
+      quantity: 1,
+      note: '',
+      isCustom: false
+    });
+    setItemSearchTerm('');
+    setShowAddModal(true);
+  };
+
+  const handleCloseAddModal = () => {
+    setShowAddModal(false);
+    setItemSearchTerm('');
+    setItemSearchFocused(false);
+    setNewItem({
+      catalogId: '',
+      customItemName: '',
+      unitId: '',
+      compartment: '',
+      expiryDate: '',
+      quantity: 1,
+      note: '',
+      isCustom: false
+    });
+  };
+
+  const handleSaveNewItem = async () => {
+    // Validation
+    if (!newItem.isCustom && !newItem.catalogId) {
+      alert('Please select an item from the catalog');
+      return;
+    }
+    if (newItem.isCustom && !newItem.customItemName.trim()) {
+      alert('Please enter a custom item name');
+      return;
+    }
+    if (!newItem.unitId) {
+      alert('Please select a unit');
+      return;
+    }
+    if (!newItem.expiryDate) {
+      alert('Please select an expiry date');
+      return;
+    }
+    if (isNaN(newItem.quantity) || newItem.quantity < 1) {
+      alert('Please enter a valid quantity');
+      return;
+    }
+
+    // Check for duplicates
+    const expiryDateObj = new Date(newItem.expiryDate);
+    const isDuplicate = inventory.some(item => {
+      if (item.status === 'Replaced' || item.status === 'OK') return false;
+      
+      const matchesItem = newItem.isCustom 
+        ? item.itemName === newItem.customItemName
+        : item.catalogId === newItem.catalogId;
+      
+      if (!matchesItem || item.unitId !== newItem.unitId) return false;
+      
+      const itemExpiry = getExpiryDate(item);
+      if (!itemExpiry) return false;
+      
+      return itemExpiry.toDateString() === expiryDateObj.toDateString();
+    });
+
+    if (isDuplicate) {
+      alert('This item already exists with the same expiry date and unit. Please check the list.');
+      return;
+    }
+
+    // Prepare payload
+    const payload: any = {
+      unitId: newItem.unitId,
+      compartment: newItem.compartment.trim(),
+      expiryDate: expiryDateObj,
+      quantity: newItem.quantity,
+      status: '',
+      crewStatus: newItem.note.trim(),
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    };
+
+    if (newItem.isCustom) {
+      payload.itemName = newItem.customItemName.trim();
+    } else {
+      payload.catalogId = newItem.catalogId;
+    }
+
+    try {
+      await addDoc(collection(db, 'inventory'), payload);
+      handleCloseAddModal();
+      alert('Item added successfully!');
+    } catch (error) {
+      console.error('Error adding item:', error);
+      alert('Failed to add item: ' + (error as Error).message);
+    }
+  };
+
+  const getQuickExpiryDate = (monthsAhead: number): string => {
+    const date = new Date();
+    date.setMonth(date.getMonth() + monthsAhead);
+    // Set to last day of that month
+    date.setDate(0);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   };
 
   if (loading) {
@@ -118,94 +351,179 @@ export const ExpiryPage = () => {
     <div className="page-container">
       <div className="page-header">
         <h1>Expiring Supplies</h1>
-        <p className="page-subtitle">Monitor supplies approaching expiration dates</p>
-      </div>
-
-      <div className="stats-grid">
-        <div className="stat-card alert">
-          <span className="stat-value">{stats.expiredCount}</span>
-          <span className="stat-label">Expired Items</span>
-        </div>
-        <div className="stat-card warning">
-          <span className="stat-value">{stats.next7DaysCount}</span>
-          <span className="stat-label">Expiring in 7 Days</span>
-        </div>
-        <div className="stat-card caution">
-          <span className="stat-value">{stats.next30DaysCount}</span>
-          <span className="stat-label">Expiring in 30 Days</span>
-        </div>
+        <p className="page-subtitle">
+          Monitoring expiration dates. Highlight upcoming expirations in pink or circle them in red, and record them here.
+        </p>
       </div>
 
       <div className="controls-section">
-        <div className="filter-buttons">
-          {(['All', 'Expired', 'Next7Days', 'Next30Days', 'Next90Days'] as ExpiryFilter[]).map(filter => (
-            <button
-              key={filter}
-              className={`filter-btn ${expiryFilter === filter ? 'active' : ''}`}
-              onClick={() => setExpiryFilter(filter)}
-            >
-              {filter === 'Next7Days' ? 'Next 7 Days' : 
-               filter === 'Next30Days' ? 'Next 30 Days' :
-               filter === 'Next90Days' ? 'Next 90 Days' : filter}
-            </button>
-          ))}
+        <div className="control-group">
+          <label htmlFor="rangeFilter">Window</label>
+          <select
+            id="rangeFilter"
+            value={rangeFilter}
+            onChange={(e) => setRangeFilter(e.target.value as ExpiryFilter)}
+          >
+            <option value="30">30 days</option>
+            <option value="60">60 days</option>
+            <option value="90">90 days</option>
+            <option value="ALL">All</option>
+          </select>
         </div>
-        
-        <div className="search-box">
+
+        <div className="control-group">
+          <label htmlFor="unitFilter">Unit</label>
+          <select
+            id="unitFilter"
+            value={unitFilter}
+            onChange={(e) => setUnitFilter(e.target.value)}
+          >
+            <option value="ALL">ALL</option>
+            {units.map(unit => (
+              <option key={unit.id} value={unit.id}>{unit.name}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="control-group search-group">
+          <label htmlFor="itemSearch">Search Items</label>
           <input
+            id="itemSearch"
             type="text"
-            placeholder="Search items..."
+            placeholder="Search item, compartment..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
+
+        <div className="count-display">
+          {filteredItems.length} item(s)
+        </div>
+
+        <button className="btn btn-add-item" onClick={handleOpenAddModal}>
+          + Add Item
+        </button>
       </div>
 
       <div className="content-card">
         {filteredItems.length === 0 ? (
-          <p className="muted">
-            {catalog.filter(item => getExpirationDate(item) !== null).length === 0 
-              ? 'No items with expiration dates found in inventory.'
-              : 'No items match the selected filter.'}
-          </p>
+          <p className="muted">No expiring items match your criteria.</p>
         ) : (
           <div className="table-container">
             <table className="expiry-table">
               <thead>
                 <tr>
-                  <th>Item Name</th>
-                  <th>Reference</th>
-                  <th>Lot Number</th>
-                  <th>Quantity</th>
-                  <th>Expiration Date</th>
-                  <th>Days Until Expiry</th>
-                  <th>Status</th>
+                  <th>Item</th>
+                  <th>Unit</th>
+                  <th>Compartment</th>
+                  <th>Qty</th>
+                  <th>Expiry</th>
+                  <th>Days Left</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredItems.map(item => {
-                  const status = getExpiryStatus(item.daysUntilExpiry);
+                  const isEditing = editingId === item.id;
+                  const rowClass = getRowClass(item.daysToExpire);
+                  
                   return (
-                    <tr key={item.id} className={`expiry-row-${status}`}>
+                    <tr key={item.id} className={rowClass}>
                       <td>{item.itemName}</td>
-                      <td>{item.itemRef || 'N/A'}</td>
-                      <td>{item.lotNumber || 'N/A'}</td>
-                      <td>{item.quantity || 'N/A'}</td>
-                      <td>{formatDate(item.expirationDate)}</td>
                       <td>
-                        <span className={`days-badge days-${status}`}>
-                          {item.daysUntilExpiry < 0 
-                            ? `${Math.abs(item.daysUntilExpiry)} days ago` 
-                            : `${item.daysUntilExpiry} days`}
-                        </span>
+                        {isEditing ? (
+                          <select
+                            value={editValues.unitId}
+                            onChange={(e) => setEditValues({ ...editValues, unitId: e.target.value })}
+                          >
+                            {units.map(unit => (
+                              <option key={unit.id} value={unit.id}>{unit.name}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          item.unitName
+                        )}
                       </td>
                       <td>
-                        <span className={`status-badge status-${status}`}>
-                          {item.daysUntilExpiry < 0 ? 'EXPIRED' :
-                           item.daysUntilExpiry <= 7 ? 'CRITICAL' :
-                           item.daysUntilExpiry <= 30 ? 'WARNING' :
-                           item.daysUntilExpiry <= 90 ? 'CAUTION' : 'GOOD'}
+                        {isEditing ? (
+                          <select
+                            value={editValues.compartment}
+                            onChange={(e) => setEditValues({ ...editValues, compartment: e.target.value })}
+                          >
+                            <option value="">Select...</option>
+                            {compartments.map(comp => (
+                              <option key={comp.id} value={comp.name}>{comp.name}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          item.compartment || 'N/A'
+                        )}
+                      </td>
+                      <td>
+                        {isEditing ? (
+                          <input
+                            type="number"
+                            min="1"
+                            value={editValues.quantity}
+                            onChange={(e) => setEditValues({ ...editValues, quantity: parseInt(e.target.value, 10) })}
+                            style={{ width: '60px' }}
+                          />
+                        ) : (
+                          item.quantity || 'N/A'
+                        )}
+                      </td>
+                      <td>{formatDate(item.expiryDate)}</td>
+                      <td className="days-cell">
+                        <span className={`days-badge ${rowClass}`}>
+                          {item.daysToExpire < 0 
+                            ? `${Math.abs(item.daysToExpire)} days ago` 
+                            : `${item.daysToExpire} days`}
                         </span>
+                      </td>
+                      <td className="actions-cell">
+                        {isEditing ? (
+                          <div className="action-buttons">
+                            <button
+                              className="btn btn-save"
+                              onClick={() => handleSaveEdit(item.id)}
+                            >
+                              Save
+                            </button>
+                            <button
+                              className="btn btn-cancel"
+                              onClick={handleCancelEdit}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="action-buttons">
+                            <button
+                              className="btn btn-edit"
+                              onClick={() => handleStartEdit(item)}
+                            >
+                              Edit
+                            </button>
+                            <button
+                              className={`btn btn-pending ${item.status === 'Pending' ? 'active' : ''}`}
+                              onClick={() => handleUpdateStatus(item.id, 'Pending')}
+                            >
+                              Pending
+                            </button>
+                            <button
+                              className="btn btn-ok"
+                              onClick={() => handleUpdateStatus(item.id, 'OK')}
+                            >
+                              OK
+                            </button>
+                            <button
+                              className="btn btn-replaced"
+                              onClick={() => handleUpdateStatus(item.id, 'Replaced')}
+                            >
+                              Replaced
+                            </button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   );
@@ -215,6 +533,244 @@ export const ExpiryPage = () => {
           </div>
         )}
       </div>
+
+      {/* History Section */}
+      <div className="content-card" style={{ marginTop: '1rem' }}>
+        <details open={showHistory} onToggle={(e) => setShowHistory((e.target as HTMLDetailsElement).open)}>
+          <summary style={{ cursor: 'pointer', fontWeight: 'bold', fontSize: '1.1rem', padding: '0.5rem 0' }}>
+            Recently Replaced / OK'd
+          </summary>
+          <div style={{ marginTop: '1rem' }}>
+            {historyItems.length === 0 ? (
+              <p className="muted">No items have been marked OK or Replaced recently.</p>
+            ) : (
+              <div className="table-container">
+                <table className="expiry-table history-table">
+                  <thead>
+                    <tr>
+                      <th>Item</th>
+                      <th>Unit</th>
+                      <th>Compartment</th>
+                      <th>Expiry Date</th>
+                      <th>Status</th>
+                      <th>Updated</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {historyItems.map(item => (
+                      <tr key={item.id}>
+                        <td>{item.itemName}</td>
+                        <td>{item.unitName}</td>
+                        <td>{item.compartment || 'N/A'}</td>
+                        <td>{item.expiryDate ? formatDate(item.expiryDate) : 'N/A'}</td>
+                        <td>
+                          <span className={`status-badge ${item.status === 'OK' ? 'status-ok' : 'status-replaced'}`}>
+                            {item.status}
+                          </span>
+                        </td>
+                        <td>{formatDateTime(item.updatedAt)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </details>
+      </div>
+
+      {/* Add Item Modal */}
+      {showAddModal && (
+        <div className="modal-overlay" onClick={handleCloseAddModal}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Add Inventory Item</h3>
+              <button className="close-btn" onClick={handleCloseAddModal}>&times;</button>
+            </div>
+
+            <div className="modal-body">
+              <div className="form-group">
+                <div className="form-row space-between">
+                  <label>Item Name</label>
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={newItem.isCustom}
+                      onChange={(e) => setNewItem({ ...newItem, isCustom: e.target.checked, catalogId: '', customItemName: '' })}
+                    />
+                    Not in catalog?
+                  </label>
+                </div>
+                
+                {newItem.isCustom ? (
+                  <input
+                    type="text"
+                    placeholder="Enter custom item name..."
+                    value={newItem.customItemName}
+                    onChange={(e) => setNewItem({ ...newItem, customItemName: e.target.value })}
+                  />
+                ) : (
+                  <div className="searchable-select">
+                    <input
+                      type="text"
+                      placeholder="Search items..."
+                      value={itemSearchTerm}
+                      onChange={(e) => setItemSearchTerm(e.target.value)}
+                      onFocus={() => setItemSearchFocused(true)}
+                      onBlur={() => setTimeout(() => setItemSearchFocused(false), 200)}
+                      className="search-input"
+                    />
+                    {(itemSearchFocused || itemSearchTerm) && (
+                      <div className="select-list">
+                        {catalog
+                          .filter(item => {
+                            if (!itemSearchTerm) return true;
+                            
+                            const searchTerms = itemSearchTerm.toLowerCase().split(' ').filter(term => term.length > 0);
+                            const itemNameLower = item.itemName.toLowerCase();
+                            const altNamesLower = (item.altNames || []).map(alt => alt.toLowerCase());
+                            
+                            // Check if all search terms are found in item name or alt names
+                            return searchTerms.every(term => {
+                              // Get all variations of the search term (e.g., "3ml" and "3 ml")
+                              const variations = getSearchVariations(term);
+                              
+                              // Check if any variation matches in item name
+                              const matchesName = variations.some(variation => itemNameLower.includes(variation));
+                              if (matchesName) return true;
+                              
+                              // Check if any variation matches in alt names
+                              return altNamesLower.some(altName => 
+                                variations.some(variation => altName.includes(variation))
+                              );
+                            });
+                          })
+                          .map(item => (
+                            <div
+                              key={item.id}
+                              className={`select-item ${newItem.catalogId === item.id ? 'selected' : ''}`}
+                              onClick={() => {
+                                setNewItem({ ...newItem, catalogId: item.id });
+                                setItemSearchTerm(item.itemName);
+                                setItemSearchFocused(false);
+                              }}
+                            >
+                              {item.itemName}
+                              {item.altNames && item.altNames.length > 0 && (
+                                <span className="alt-names"> ({item.altNames.join(', ')})</span>
+                              )}
+                            </div>
+                          ))}
+                        {catalog.filter(item => {
+                          if (!itemSearchTerm) return true;
+                          const searchTerms = itemSearchTerm.toLowerCase().split(' ').filter(term => term.length > 0);
+                          const itemNameLower = item.itemName.toLowerCase();
+                          const altNamesLower = (item.altNames || []).map(alt => alt.toLowerCase());
+                          return searchTerms.every(term => {
+                            const variations = getSearchVariations(term);
+                            const matchesName = variations.some(variation => itemNameLower.includes(variation));
+                            if (matchesName) return true;
+                            return altNamesLower.some(altName => 
+                              variations.some(variation => altName.includes(variation))
+                            );
+                          });
+                        }).length === 0 && (
+                          <div className="select-item-empty">No items found</div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Unit</label>
+                  <select
+                    value={newItem.unitId}
+                    onChange={(e) => setNewItem({ ...newItem, unitId: e.target.value })}
+                  >
+                    <option value="">Select...</option>
+                    {units.map(unit => (
+                      <option key={unit.id} value={unit.id}>{unit.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label>Compartment</label>
+                  <select
+                    value={newItem.compartment}
+                    onChange={(e) => setNewItem({ ...newItem, compartment: e.target.value })}
+                  >
+                    <option value="">Select...</option>
+                    {compartments.map(comp => (
+                      <option key={comp.id} value={comp.name}>{comp.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label>Expiry Date</label>
+                <div className="expiry-chips">
+                  {[1, 2, 3].map(months => {
+                    const date = new Date();
+                    date.setMonth(date.getMonth() + months);
+                    const monthName = date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+                    const dateValue = getQuickExpiryDate(months);
+                    
+                    return (
+                      <button
+                        key={months}
+                        type="button"
+                        className={`chip-btn ${newItem.expiryDate === dateValue ? 'selected' : ''}`}
+                        onClick={() => setNewItem({ ...newItem, expiryDate: dateValue })}
+                      >
+                        {monthName}
+                      </button>
+                    );
+                  })}
+                </div>
+                <input
+                  type="date"
+                  value={newItem.expiryDate}
+                  onChange={(e) => setNewItem({ ...newItem, expiryDate: e.target.value })}
+                  style={{ marginTop: '0.5rem' }}
+                />
+              </div>
+
+              <div className="form-row">
+                <div className="form-group" style={{ flex: '0 0 100px' }}>
+                  <label>Qty</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={newItem.quantity}
+                    onChange={(e) => setNewItem({ ...newItem, quantity: parseInt(e.target.value, 10) || 1 })}
+                  />
+                </div>
+
+                <div className="form-group" style={{ flex: 1 }}>
+                  <label>Note (Optional)</label>
+                  <input
+                    type="text"
+                    placeholder="e.g., Broken seal check"
+                    value={newItem.note}
+                    onChange={(e) => setNewItem({ ...newItem, note: e.target.value })}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="modal-footer">
+              <button className="btn btn-cancel" onClick={handleCloseAddModal}>Cancel</button>
+              <button className="btn btn-primary" onClick={handleSaveNewItem}>Save Item</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+
