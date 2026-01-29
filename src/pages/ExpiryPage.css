@@ -219,13 +219,13 @@
 }
 
 .btn-save {
-  background: #0066cc;
-  color: white;
-  border-color: #0066cc;
+  background: #0066cc !important;
+  color: white !important;
+  border-color: #0066cc !important;
 }
 
 .btn-save:hover {
-  background: #0056b3;
+  background: #0056b3 !important;
 }
 
 .btn-cancel {

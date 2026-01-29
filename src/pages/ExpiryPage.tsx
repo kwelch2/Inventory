@@ -14,7 +14,7 @@ export const ExpiryPage = () => {
   const [unitFilter, setUnitFilter] = useState<string>('ALL');
   const [searchTerm, setSearchTerm] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editValues, setEditValues] = useState<{ unitId: string; compartment: string; quantity: number }>({ unitId: '', compartment: '', quantity: 1 });
+  const [editValues, setEditValues] = useState<{ unitId: string; compartment: string; quantity: number; crewStatus: string; expiryDate: string }>({ unitId: '', compartment: '', quantity: 1, crewStatus: '', expiryDate: '' });
   
   // Add Item Modal State
   const [showAddModal, setShowAddModal] = useState(false);
@@ -185,13 +185,15 @@ export const ExpiryPage = () => {
     setEditValues({
       unitId: item.unitId,
       compartment: item.compartment || '',
-      quantity: item.quantity || 1
+      quantity: item.qty ?? item.quantity ?? 1,
+      crewStatus: item.crewStatus || '',
+      expiryDate: formatDateInput(getExpiryDate(item))
     });
   };
 
   const handleCancelEdit = () => {
     setEditingId(null);
-    setEditValues({ unitId: '', compartment: '', quantity: 1 });
+    setEditValues({ unitId: '', compartment: '', quantity: 1, crewStatus: '', expiryDate: '' });
   };
 
   const handleSaveEdit = async (id: string) => {
@@ -204,7 +206,9 @@ export const ExpiryPage = () => {
       await updateDoc(doc(db, 'inventory', id), {
         unitId: editValues.unitId,
         compartment: editValues.compartment,
-        quantity: editValues.quantity,
+        qty: editValues.quantity,
+        crewStatus: editValues.crewStatus.trim(),
+        expiryDate: editValues.expiryDate ? new Date(editValues.expiryDate) : null,
         updatedAt: serverTimestamp()
       });
       setEditingId(null);
@@ -216,6 +220,14 @@ export const ExpiryPage = () => {
 
   const formatDate = (date: Date): string => {
     return date.toLocaleDateString();
+  };
+
+  const formatDateInput = (date: Date | null): string => {
+    if (!date) return '';
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   };
 
   const formatDateTime = (timestamp: any): string => {
@@ -305,7 +317,7 @@ export const ExpiryPage = () => {
       unitId: newItem.unitId,
       compartment: newItem.compartment.trim(),
       expiryDate: expiryDateObj,
-      quantity: newItem.quantity,
+      qty: newItem.quantity,
       status: '',
       crewStatus: newItem.note.trim(),
       createdAt: serverTimestamp(),
@@ -431,6 +443,7 @@ export const ExpiryPage = () => {
                   <th>Compartment</th>
                   <th>Qty</th>
                   <th>Expiry</th>
+                  <th>Notes</th>
                   <th>Days Left</th>
                   <th>Actions</th>
                 </tr>
@@ -482,10 +495,32 @@ export const ExpiryPage = () => {
                             style={{ width: '60px' }}
                           />
                         ) : (
-                          item.quantity || 'N/A'
+                          item.qty ?? item.quantity ?? 'N/A'
                         )}
                       </td>
-                      <td>{formatDate(item.expiryDate)}</td>
+                      <td>
+                        {isEditing ? (
+                          <input
+                            type="date"
+                            value={editValues.expiryDate}
+                            onChange={(e) => setEditValues({ ...editValues, expiryDate: e.target.value })}
+                          />
+                        ) : (
+                          formatDate(item.expiryDate)
+                        )}
+                      </td>
+                      <td>
+                        {isEditing ? (
+                          <input
+                            type="text"
+                            placeholder="Notes"
+                            value={editValues.crewStatus}
+                            onChange={(e) => setEditValues({ ...editValues, crewStatus: e.target.value })}
+                          />
+                        ) : (
+                          item.crewStatus || '—'
+                        )}
+                      </td>
                       <td className="days-cell">
                         <span className={`days-badge ${rowClass}`}>
                           {item.daysToExpire < 0 

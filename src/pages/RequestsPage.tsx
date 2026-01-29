@@ -23,10 +23,16 @@ export const RequestsPage = () => {
   const [historySearch, setHistorySearch] = useState('');
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [editNoteValue, setEditNoteValue] = useState('');
+  const [editingQtyId, setEditingQtyId] = useState<string | null>(null);
+  const [editQtyValue, setEditQtyValue] = useState('');
 
   // Create a map for fast catalog lookups
   const catalogMap = useMemo(() => {
     return new Map(catalog.map(item => [item.id, item]));
+  }, [catalog]);
+
+  const catalogByCatalogId = useMemo(() => {
+    return new Map(catalog.map(item => [(item as any).catalogId, item]));
   }, [catalog]);
 
   const filteredRequests = useMemo(() => {
@@ -118,20 +124,13 @@ export const RequestsPage = () => {
 
   const getItemPricing = (catalogId?: string, itemId?: string) => {
     if (!catalogId && !itemId) return [];
-    
-    // First try to find the catalog item by catalogId
-    let targetItemId = itemId;
-    if (catalogId) {
-      const catalogItem = catalog.find(c => (c as any).catalogId === catalogId);
-      if (catalogItem) {
-        targetItemId = catalogItem.id;
-      }
-    }
-    
-    if (!targetItemId) return [];
-    
+
+    const catalogItem = catalogId ? catalogByCatalogId.get(catalogId) : undefined;
+    const targetItemId = itemId || catalogItem?.id;
+    const targetCatalogId = catalogId || (catalogItem as any)?.catalogId;
+
     return pricing
-      .filter(p => p.itemId === targetItemId)
+      .filter(p => (targetItemId && p.itemId === targetItemId) || (targetCatalogId && p.catalogId === targetCatalogId))
       .sort((a, b) => (a.unitPrice || Infinity) - (b.unitPrice || Infinity));
   };
 
@@ -185,6 +184,21 @@ export const RequestsPage = () => {
     } catch (error) {
       console.error('Error updating note:', error);
       alert('Failed to update note');
+    }
+  };
+
+  const handleSaveQty = async (requestId: string, newQty: string) => {
+    try {
+      await updateDoc(doc(db, 'requests', requestId), {
+        quantity: newQty,
+        qty: newQty,
+        updatedAt: serverTimestamp()
+      });
+      setEditingQtyId(null);
+      setEditQtyValue('');
+    } catch (error) {
+      console.error('Error updating quantity:', error);
+      alert('Failed to update quantity');
     }
   };
 
@@ -331,6 +345,7 @@ export const RequestsPage = () => {
                   const statusClass = String(statusLabel).toLowerCase().replace(/\s+/g, '-');
                   const vendorPrices = getItemPricing(request.catalogId, request.itemId);
                   const isEditingNote = editingNoteId === request.id;
+                  const isEditingQty = editingQtyId === request.id;
 
                   return (
                     <tr key={request.id}>
@@ -365,7 +380,43 @@ export const RequestsPage = () => {
                           )}
                         </details>
                       </td>
-                      <td>{request.quantity || request.qty || ''}</td>
+                      <td>
+                        {isEditingQty ? (
+                          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                            <input
+                              type="text"
+                              value={editQtyValue}
+                              onChange={(e) => setEditQtyValue(e.target.value)}
+                              style={{ flex: 1, minWidth: '80px' }}
+                            />
+                            <button
+                              className="btn btn-small"
+                              onClick={() => handleSaveQty(request.id, editQtyValue)}
+                            >
+                              Save
+                            </button>
+                            <button
+                              className="btn btn-small"
+                              onClick={() => {
+                                setEditingQtyId(null);
+                                setEditQtyValue('');
+                              }}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <span
+                            onClick={() => {
+                              setEditingQtyId(request.id);
+                              setEditQtyValue(request.quantity || request.qty || '');
+                            }}
+                            style={{ cursor: 'pointer' }}
+                          >
+                            {request.quantity || request.qty || ''}
+                          </span>
+                        )}
+                      </td>
                       <td>
                         <span className={`status-badge status-${statusClass}`}>
                           {statusLabel}

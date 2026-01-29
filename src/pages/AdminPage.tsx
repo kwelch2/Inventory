@@ -33,7 +33,7 @@ export const AdminPage = () => {
   // Catalog tab state
   const [catalogSearch, setCatalogSearch] = useState('');
   const [catalogCategoryFilter, setCatalogCategoryFilter] = useState('all');
-  const [catalogActiveFilter, setCatalogActiveFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [catalogActiveFilter, setCatalogActiveFilter] = useState<'all' | 'active' | 'inactive'>('active');
   const [showCatalogModal, setShowCatalogModal] = useState(false);
   const [showPricingModal, setShowPricingModal] = useState(false);
   const [editingCatalogItem, setEditingCatalogItem] = useState<CatalogItem | null>(null);
@@ -714,6 +714,17 @@ export const AdminPage = () => {
     });
   };
 
+  const handleOpenCatalogFromOrder = (request: any) => {
+    const catalogItem = request.catalogId
+      ? catalogByCatalogId.get(request.catalogId)
+      : request.itemId
+        ? catalogMap.get(request.itemId)
+        : null;
+    if (catalogItem) {
+      openEditCatalog(catalogItem);
+    }
+  };
+
   // Helper to render order table rows with consistent logic
   const renderOrderRow = (r: any, rowClassName: string = '') => {
     const itemName = getItemName(r);
@@ -742,7 +753,13 @@ export const AdminPage = () => {
             />
           </td>
           <td>
-            <strong>{itemName}</strong>
+            <strong
+              onDoubleClick={() => handleOpenCatalogFromOrder(r)}
+              style={{ cursor: catalogItem ? 'pointer' : 'default' }}
+              title={catalogItem ? 'Double-click to edit catalog item' : ''}
+            >
+              {itemName}
+            </strong>
             {r.otherItemName && <span className="tag unlisted-tag">Unlisted</span>}
             <button className="btn-expand" onClick={() => toggleRowExpand(r.id)}>
               {isExpanded ? '▲' : '▼'}

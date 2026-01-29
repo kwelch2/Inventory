@@ -86,6 +86,7 @@ export interface InventoryItem {
   unitId: string;
   compartment?: string;
   expiryDate?: Date | { seconds: number; nanoseconds: number };
+  qty?: number;
   quantity?: number;
   status?: 'Pending' | 'OK' | 'Replaced' | '';
   crewStatus?: string; // Note field

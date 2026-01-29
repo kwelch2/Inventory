@@ -63,7 +63,7 @@ export const CatalogTab = ({
         </select>
         <select
           value={catalogActiveFilter}
-          onChange={(e) => setCatalogActiveFilter(e.target.value as 'all' | 'active' | 'inactive')}
+          onChange={(e) => setCatalogActiveFilter(e.target.value as  'active' | 'all' | 'inactive')}
         >
           <option value="all">All Items</option>
           <option value="active">Active Only</option>
