@@ -107,6 +107,19 @@
   font-size: 0.95rem;
 }
 
+/* Item name cell with alternative names */
+.item-name-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.alt-names-small {
+  font-size: 0.75rem;
+  color: #888;
+  font-style: italic;
+}
+
 .stats {
   display: flex;
   gap: 1rem;

@@ -103,27 +103,47 @@ export const ExpiryPage = () => {
           expiryDate,
           daysToExpire,
           itemName,
+          catalogItem,
           unitName: unit?.name || 'Unknown',
         };
       })
       .filter((item): item is NonNullable<typeof item> => item !== null);
 
-    // Apply range filter
-    const withinDays = rangeFilter === 'ALL' ? 99999 : parseInt(rangeFilter, 10);
-    items = items.filter(item => item.daysToExpire <= withinDays);
-
-    // Apply unit filter
-    if (unitFilter !== 'ALL') {
-      items = items.filter(item => item.unitId === unitFilter);
-    }
-
-    // Apply search filter
+    // Apply search filter with better matching
     if (searchTerm) {
-      const search = searchTerm.toLowerCase();
-      items = items.filter(item => 
-        item.itemName.toLowerCase().includes(search) ||
-        (item.compartment || '').toLowerCase().includes(search)
-      );
+      const searchTerms = searchTerm.toLowerCase().split(' ').filter(term => term.length > 0);
+      
+      items = items.filter(item => {
+        const itemNameLower = item.itemName.toLowerCase();
+        const compartmentLower = (item.compartment || '').toLowerCase();
+        const unitNameLower = item.unitName.toLowerCase();
+        const altNamesLower = (item.catalogItem?.altNames || []).map(alt => alt.toLowerCase());
+        const crewStatusLower = (item.crewStatus || '').toLowerCase();
+        
+        // Check if all search terms match somewhere in the item data
+        return searchTerms.every(term => {
+          const variations = getSearchVariations(term);
+          
+          // Check item name
+          if (variations.some(v => itemNameLower.includes(v))) return true;
+          
+          // Check compartment
+          if (variations.some(v => compartmentLower.includes(v))) return true;
+          
+          // Check unit name
+          if (variations.some(v => unitNameLower.includes(v))) return true;
+          
+          // Check crew status/notes
+          if (variations.some(v => crewStatusLower.includes(v))) return true;
+          
+          // Check alternative names
+          if (altNamesLower.some(altName => 
+            variations.some(v => altName.includes(v))
+          )) return true;
+          
+          return false;
+        });
+      });
     }
 
     // Sort by days to expire, then by unit, then by item name
@@ -139,6 +159,7 @@ export const ExpiryPage = () => {
 
     return items;
   }, [inventory, catalogMap, unitsMap, rangeFilter, unitFilter, searchTerm]);
+
 
   const historyItems = useMemo(() => {
     return inventory
@@ -479,7 +500,14 @@ export const ExpiryPage = () => {
                   
                   return (
                     <tr key={item.id} className={rowClass}>
-                      <td>{item.itemName}</td>
+                      <td>
+                        <div className="item-name-cell">
+                          <span>{item.itemName}</span>
+                          {item.catalogItem?.altNames && item.catalogItem.altNames.length > 0 && (
+                            <span className="alt-names-small">({item.catalogItem.altNames.join(', ')})</span>
+                          )}
+                        </div>
+                      </td>
                       <td>
                         {isEditing ? (
                           <select
@@ -631,7 +659,14 @@ export const ExpiryPage = () => {
                   <tbody>
                     {historyItems.map(item => (
                       <tr key={item.id}>
-                        <td>{item.itemName}</td>
+                        <td>
+                          <div className="item-name-cell">
+                            <span>{item.itemName}</span>
+                            {item.catalogItem?.altNames && item.catalogItem.altNames.length > 0 && (
+                              <span className="alt-names-small">({item.catalogItem.altNames.join(', ')})</span>
+                            )}
+                          </div>
+                        </td>
                         <td>{item.unitName}</td>
                         <td>{item.compartment || 'N/A'}</td>
                         <td>{item.expiryDate ? formatDate(item.expiryDate) : 'N/A'}</td>
@@ -692,7 +727,7 @@ export const ExpiryPage = () => {
                       onBlur={() => setTimeout(() => setItemSearchFocused(false), 200)}
                       className="search-input"
                     />
-                    {(itemSearchFocused || itemSearchTerm) && (
+                    {(itemSearchFocused || itemSearchTerm) && !newItem.catalogId && (
                       <div className="select-list">
                         {catalog
                           .filter(item => {

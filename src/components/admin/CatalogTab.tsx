@@ -103,10 +103,15 @@ export const CatalogTab = ({
               return (
                 <tr key={item.id} style={{ opacity: isActive ? 1 : 0.5 }}>
                   <td>
-                    <strong style={{ textDecoration: isActive ? 'none' : 'line-through' }}>
-                      {item.itemName}
-                    </strong>
-                    {item.itemRef && <><br /><span className="muted">Ref: {item.itemRef}</span></>}
+                    <div className="item-name-cell">
+                      <strong style={{ textDecoration: isActive ? 'none' : 'line-through' }}>
+                        {item.itemName}
+                      </strong>
+                      {item.altNames && item.altNames.length > 0 && (
+                        <span className="alt-names-small">({item.altNames.join(', ')})</span>
+                      )}
+                    </div>
+                    {item.itemRef && <span className="muted">Ref: {item.itemRef}</span>}
                   </td>
                   <td>{categoryName}</td>
                   <td>{item.parLevel || 0}</td>

@@ -122,6 +122,20 @@ export const RequestsPage = () => {
     return 'Unknown Item';
   };
 
+  const getItemAltNames = (request: any) => {
+    // Check for catalog items by catalogId field
+    if (request.catalogId) {
+      const item = catalog.find(c => (c as any).catalogId === request.catalogId);
+      return item?.altNames || [];
+    }
+    // Also support legacy itemId field
+    if (request.itemId) {
+      const item = catalogMap.get(request.itemId);
+      return item?.altNames || [];
+    }
+    return [];
+  };
+
   const getItemPricing = (catalogId?: string, itemId?: string) => {
     if (!catalogId && !itemId) return [];
 
@@ -341,6 +355,7 @@ export const RequestsPage = () => {
               <tbody>
                 {filteredRequests.map(request => {
                   const itemName = getItemName(request);
+                  const altNames = getItemAltNames(request);
                   const statusLabel = request.status || 'Open';
                   const statusClass = String(statusLabel).toLowerCase().replace(/\s+/g, '-');
                   const vendorPrices = getItemPricing(request.catalogId, request.itemId);
@@ -352,7 +367,12 @@ export const RequestsPage = () => {
                       <td>
                         <details>
                           <summary style={{ cursor: 'pointer', fontWeight: '600' }}>
-                            {itemName}
+                            <div className="item-name-cell" style={{ display: 'inline-block' }}>
+                              <span>{itemName}</span>
+                              {altNames.length > 0 && (
+                                <span className="alt-names-small">({altNames.join(', ')})</span>
+                              )}
+                            </div>
                           </summary>
                           {vendorPrices.length > 0 ? (
                             <table className="vendor-pricing-table">
@@ -527,12 +547,20 @@ export const RequestsPage = () => {
                   <tbody>
                     {historyItems.map(request => {
                       const itemName = getItemName(request);
+                      const altNames = getItemAltNames(request);
                       const statusLabel = request.status || 'Unknown';
                       const statusClass = String(statusLabel).toLowerCase().replace(/\s+/g, '-');
 
                       return (
                         <tr key={request.id}>
-                          <td>{itemName}</td>
+                          <td>
+                            <div className="item-name-cell">
+                              <span>{itemName}</span>
+                              {altNames.length > 0 && (
+                                <span className="alt-names-small">({altNames.join(', ')})</span>
+                              )}
+                            </div>
+                          </td>
                           <td>{request.quantity || request.qty || ''}</td>
                           <td>
                             <span className={`status-badge status-${statusClass}`}>
