@@ -172,6 +172,7 @@ export const ExpiryPage = () => {
         
         return {
           ...item,
+          catalogItem,
           itemName,
           unitName: unit?.name || 'Unknown',
           expiryDate

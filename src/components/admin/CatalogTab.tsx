@@ -101,7 +101,11 @@ export const CatalogTab = ({
                 .sort((a, b) => a.effectivePrice - b.effectivePrice);
 
               return (
-                <tr key={item.id} style={{ opacity: isActive ? 1 : 0.5 }}>
+                <tr 
+                  key={item.id} 
+                  style={{ opacity: isActive ? 1 : 0.5, cursor: 'pointer' }}
+                  onDoubleClick={() => openEditCatalog(item)}
+                >
                   <td>
                     <div className="item-name-cell">
                       <strong style={{ textDecoration: isActive ? 'none' : 'line-through' }}>
