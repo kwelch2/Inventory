@@ -267,7 +267,6 @@ export const ExpiryPage = () => {
     });
   };
 
-    // ...existing code...
   
     const handleSaveNewItem = async (closeAfter: boolean = false) => {
       // Validation
@@ -367,22 +366,28 @@ export const ExpiryPage = () => {
       }
     };
   
-    const getQuickExpiryDate = (monthsAhead: number): string => {
-      const date = new Date();
-      date.setMonth(date.getMonth() + monthsAhead);
-      // Get last day of the target month
-      const year = date.getFullYear();
-      const month = date.getMonth();
-      // Set to first day of next month, then subtract 1 day
-      const lastDay = new Date(year, month + 1, 0);
-      const resultYear = lastDay.getFullYear();
-      const resultMonth = String(lastDay.getMonth() + 1).padStart(2, '0');
-      const resultDay = String(lastDay.getDate()).padStart(2, '0');
-      return `${resultYear}-${resultMonth}-${resultDay}`;
-    };
+    // Calculate expiry date for quick selection chips (handles month-end dates correctly)
+  const getQuickExpiryDate = (monthsAhead: number): string => {
+    // Start from first day of current month to avoid month-end edge cases
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = today.getMonth();
+    
+    // Get the target month by adding monthsAhead to current month
+    const targetDate = new Date(year, month + monthsAhead, 1);
+    const targetYear = targetDate.getFullYear();
+    const targetMonth = targetDate.getMonth();
+    
+    // Get last day of target month (day 0 of next month = last day of current month)
+    const lastDay = new Date(targetYear, targetMonth + 1, 0);
+    
+    const resultYear = lastDay.getFullYear();
+    const resultMonth = String(lastDay.getMonth() + 1).padStart(2, '0');
+    const resultDay = String(lastDay.getDate()).padStart(2, '0');
+    return `${resultYear}-${resultMonth}-${resultDay}`;
+  };
   
-  // ...existing code...
-
+  
   if (loading) {
     return (
       <div className="page-container">
@@ -496,8 +501,8 @@ export const ExpiryPage = () => {
                             onChange={(e) => setEditValues({ ...editValues, compartment: e.target.value })}
                           >
                             <option value="">Select...</option>
-                            {compartments.map(comp => (
-                              <option key={comp.id} value={comp.name}>{comp.name}</option>
+                            {compartments?.filter(comp => comp?.id && comp?.name).map(comp => (
+                              <option key={String(comp.id)} value={comp.name}>{comp.name}</option>
                             ))}
                           </select>
                         ) : (
@@ -750,57 +755,85 @@ export const ExpiryPage = () => {
                 )}
               </div>
 
-                            // ...existing code...
-              
-                            <div className="form-row">
-                              <div className="form-group" style={{ flex: '0 0 150px' }}>
-                                <label>Qty</label>
-                                <div className="qty-controls">
-                                  <button
-                                    type="button"
-                                    className="qty-btn"
-                                    onClick={() => setNewItem({ ...newItem, quantity: Math.max(1, newItem.quantity - 1) })}
-                                  >
-                                    −
-                                  </button>
-                                  <input
-                                    type="number"
-                                    min="1"
-                                    inputMode="numeric"
-                                    pattern="[0-9]*"
-                                    value={newItem.quantity}
-                                    onChange={(e) => setNewItem({ ...newItem, quantity: parseInt(e.target.value, 10) || 1 })}
-                                    style={{ textAlign: 'center' }}
-                                  />
-                                  <button
-                                    type="button"
-                                    className="qty-btn"
-                                    onClick={() => setNewItem({ ...newItem, quantity: newItem.quantity + 1 })}
-                                  >
-                                    +
-                                  </button>
-                                </div>
-                              </div>
-              
-                              <div className="form-group" style={{ flex: 1 }}>
-                                <label>Note (Optional)</label>
-                                <input
-                                  type="text"
-                                  placeholder="e.g., Broken seal check"
-                                  value={newItem.note}
-                                  onChange={(e) => setNewItem({ ...newItem, note: e.target.value })}
-                                />
-                              </div>
-                            </div>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Unit</label>
+                  <select
+                    value={newItem.unitId}
+                    onChange={(e) => setNewItem({ ...newItem, unitId: e.target.value })}
+                  >
+                    <option value="">Select unit...</option>
+                    {units?.map(unit => (
+                      <option key={unit.id} value={unit.id}>{unit.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label>Compartment</label>
+                  <input
+                    type="text"
+                    list="compartment-list"
+                    placeholder="e.g., Cabinet A"
+                    value={newItem.compartment}
+                    onChange={(e) => setNewItem({ ...newItem, compartment: e.target.value })}
+                  />
+                  <datalist id="compartment-list">
+                    {compartments?.filter(comp => comp?.id && comp?.name).map(comp => (
+                      <option key={String(comp.id)} value={comp.name} />
+                    ))}
+                  </datalist>
+                </div>
+              </div>
+
+              <div className="form-row">
+                <div className="form-group" style={{ flex: '0 0 150px' }}>
+                  <label>Qty</label>
+                  <div className="qty-controls">
+                    <button
+                      type="button"
+                      className="qty-btn"
+                      onClick={() => setNewItem({ ...newItem, quantity: Math.max(1, newItem.quantity - 1) })}
+                    >
+                      −
+                    </button>
+                    <input
+                      type="number"
+                      min="1"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      value={newItem.quantity}
+                      onChange={(e) => setNewItem({ ...newItem, quantity: parseInt(e.target.value, 10) || 1 })}
+                      style={{ textAlign: 'center' }}
+                    />
+                    <button
+                      type="button"
+                      className="qty-btn"
+                      onClick={() => setNewItem({ ...newItem, quantity: newItem.quantity + 1 })}
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+
+                <div className="form-group" style={{ flex: 1 }}>
+                  <label>Note (Optional)</label>
+                  <input
+                    type="text"
+                    placeholder="e.g., Broken seal check"
+                    value={newItem.note}
+                    onChange={(e) => setNewItem({ ...newItem, note: e.target.value })}
+                  />
+                </div>
+              </div>
 
               <div className="form-group">
                 <label>Expiry Date</label>
                 <div className="expiry-chips">
                   {[1, 2, 3].map(months => {
-                    const date = new Date();
-                    date.setMonth(date.getMonth() + months);
-                    const monthName = date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
                     const dateValue = getQuickExpiryDate(months);
+                    const dateObj = new Date(dateValue);
+                    const monthName = dateObj.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
                     
                     return (
                       <button
@@ -823,32 +856,15 @@ export const ExpiryPage = () => {
               </div>
 
               <div className="form-row">
-                <div className="form-group" style={{ flex: '0 0 100px' }}>
-                  <label>Qty</label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={newItem.quantity}
-                    onChange={(e) => setNewItem({ ...newItem, quantity: parseInt(e.target.value, 10) || 1 })}
-                  />
-                </div>
-
-                <div className="form-group" style={{ flex: 1 }}>
-                  <label>Note (Optional)</label>
-                  <input
-                    type="text"
-                    placeholder="e.g., Broken seal check"
-                    value={newItem.note}
-                    onChange={(e) => setNewItem({ ...newItem, note: e.target.value })}
-                  />
-                </div>
+                
+ 
               </div>
             </div>
 
             <div className="modal-footer">
               <button className="btn btn-cancel" onClick={handleCloseAddModal}>Close</button>
               <button className="btn btn-save" onClick={() => handleSaveNewItem(true)}>Save & Close</button>
-              <button className="btn btn-primary" onClick={() => handleSaveNewItem(false)}>Save Item</button>
+              <button className="btn btn-primary" onClick={() => handleSaveNewItem(false)}>Save & New</button>
             </div>
           </div>
         </div>
