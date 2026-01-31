@@ -267,102 +267,121 @@ export const ExpiryPage = () => {
     });
   };
 
-  const handleSaveNewItem = async (closeAfter: boolean = false) => {
-    // Validation
-    if (!newItem.isCustom && !newItem.catalogId) {
-      alert('Please select an item from the catalog');
-      return;
-    }
-    if (newItem.isCustom && !newItem.customItemName.trim()) {
-      alert('Please enter a custom item name');
-      return;
-    }
-    if (!newItem.unitId) {
-      alert('Please select a unit');
-      return;
-    }
-    if (!newItem.expiryDate) {
-      alert('Please select an expiry date');
-      return;
-    }
-    if (isNaN(newItem.quantity) || newItem.quantity < 1) {
-      alert('Please enter a valid quantity');
-      return;
-    }
-
-    // Check for duplicates
-    const expiryDateObj = new Date(newItem.expiryDate);
-    const isDuplicate = inventory.some(item => {
-      if (item.status === 'Replaced' || item.status === 'OK') return false;
-      
-      const matchesItem = newItem.isCustom 
-        ? item.itemName === newItem.customItemName
-        : item.catalogId === newItem.catalogId;
-      
-      if (!matchesItem || item.unitId !== newItem.unitId) return false;
-      
-      const itemExpiry = getExpiryDate(item);
-      if (!itemExpiry) return false;
-      
-      return itemExpiry.toDateString() === expiryDateObj.toDateString();
-    });
-
-    if (isDuplicate) {
-      alert('This item already exists with the same expiry date and unit. Please check the list.');
-      return;
-    }
-
-    // Prepare payload
-    const payload: any = {
-      unitId: newItem.unitId,
-      compartment: newItem.compartment.trim(),
-      expiryDate: expiryDateObj,
-      qty: newItem.quantity,
-      status: '',
-      crewStatus: newItem.note.trim(),
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
-    };
-
-    if (newItem.isCustom) {
-      payload.itemName = newItem.customItemName.trim();
-    } else {
-      payload.catalogId = newItem.catalogId;
-    }
-
-    try {
-      await addDoc(collection(db, 'inventory'), payload);
-      setNewItem(prev => ({
-        catalogId: '',
-        customItemName: '',
-        unitId: prev.unitId,
-        compartment: prev.compartment,
-        expiryDate: '',
-        quantity: 1,
-        note: '',
-        isCustom: prev.isCustom
-      }));
-      setItemSearchTerm('');
-      setItemSearchFocused(false);
-      if (closeAfter) {
-        handleCloseAddModal();
+    // ...existing code...
+  
+    const handleSaveNewItem = async (closeAfter: boolean = false) => {
+      // Validation
+      if (!newItem.isCustom && !newItem.catalogId) {
+        alert('Please select an item from the catalog');
+        return;
       }
-    } catch (error) {
-      console.error('Error adding item:', error);
-      alert('Failed to add item: ' + (error as Error).message);
-    }
-  };
-
-  const getQuickExpiryDate = (monthsAhead: number): string => {
-    const date = new Date();
-    date.setMonth(date.getMonth() + monthsAhead);
-    // Set to last day of that month
-    date.setDate(0);
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
+      if (newItem.isCustom && !newItem.customItemName.trim()) {
+        alert('Please enter a custom item name');
+        return;
+      }
+      if (!newItem.unitId) {
+        alert('Please select a unit');
+        return;
+      }
+      if (!newItem.expiryDate) {
+        alert('Please select an expiry date');
+        return;
+      }
+      if (isNaN(newItem.quantity) || newItem.quantity < 1) {
+        alert('Please enter a valid quantity');
+        return;
+      }
+  
+      // Check for duplicates - only check Item, Unit, Compartment, and Expiry Date
+      const expiryDateObj = new Date(newItem.expiryDate);
+      const isDuplicate = inventory.some(item => {
+        if (item.status === 'Replaced' || item.status === 'OK') return false;
+        
+        // Check if same item (catalog or custom)
+        const matchesItem = newItem.isCustom 
+          ? (item.itemName === newItem.customItemName.trim())
+          : (item.catalogId === newItem.catalogId);
+        
+        if (!matchesItem) return false;
+        
+        // Check unit
+        if (item.unitId !== newItem.unitId) return false;
+        
+        // Check compartment (normalize both to handle empty strings)
+        const itemComp = (item.compartment || '').trim().toLowerCase();
+        const newComp = (newItem.compartment || '').trim().toLowerCase();
+        if (itemComp !== newComp) return false;
+        
+        // Check expiry date
+        const itemExpiry = getExpiryDate(item);
+        if (!itemExpiry) return false;
+        
+        return itemExpiry.toDateString() === expiryDateObj.toDateString();
+      });
+  
+      if (isDuplicate) {
+        const confirmAdd = confirm(
+          'A similar item already exists with the same Unit, Compartment, and Expiry Date. Do you want to add it anyway?'
+        );
+        if (!confirmAdd) return;
+      }
+  
+      // Prepare payload
+      const payload: any = {
+        unitId: newItem.unitId,
+        compartment: newItem.compartment.trim(),
+        expiryDate: expiryDateObj,
+        qty: newItem.quantity,
+        status: '',
+        crewStatus: newItem.note.trim(),
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      };
+  
+      if (newItem.isCustom) {
+        payload.itemName = newItem.customItemName.trim();
+      } else {
+        payload.catalogId = newItem.catalogId;
+      }
+  
+      try {
+        await addDoc(collection(db, 'inventory'), payload);
+        setNewItem(prev => ({
+          catalogId: '',
+          customItemName: '',
+          unitId: prev.unitId,
+          compartment: prev.compartment,
+          expiryDate: '',
+          quantity: 1,
+          note: '',
+          isCustom: prev.isCustom
+        }));
+        setItemSearchTerm('');
+        setItemSearchFocused(false);
+        if (closeAfter) {
+          handleCloseAddModal();
+        }
+      } catch (error) {
+        console.error('Error adding item:', error);
+        alert('Failed to add item: ' + (error as Error).message);
+      }
+    };
+  
+    const getQuickExpiryDate = (monthsAhead: number): string => {
+      const date = new Date();
+      date.setMonth(date.getMonth() + monthsAhead);
+      // Get last day of the target month
+      const year = date.getFullYear();
+      const month = date.getMonth();
+      // Set to first day of next month, then subtract 1 day
+      const lastDay = new Date(year, month + 1, 0);
+      const resultYear = lastDay.getFullYear();
+      const resultMonth = String(lastDay.getMonth() + 1).padStart(2, '0');
+      const resultDay = String(lastDay.getDate()).padStart(2, '0');
+      return `${resultYear}-${resultMonth}-${resultDay}`;
+    };
+  
+  // ...existing code...
 
   if (loading) {
     return (
@@ -731,33 +750,48 @@ export const ExpiryPage = () => {
                 )}
               </div>
 
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Unit</label>
-                  <select
-                    value={newItem.unitId}
-                    onChange={(e) => setNewItem({ ...newItem, unitId: e.target.value })}
-                  >
-                    <option value="">Select...</option>
-                    {units.map(unit => (
-                      <option key={unit.id} value={unit.id}>{unit.name}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="form-group">
-                  <label>Compartment</label>
-                  <select
-                    value={newItem.compartment}
-                    onChange={(e) => setNewItem({ ...newItem, compartment: e.target.value })}
-                  >
-                    <option value="">Select...</option>
-                    {compartments.map(comp => (
-                      <option key={comp.id} value={comp.name}>{comp.name}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
+                            // ...existing code...
+              
+                            <div className="form-row">
+                              <div className="form-group" style={{ flex: '0 0 150px' }}>
+                                <label>Qty</label>
+                                <div className="qty-controls">
+                                  <button
+                                    type="button"
+                                    className="qty-btn"
+                                    onClick={() => setNewItem({ ...newItem, quantity: Math.max(1, newItem.quantity - 1) })}
+                                  >
+                                    −
+                                  </button>
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    inputMode="numeric"
+                                    pattern="[0-9]*"
+                                    value={newItem.quantity}
+                                    onChange={(e) => setNewItem({ ...newItem, quantity: parseInt(e.target.value, 10) || 1 })}
+                                    style={{ textAlign: 'center' }}
+                                  />
+                                  <button
+                                    type="button"
+                                    className="qty-btn"
+                                    onClick={() => setNewItem({ ...newItem, quantity: newItem.quantity + 1 })}
+                                  >
+                                    +
+                                  </button>
+                                </div>
+                              </div>
+              
+                              <div className="form-group" style={{ flex: 1 }}>
+                                <label>Note (Optional)</label>
+                                <input
+                                  type="text"
+                                  placeholder="e.g., Broken seal check"
+                                  value={newItem.note}
+                                  onChange={(e) => setNewItem({ ...newItem, note: e.target.value })}
+                                />
+                              </div>
+                            </div>
 
               <div className="form-group">
                 <label>Expiry Date</label>
