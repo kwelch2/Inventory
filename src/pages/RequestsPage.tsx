@@ -38,7 +38,7 @@ export const RequestsPage = () => {
   }, [catalog]);
 
   // Helper functions defined before useMemo hooks that use them
-  const getItemName = (request: any) => {
+  function getItemName(request: any) {
     // Check for unlisted/other items first
     if (request.otherItemName) {
       return request.otherItemName;
@@ -55,7 +55,7 @@ export const RequestsPage = () => {
     }
     // Fallback
     return 'Unknown Item';
-  };
+  }
 
   const filteredRequests = useMemo(() => {
     if (!requests) return [];
@@ -138,7 +138,7 @@ export const RequestsPage = () => {
     return filtered.slice(0, 50);
   }, [requests, historyDays, historySearch]);
 
-  const getItemAltNames = (request: any) => {
+  function getItemAltNames(request: any) {
     // Check for catalog items by catalogId field
     if (request.catalogId) {
       const item = catalog.find(c => (c as any).catalogId === request.catalogId);
@@ -150,9 +150,9 @@ export const RequestsPage = () => {
       return item?.altNames || [];
     }
     return [];
-  };
+  }
 
-  const getItemPricing = (catalogId?: string, itemId?: string) => {
+  function getItemPricing(catalogId?: string, itemId?: string) {
     if (!catalogId && !itemId) return [];
 
     const catalogItem = catalogId ? catalogByCatalogId.get(catalogId) : undefined;
@@ -162,10 +162,10 @@ export const RequestsPage = () => {
     return pricing
       .filter(p => (targetItemId && p.itemId === targetItemId) || (targetCatalogId && p.catalogId === targetCatalogId))
       .sort((a, b) => (a.unitPrice || Infinity) - (b.unitPrice || Infinity));
-  };
+  }
 
   // Helper to generate search variations for terms like "3ml" -> ["3ml", "3 ml"]
-  const getSearchVariations = (term: string): string[] => {
+  function getSearchVariations(term: string): string[] {
     const variations = [term];
     // Check if term is like "3ml", "20g", etc. (number followed by letters)
     const numberLetterPattern = /^(\d+)([a-z]+)$/i;
@@ -182,13 +182,13 @@ export const RequestsPage = () => {
       variations.push(`${spacedMatch[1]}${spacedMatch[2]}`);
     }
     return variations;
-  };
+  }
 
-  const getVendorName = (vendorId?: string) => {
+  function getVendorName(vendorId?: string) {
     if (!vendorId) return 'Not Assigned';
     const vendor = vendors.find(v => v.id === vendorId);
     return vendor?.name || 'Unknown Vendor';
-  };
+  }
 
   const handleMarkReceived = async (requestId: string) => {
     try {
@@ -344,14 +344,14 @@ export const RequestsPage = () => {
           ))}
         </div>
         
-        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flex: 1, maxWidth: '400px' }}>
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
           <input
             type="text"
             placeholder="Search items..."
             value={mainSearchTerm}
             onChange={(e) => setMainSearchTerm(e.target.value)}
             className="search-input"
-            style={{ flex: 1 }}
+            style={{ width: '160px' }}
           />
         </div>
         
