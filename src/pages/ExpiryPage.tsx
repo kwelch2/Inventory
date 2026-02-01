@@ -109,6 +109,17 @@ export const ExpiryPage = () => {
       })
       .filter((item): item is NonNullable<typeof item> => item !== null);
 
+    // Apply range filter
+    if (rangeFilter !== 'ALL') {
+      const maxDays = parseInt(rangeFilter, 10);
+      items = items.filter(item => item.daysToExpire <= maxDays);
+    }
+
+    // Apply unit filter
+    if (unitFilter !== 'ALL') {
+      items = items.filter(item => item.unitId === unitFilter);
+    }
+
     // Apply search filter with better matching
     if (searchTerm) {
       const searchTerms = searchTerm.toLowerCase().split(' ').filter(term => term.length > 0);
@@ -146,16 +157,28 @@ export const ExpiryPage = () => {
       });
     }
 
-    // Sort by days to expire, then by unit, then by item name
-    items.sort((a, b) => {
-      if (a.daysToExpire !== b.daysToExpire) {
-        return a.daysToExpire - b.daysToExpire;
-      }
-      if (a.unitName !== b.unitName) {
-        return a.unitName.localeCompare(b.unitName);
-      }
-      return a.itemName.localeCompare(b.itemName);
-    });
+    // Sort logic: when a specific unit is selected, sort by days to expire then by item name
+    // When ALL units selected, sort by days to expire, then by unit, then by item name
+    if (unitFilter !== 'ALL') {
+      // Specific unit selected - sort by days to expire, then by item name
+      items.sort((a, b) => {
+        if (a.daysToExpire !== b.daysToExpire) {
+          return a.daysToExpire - b.daysToExpire;
+        }
+        return a.itemName.localeCompare(b.itemName);
+      });
+    } else {
+      // All units - sort by days to expire, then by unit, then by item name
+      items.sort((a, b) => {
+        if (a.daysToExpire !== b.daysToExpire) {
+          return a.daysToExpire - b.daysToExpire;
+        }
+        if (a.unitName !== b.unitName) {
+          return a.unitName.localeCompare(b.unitName);
+        }
+        return a.itemName.localeCompare(b.itemName);
+      });
+    }
 
     return items;
   }, [inventory, catalogMap, unitsMap, rangeFilter, unitFilter, searchTerm]);
@@ -454,17 +477,6 @@ export const ExpiryPage = () => {
               <option key={unit.id} value={unit.id}>{unit.name}</option>
             ))}
           </select>
-        </div>
-
-        <div className="control-group search-group">
-          <label htmlFor="itemSearch">Search Items</label>
-          <input
-            id="itemSearch"
-            type="text"
-            placeholder="Search item, compartment..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
         </div>
 
         <div className="count-display">
@@ -905,6 +917,35 @@ export const ExpiryPage = () => {
           </div>
         </div>
       )}
+
+      {/* Search Section - Positioned at bottom for better iPad UX */}
+      <div className="search-section">
+        <div className="search-container">
+          <label htmlFor="itemSearch" className="search-label">Search Items</label>
+          <input
+            id="itemSearch"
+            type="text"
+            className="search-input"
+            placeholder="Type to search items, compartments, units..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck="false"
+          />
+          {searchTerm && (
+            <button 
+              className="search-clear"
+              onClick={() => setSearchTerm('')}
+              type="button"
+              aria-label="Clear search"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   );
 };

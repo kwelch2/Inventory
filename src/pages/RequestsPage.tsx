@@ -36,32 +36,46 @@ export const RequestsPage = () => {
   }, [catalog]);
 
   const filteredRequests = useMemo(() => {
-    let filtered = [...requests];
-
-    // Filter by history
-    const historyStatuses = ['Received', 'Cancelled', 'Completed', 'Closed'];
+    if (!requests) return [];
     
-    // Always filter out history from main view
-    filtered = filtered.filter(r => !r.status || !historyStatuses.includes(r.status));
-
-    // Filter by status
-    if (statusFilter !== 'All') {
-      filtered = filtered.filter(r => r.status === statusFilter);
-    }
-
-    // Sort by creation date (newest first)
-    filtered.sort((a, b) => {
-      const aTime = a.createdAt && typeof a.createdAt === 'object' && 'seconds' in a.createdAt 
-        ? a.createdAt.seconds 
-        : 0;
-      const bTime = b.createdAt && typeof b.createdAt === 'object' && 'seconds' in b.createdAt 
-        ? b.createdAt.seconds 
-        : 0;
-      return bTime - aTime;
+    let filtered = requests.filter(request => {
+      const matchesSearch = !itemSearchTerm || 
+        request.itemName?.toLowerCase().includes(itemSearchTerm.toLowerCase()) ||
+        request.location?.toLowerCase().includes(itemSearchTerm.toLowerCase()) ||
+        request.requestedBy?.toLowerCase().includes(itemSearchTerm.toLowerCase());
+        
+      const matchesStatus = statusFilter === 'all' || request.status === statusFilter;
+      const matchesUnit = selectedUnit === 'all' || request.unit === selectedUnit;
+      
+      return matchesSearch && matchesStatus && matchesUnit;
     });
 
-    return filtered;
-  }, [requests, statusFilter]);
+    // Sort by status priority, then by item name
+    const statusPriority = {
+      'Open': 1,
+      'Backordered': 2, 
+      'Back ordered': 2, // Handle both spellings
+      'Ordered': 3,
+      'Received': 4,
+      'Cancelled': 5
+    };
+
+    return filtered.sort((a, b) => {
+      // First sort by status priority
+      const statusA = statusPriority[a.status] || 999;
+      const statusB = statusPriority[b.status] || 999;
+      
+      if (statusA !== statusB) {
+        return statusA - statusB;
+      }
+      
+      // Then sort by item name
+      const nameA = (a.itemName || '').toLowerCase();
+      const nameB = (b.itemName || '').toLowerCase();
+      
+      return nameA.localeCompare(nameB);
+    });
+  }, [requests, itemSearchTerm, statusFilter, selectedUnit]);
 
   const historyItems = useMemo(() => {
     const historyStatuses = ['Received', 'Cancelled', 'Completed', 'Closed'];
