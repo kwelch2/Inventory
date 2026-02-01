@@ -282,6 +282,13 @@ export const ExpiryPage = () => {
   };
 
   const handleOpenAddModal = () => {
+    setShowAddModal(true);
+  };
+
+  const handleCloseAddModal = () => {
+    setShowAddModal(false);
+    setItemSearchTerm('');
+    setItemSearchFocused(false);
   };
 
   
