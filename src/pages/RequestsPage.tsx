@@ -640,7 +640,7 @@ export const RequestsPage = () => {
                       onBlur={() => setTimeout(() => setItemSearchFocused(false), 200)}
                       className="search-input"
                     />
-                    {(itemSearchFocused || itemSearchTerm) && (
+                    {(itemSearchFocused && itemSearchTerm) && (
                       <div className="select-list">
                         {catalog
                           .filter(item => item.active !== false)

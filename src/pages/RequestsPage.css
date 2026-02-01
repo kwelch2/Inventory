@@ -204,19 +204,19 @@
 
 .searchable-select .search-input {
   width: 100%;
-  padding: 0.6rem 0.75rem;
-  border: 1px solid #ddd;
-  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  border: none;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  background: transparent;
   font-size: 0.95rem;
   font-family: inherit;
-  transition: border-radius 0.2s;
+  transition: all 0.2s;
 }
 
 .searchable-select .search-input:focus {
   outline: none;
-  border-color: #0066cc;
-  box-shadow: 0 0 0 2px rgba(0, 102, 204, 0.1);
-  border-radius: 6px 6px 0 0;
+  border-bottom: 1px solid rgba(0, 102, 204, 0.3);
+  background: rgba(0, 102, 204, 0.02);
 }
 
 .select-list {
