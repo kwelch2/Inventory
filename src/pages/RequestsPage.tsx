@@ -25,6 +25,7 @@ export const RequestsPage = () => {
   const [editNoteValue, setEditNoteValue] = useState('');
   const [editingQtyId, setEditingQtyId] = useState<string | null>(null);
   const [editQtyValue, setEditQtyValue] = useState('');
+  const [selectedUnit, setSelectedUnit] = useState<string>('all');
 
   // Create a map for fast catalog lookups
   const catalogMap = useMemo(() => {
@@ -39,12 +40,11 @@ export const RequestsPage = () => {
     if (!requests) return [];
     
     let filtered = requests.filter(request => {
-      const matchesSearch = !itemSearchTerm || 
-        request.itemName?.toLowerCase().includes(itemSearchTerm.toLowerCase()) ||
-        request.location?.toLowerCase().includes(itemSearchTerm.toLowerCase()) ||
-        request.requestedBy?.toLowerCase().includes(itemSearchTerm.toLowerCase());
+      const itemName = getItemName(request).toLowerCase();
+      const searchTerm = (itemSearchTerm || '').toLowerCase();
+      const matchesSearch = !searchTerm || itemName.includes(searchTerm);
         
-      const matchesStatus = statusFilter === 'all' || request.status === statusFilter;
+      const matchesStatus = statusFilter === 'All' || request.status === statusFilter;
       const matchesUnit = selectedUnit === 'all' || request.unit === selectedUnit;
       
       return matchesSearch && matchesStatus && matchesUnit;
@@ -70,12 +70,12 @@ export const RequestsPage = () => {
       }
       
       // Then sort by item name
-      const nameA = (a.itemName || '').toLowerCase();
-      const nameB = (b.itemName || '').toLowerCase();
+      const nameA = getItemName(a).toLowerCase();
+      const nameB = getItemName(b).toLowerCase();
       
       return nameA.localeCompare(nameB);
     });
-  }, [requests, itemSearchTerm, statusFilter, selectedUnit]);
+  }, [requests, itemSearchTerm, statusFilter, selectedUnit, catalog]);
 
   const historyItems = useMemo(() => {
     const historyStatuses = ['Received', 'Cancelled', 'Completed', 'Closed'];
