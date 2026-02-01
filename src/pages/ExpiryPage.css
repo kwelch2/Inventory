@@ -70,6 +70,14 @@
   min-width: 150px;
 }
 
+.search-control {
+  min-width: 220px;
+}
+
+.expiry-search-input {
+  width: 220px;
+}
+
 .search-group {
   flex: 1;
   min-width: 250px;
@@ -820,105 +828,10 @@ details summary:hover {
   }
 }
 
-/* Search Section Styles - Optimized for iPad */
-.search-section {
-  position: sticky;
-  bottom: 0;
-  background: white;
-  border-top: 2px solid #e0e0e0;
-  padding: 1rem;
-  margin: 1rem -1rem -1rem -1rem; /* Extend to edges of container */
-  z-index: 100;
-}
-
-.search-container {
-  position: relative;
-  max-width: 600px;
-  margin: 0 auto;
-}
-
-.search-label {
-  display: block;
-  font-weight: bold;
-  margin-bottom: 0.5rem;
-  color: #333;
-  font-size: 1.1rem;
-}
-
-.search-input {
-  width: 100%;
-  padding: 1rem 3rem 1rem 1rem;
-  font-size: 1.1rem;
-  border: 2px solid #ddd;
-  border-radius: 8px;
-  background: #f9f9f9;
-  box-sizing: border-box;
-  
-  /* iPad-specific optimizations */
-  -webkit-appearance: none;
-  -webkit-border-radius: 8px;
-  outline: none;
-  
-  /* Prevent autocorrection and capitalization */
-  autocomplete: off;
-  autocorrect: off;
-  autocapitalize: off;
-  spellcheck: false;
-  
-  /* Larger tap target for iPad */
-  min-height: 44px;
-}
-
-.search-input:focus {
-  border-color: #0066cc;
-  background: white;
-  box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.1);
-}
-
-.search-clear {
-  position: absolute;
-  right: 1rem;
-  top: 50%;
-  transform: translateY(-50%);
-  background: #666;
-  color: white;
-  border: none;
-  border-radius: 50%;
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  font-size: 0.9rem;
-  line-height: 1;
-}
-
-.search-clear:hover {
-  background: #333;
-}
-
-/* Responsive adjustments */
 @media (max-width: 768px) {
-  .search-section {
-    padding: 0.75rem;
-    margin: 1rem -0.75rem -0.75rem -0.75rem;
-  }
-  
-  .search-input {
-    font-size: 1.2rem; /* Larger on mobile to prevent zoom */
-    padding: 1.2rem 3rem 1.2rem 1.2rem;
-  }
-}
-
-/* iPad specific adjustments */
-@media (min-width: 768px) and (max-width: 1024px) {
-  .search-input {
-    font-size: 1.2rem; /* Prevent zoom on iPad */
-    padding: 1.1rem 3rem 1.1rem 1.1rem;
-  }
-  
-  .search-section {
-    box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+  .search-control,
+  .expiry-search-input {
+    width: 100%;
+    min-width: 100%;
   }
 }

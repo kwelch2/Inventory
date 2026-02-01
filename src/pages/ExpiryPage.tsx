@@ -282,34 +282,6 @@ export const ExpiryPage = () => {
   };
 
   const handleOpenAddModal = () => {
-    setNewItem({
-      catalogId: '',
-      customItemName: '',
-      unitId: unitFilter !== 'ALL' ? unitFilter : '',
-      compartment: '',
-      expiryDate: '',
-      quantity: 1,
-      note: '',
-      isCustom: false
-    });
-    setItemSearchTerm('');
-    setShowAddModal(true);
-  };
-
-  const handleCloseAddModal = () => {
-    setShowAddModal(false);
-    setItemSearchTerm('');
-    setItemSearchFocused(false);
-    setNewItem({
-      catalogId: '',
-      customItemName: '',
-      unitId: '',
-      compartment: '',
-      expiryDate: '',
-      quantity: 1,
-      note: '',
-      isCustom: false
-    });
   };
 
   
@@ -477,6 +449,22 @@ export const ExpiryPage = () => {
               <option key={unit.id} value={unit.id}>{unit.name}</option>
             ))}
           </select>
+        </div>
+
+        <div className="control-group search-control">
+          <label htmlFor="itemSearch">Search</label>
+          <input
+            id="itemSearch"
+            type="text"
+            className="expiry-search-input"
+            placeholder="Search items, compartments, units..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
+          />
         </div>
 
         <div className="count-display">

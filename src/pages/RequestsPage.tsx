@@ -5,11 +5,11 @@ import { useInventoryData } from '../hooks/useInventoryData';
 import './CommonPages.css';
 import './RequestsPage.css';
 
-type StatusFilter = 'All' | 'Open' | 'Ordered' | 'Backordered' | 'Received' | 'Cancelled';
+type StatusFilter = 'Active' | 'Open' | 'Ordered' | 'Backordered' | 'Received' | 'Cancelled';
 
 export const RequestsPage = () => {
   const { catalog, requests, vendors, pricing, loading } = useInventoryData();
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('All');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('Active');
   const [showHistory, setShowHistory] = useState(false);
   const [showNewRequestModal, setShowNewRequestModal] = useState(false);
   const [selectedItemId, setSelectedItemId] = useState('');
@@ -60,12 +60,17 @@ export const RequestsPage = () => {
   const filteredRequests = useMemo(() => {
     if (!requests) return [];
     
+    const activeStatuses = ['Open', 'Ordered', 'Backordered', 'Back ordered'];
+
     let filtered = requests.filter(request => {
       const itemName = getItemName(request).toLowerCase();
       const searchTerm = (mainSearchTerm || '').toLowerCase();
       const matchesSearch = !searchTerm || itemName.includes(searchTerm);
-        
-      const matchesStatus = statusFilter === 'All' || request.status === statusFilter;
+      const normalizedStatus = request.status || 'Open';
+      const matchesStatus = statusFilter === 'Active'
+        ? activeStatuses.includes(normalizedStatus)
+        : normalizedStatus === statusFilter;
+
       const matchesUnit = selectedUnit === 'all' || request.unit === selectedUnit;
       
       return matchesSearch && matchesStatus && matchesUnit;
@@ -161,6 +166,13 @@ export const RequestsPage = () => {
 
     return pricing
       .filter(p => (targetItemId && p.itemId === targetItemId) || (targetCatalogId && p.catalogId === targetCatalogId))
+      .map(p => {
+        const normalizedUnitPrice = typeof p.unitPrice === 'number' ? p.unitPrice : Number(p.unitPrice);
+        return {
+          ...p,
+          unitPrice: Number.isFinite(normalizedUnitPrice) ? normalizedUnitPrice : undefined
+        };
+      })
       .sort((a, b) => (a.unitPrice || Infinity) - (b.unitPrice || Infinity));
   }
 
@@ -333,7 +345,7 @@ export const RequestsPage = () => {
 
       <div className="controls-section">
         <div className="filter-buttons">
-          {(['All', 'Open', 'Ordered', 'Backordered'] as StatusFilter[]).map(status => (
+          {(['Active', 'Open', 'Ordered', 'Backordered'] as StatusFilter[]).map(status => (
             <button
               key={status}
               className={`filter-btn ${statusFilter === status ? 'active' : ''}`}
@@ -344,14 +356,14 @@ export const RequestsPage = () => {
           ))}
         </div>
         
-        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
           <input
             type="text"
             placeholder="Search items..."
             value={mainSearchTerm}
             onChange={(e) => setMainSearchTerm(e.target.value)}
             className="search-input"
-            style={{ width: '160px' }}
+            style={{ width: '300px' }}
           />
         </div>
         
@@ -411,13 +423,20 @@ export const RequestsPage = () => {
                                 </tr>
                               </thead>
                               <tbody>
-                                {vendorPrices.map((vp, idx) => (
-                                  <tr key={idx}>
-                                    <td>{getVendorName(vp.vendorId)}</td>
-                                    <td>{vp.unitPrice ? `$${vp.unitPrice.toFixed(2)}` : 'N/A'}</td>
-                                    <td>{vp.vendorOrderNumber || 'N/A'}</td>
-                                  </tr>
-                                ))}
+                                {vendorPrices.map((vp, idx) => {
+                                  const unitPriceNumber = Number(vp.unitPrice);
+                                  const formattedPrice = Number.isFinite(unitPriceNumber)
+                                    ? `$${unitPriceNumber.toFixed(2)}`
+                                    : 'N/A';
+
+                                  return (
+                                    <tr key={idx}>
+                                      <td>{getVendorName(vp.vendorId)}</td>
+                                      <td>{formattedPrice}</td>
+                                      <td>{vp.vendorOrderNumber || 'N/A'}</td>
+                                    </tr>
+                                  );
+                                })}
                               </tbody>
                             </table>
                           ) : (
