@@ -731,6 +731,11 @@ export const ExpiryPage = () => {
                   />
                 ) : (
                   <div className="searchable-select">
+                    {newItem.catalogId && (
+                      <div style={{ marginBottom: '0.5rem', padding: '0.5rem', background: '#e3f2fd', borderRadius: '4px', color: '#0066cc', fontWeight: '500' }}>
+                        Selected: {catalog.find(c => c.id === newItem.catalogId)?.itemName}
+                      </div>
+                    )}
                     <input
                       type="text"
                       placeholder="Search items..."
@@ -771,7 +776,7 @@ export const ExpiryPage = () => {
                               className={`select-item ${newItem.catalogId === item.id ? 'selected' : ''}`}
                               onClick={() => {
                                 setNewItem({ ...newItem, catalogId: item.id });
-                                setItemSearchTerm(item.itemName);
+                                setItemSearchTerm('');
                                 setItemSearchFocused(false);
                               }}
                             >

@@ -26,6 +26,7 @@ export const RequestsPage = () => {
   const [editingQtyId, setEditingQtyId] = useState<string | null>(null);
   const [editQtyValue, setEditQtyValue] = useState('');
   const [selectedUnit] = useState<string>('all');
+  const [mainSearchTerm, setMainSearchTerm] = useState('');
 
   // Create a map for fast catalog lookups
   const catalogMap = useMemo(() => {
@@ -41,7 +42,7 @@ export const RequestsPage = () => {
     
     let filtered = requests.filter(request => {
       const itemName = getItemName(request).toLowerCase();
-      const searchTerm = (itemSearchTerm || '').toLowerCase();
+      const searchTerm = (mainSearchTerm || '').toLowerCase();
       const matchesSearch = !searchTerm || itemName.includes(searchTerm);
         
       const matchesStatus = statusFilter === 'All' || request.status === statusFilter;
@@ -75,7 +76,7 @@ export const RequestsPage = () => {
       
       return nameA.localeCompare(nameB);
     });
-  }, [requests, itemSearchTerm, statusFilter, selectedUnit, catalog]);
+  }, [requests, mainSearchTerm, statusFilter, selectedUnit, catalog]);
 
   const historyItems = useMemo(() => {
     const historyStatuses = ['Received', 'Cancelled', 'Completed', 'Closed'];
@@ -340,6 +341,17 @@ export const RequestsPage = () => {
               {status}
             </button>
           ))}
+        </div>
+        
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flex: 1, maxWidth: '400px' }}>
+          <input
+            type="text"
+            placeholder="Search items..."
+            value={mainSearchTerm}
+            onChange={(e) => setMainSearchTerm(e.target.value)}
+            className="search-input"
+            style={{ flex: 1 }}
+          />
         </div>
         
         <button 
@@ -631,6 +643,11 @@ export const RequestsPage = () => {
                   />
                 ) : (
                   <div className="searchable-select">
+                    {selectedItemId && (
+                      <div style={{ marginBottom: '0.5rem', padding: '0.5rem', background: '#e3f2fd', borderRadius: '4px', color: '#0066cc', fontWeight: '500' }}>
+                        Selected: {catalogMap.get(selectedItemId)?.itemName}
+                      </div>
+                    )}
                     <input
                       type="text"
                       placeholder="Search for an item..."
@@ -671,7 +688,7 @@ export const RequestsPage = () => {
                               className={`select-item ${selectedItemId === item.id ? 'selected' : ''}`}
                               onClick={() => {
                                 setSelectedItemId(item.id);
-                                setItemSearchTerm(item.itemName);
+                                setItemSearchTerm('');
                                 setItemSearchFocused(false);
                               }}
                             >
