@@ -37,6 +37,26 @@ export const RequestsPage = () => {
     return new Map(catalog.map(item => [(item as any).catalogId, item]));
   }, [catalog]);
 
+  // Helper functions defined before useMemo hooks that use them
+  const getItemName = (request: any) => {
+    // Check for unlisted/other items first
+    if (request.otherItemName) {
+      return request.otherItemName;
+    }
+    // Check for catalog items by catalogId field
+    if (request.catalogId) {
+      const item = catalog.find(c => (c as any).catalogId === request.catalogId);
+      return item?.itemName || 'Unknown Item';
+    }
+    // Also support legacy itemId field
+    if (request.itemId) {
+      const item = catalogMap.get(request.itemId);
+      return item?.itemName || 'Unknown Item';
+    }
+    // Fallback
+    return 'Unknown Item';
+  };
+
   const filteredRequests = useMemo(() => {
     if (!requests) return [];
     
@@ -117,25 +137,6 @@ export const RequestsPage = () => {
 
     return filtered.slice(0, 50);
   }, [requests, historyDays, historySearch]);
-
-  const getItemName = (request: any) => {
-    // Check for unlisted/other items first
-    if (request.otherItemName) {
-      return request.otherItemName;
-    }
-    // Check for catalog items by catalogId field
-    if (request.catalogId) {
-      const item = catalog.find(c => (c as any).catalogId === request.catalogId);
-      return item?.itemName || 'Unknown Item';
-    }
-    // Also support legacy itemId field
-    if (request.itemId) {
-      const item = catalogMap.get(request.itemId);
-      return item?.itemName || 'Unknown Item';
-    }
-    // Fallback
-    return 'Unknown Item';
-  };
 
   const getItemAltNames = (request: any) => {
     // Check for catalog items by catalogId field
