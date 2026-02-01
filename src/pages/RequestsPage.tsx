@@ -25,7 +25,7 @@ export const RequestsPage = () => {
   const [editNoteValue, setEditNoteValue] = useState('');
   const [editingQtyId, setEditingQtyId] = useState<string | null>(null);
   const [editQtyValue, setEditQtyValue] = useState('');
-  const [selectedUnit, setSelectedUnit] = useState<string>('all');
+  const [selectedUnit] = useState<string>('all');
 
   // Create a map for fast catalog lookups
   const catalogMap = useMemo(() => {
@@ -62,8 +62,8 @@ export const RequestsPage = () => {
 
     return filtered.sort((a, b) => {
       // First sort by status priority
-      const statusA = statusPriority[a.status] || 999;
-      const statusB = statusPriority[b.status] || 999;
+      const statusA = (a.status && statusPriority[a.status as keyof typeof statusPriority]) || 999;
+      const statusB = (b.status && statusPriority[b.status as keyof typeof statusPriority]) || 999;
       
       if (statusA !== statusB) {
         return statusA - statusB;
