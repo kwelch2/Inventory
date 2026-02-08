@@ -727,8 +727,19 @@ export const ExpiryPage = () => {
                 ) : (
                   <div className="searchable-select">
                     {newItem.catalogId && (
-                      <div style={{ marginBottom: '0.5rem', padding: '0.5rem', background: '#e3f2fd', borderRadius: '4px', color: '#0066cc', fontWeight: '500' }}>
-                        Selected: {catalog.find(c => c.id === newItem.catalogId)?.itemName}
+                      <div style={{ marginBottom: '0.5rem', padding: '0.5rem', background: '#e3f2fd', borderRadius: '4px', color: '#0066cc', fontWeight: '500', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span>Selected: {catalog.find(c => c.id === newItem.catalogId)?.itemName}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setNewItem({ ...newItem, catalogId: '' });
+                            setItemSearchTerm('');
+                            setItemSearchFocused(false);
+                          }}
+                          style={{ background: '#ff6b6b', color: 'white', border: 'none', padding: '0.25rem 0.5rem', borderRadius: '3px', cursor: 'pointer', fontSize: '0.8rem' }}
+                        >
+                          Clear
+                        </button>
                       </div>
                     )}
                     <input
@@ -819,18 +830,15 @@ export const ExpiryPage = () => {
 
                 <div className="form-group">
                   <label>Compartment</label>
-                  <input
-                    type="text"
-                    list="compartment-list"
-                    placeholder="e.g., Cabinet A"
+                  <select
                     value={newItem.compartment}
                     onChange={(e) => setNewItem({ ...newItem, compartment: e.target.value })}
-                  />
-                  <datalist id="compartment-list">
+                  >
+                    <option value="">Select compartment...</option>
                     {compartments?.filter(comp => comp?.id && comp?.name).map(comp => (
-                      <option key={String(comp.id)} value={comp.name} />
+                      <option key={String(comp.id)} value={comp.name}>{comp.name}</option>
                     ))}
-                  </datalist>
+                  </select>
                 </div>
               </div>
 

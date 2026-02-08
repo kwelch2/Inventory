@@ -274,38 +274,40 @@
 /* Searchable Select */
 .searchable-select {
   position: relative;
-  display: inline-block;
-  width: auto;
-  max-width: 180px;
+  display: block;
+  width: 100%;
 }
 
 .searchable-select .search-input {
-  width: 160px;
-  padding: 0.25rem 0.5rem;
-  border: none;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
-  background: transparent;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: white;
   font-size: 0.95rem;
   font-family: inherit;
   transition: all 0.2s;
+  box-sizing: border-box;
 }
 
 .searchable-select .search-input:focus {
   outline: none;
-  border-bottom: 1px solid rgba(0, 102, 204, 0.3);
-  background: rgba(0, 102, 204, 0.02);
+  border-color: #0066cc;
+  background: white;
+  box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.1);
 }
 
 .select-list {
-  max-height: 250px;
+  max-height: 300px;
   overflow-y: auto;
   border: 1px solid #ddd;
   border-top: none;
-  border-radius: 0 0 6px 6px;
+  border-radius: 0 0 4px 4px;
   background: white;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   position: relative;
-  z-index: 10;
+  z-index: 100;
+  margin-top: -1px;
 }
 
 .select-item {
@@ -484,6 +486,26 @@
 
 .vendor-pricing-table tr:last-child {
   border-bottom: none;
+}
+
+.vendor-pricing-table td:last-child {
+  max-width: 200px;
+}
+
+.vendor-pricing-table td:last-child input {
+  max-width: 100%;
+}
+
+/* Vendor Notes Column */
+.vendor-pricing-table td:nth-child(4) {
+  font-size: 0.85rem;
+  color: #666;
+}
+
+.vendor-pricing-table td:nth-child(4) span {
+  display: inline-block;
+  word-break: break-word;
+  white-space: normal;
 }
 
 /* Button Styles */

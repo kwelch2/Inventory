@@ -27,6 +27,9 @@ export const RequestsPage = () => {
   const [editQtyValue, setEditQtyValue] = useState('');
   const [selectedUnit] = useState<string>('all');
   const [mainSearchTerm, setMainSearchTerm] = useState('');
+  const [editingVendorNote, setEditingVendorNote] = useState<string | null>(null);
+  const [editVendorNoteValue, setEditVendorNoteValue] = useState('');
+  const [editVendorNoteRequestId, setEditVendorNoteRequestId] = useState<string | null>(null);
 
   // Create a map for fast catalog lookups
   const catalogMap = useMemo(() => {
@@ -244,6 +247,22 @@ export const RequestsPage = () => {
     }
   };
 
+  const handleSaveVendorNote = async (requestId: string, vendorNoteKey: string, newNote: string) => {
+    try {
+      const vendorNotesField = `vendorNotes.${vendorNoteKey}`;
+      await updateDoc(doc(db, 'requests', requestId), {
+        [vendorNotesField]: newNote,
+        updatedAt: serverTimestamp()
+      });
+      setEditingVendorNote(null);
+      setEditVendorNoteValue('');
+      setEditVendorNoteRequestId(null);
+    } catch (error) {
+      console.error('Error updating vendor note:', error);
+      alert('Failed to update vendor note');
+    }
+  };
+
   const handleCreateRequest = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -420,6 +439,7 @@ export const RequestsPage = () => {
                                   <th>Vendor</th>
                                   <th>Price</th>
                                   <th>Item #</th>
+                                  <th>Notes</th>
                                 </tr>
                               </thead>
                               <tbody>
@@ -428,12 +448,59 @@ export const RequestsPage = () => {
                                   const formattedPrice = Number.isFinite(unitPriceNumber)
                                     ? `$${unitPriceNumber.toFixed(2)}`
                                     : 'N/A';
+                                  const vendorNoteKey = `${vp.vendorId}_${idx}`;
+                                  const isEditingThisNote = editingVendorNote === vendorNoteKey && editVendorNoteRequestId === request.id;
+                                  const vendorNotesMap = (request.vendorNotes as any) || {};
+                                  const currentVendorNote = vendorNotesMap[vendorNoteKey] || '';
 
                                   return (
                                     <tr key={idx}>
                                       <td>{getVendorName(vp.vendorId)}</td>
                                       <td>{formattedPrice}</td>
                                       <td>{vp.vendorOrderNumber || 'N/A'}</td>
+                                      <td>
+                                        {isEditingThisNote ? (
+                                          <div style={{ display: 'flex', gap: '0.25rem', alignItems: 'center' }}>
+                                            <input
+                                              type="text"
+                                              value={editVendorNoteValue}
+                                              onChange={(e) => setEditVendorNoteValue(e.target.value)}
+                                              style={{ flex: 1, minWidth: '150px', padding: '0.25rem' }}
+                                              placeholder="Add note..."
+                                            />
+                                            <button
+                                              className="btn btn-small"
+                                              onClick={() => handleSaveVendorNote(request.id, vendorNoteKey, editVendorNoteValue)}
+                                              style={{ padding: '0.25rem 0.5rem', fontSize: '0.8rem' }}
+                                            >
+                                              Save
+                                            </button>
+                                            <button
+                                              className="btn btn-small"
+                                              onClick={() => {
+                                                setEditingVendorNote(null);
+                                                setEditVendorNoteValue('');
+                                                setEditVendorNoteRequestId(null);
+                                              }}
+                                              style={{ padding: '0.25rem 0.5rem', fontSize: '0.8rem' }}
+                                            >
+                                              Cancel
+                                            </button>
+                                          </div>
+                                        ) : (
+                                          <span
+                                            onClick={() => {
+                                              setEditingVendorNote(vendorNoteKey);
+                                              setEditVendorNoteValue(currentVendorNote);
+                                              setEditVendorNoteRequestId(request.id);
+                                            }}
+                                            style={{ cursor: 'pointer', color: currentVendorNote ? '#0066cc' : '#999', fontSize: '0.9rem' }}
+                                            title="Click to add or edit note"
+                                          >
+                                            {currentVendorNote || 'Click to add...'}
+                                          </span>
+                                        )}
+                                      </td>
                                     </tr>
                                   );
                                 })}
@@ -664,8 +731,19 @@ export const RequestsPage = () => {
                 ) : (
                   <div className="searchable-select">
                     {selectedItemId && (
-                      <div style={{ marginBottom: '0.5rem', padding: '0.5rem', background: '#e3f2fd', borderRadius: '4px', color: '#0066cc', fontWeight: '500' }}>
-                        Selected: {catalogMap.get(selectedItemId)?.itemName}
+                      <div style={{ marginBottom: '0.5rem', padding: '0.5rem', background: '#e3f2fd', borderRadius: '4px', color: '#0066cc', fontWeight: '500', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span>Selected: {catalogMap.get(selectedItemId)?.itemName}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedItemId('');
+                            setItemSearchTerm('');
+                            setItemSearchFocused(false);
+                          }}
+                          style={{ background: '#ff6b6b', color: 'white', border: 'none', padding: '0.25rem 0.5rem', borderRadius: '3px', cursor: 'pointer', fontSize: '0.8rem' }}
+                        >
+                          Clear
+                        </button>
                       </div>
                     )}
                     <input
