@@ -909,9 +909,7 @@ export const AdminPage = () => {
     setShowNewRequestModal(true);
   };
 
-  const handleCreateRequest = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
+  const handleCreateRequest = async (closeModal: boolean = true) => {
     try {
       const data: any = {
         status: 'Open',
@@ -958,7 +956,22 @@ export const AdminPage = () => {
       }
 
       await addDoc(collection(db, 'requests'), data);
-      setShowNewRequestModal(false);
+      
+      // Reset form
+      setNewRequestForm({
+        catalogId: '',
+        qty: '',
+        unit: '',
+        notes: '',
+        isOtherItem: false,
+        otherItemName: ''
+      });
+      
+      if (closeModal) {
+        setShowNewRequestModal(false);
+      }
+      
+      alert('Request created successfully!');
     } catch (error) {
       console.error('Error creating request:', error);
       alert('Failed to create request');
@@ -1631,7 +1644,7 @@ export const AdminPage = () => {
               <h3>Create New Request</h3>
               <button className="close-btn" onClick={() => setShowNewRequestModal(false)}>&times;</button>
             </div>
-            <form onSubmit={handleCreateRequest} className="modal-body">
+            <div className="modal-body">
               <div className="form-group">
                 <label className="checkbox-label">
                   <input
@@ -1718,9 +1731,10 @@ export const AdminPage = () => {
               
               <div className="modal-footer">
                 <button type="button" className="btn" onClick={() => setShowNewRequestModal(false)}>Cancel</button>
-                <button type="submit" className="btn btn-primary">Create Request</button>
+                <button type="button" className="btn btn-primary" onClick={() => handleCreateRequest(false)}>Submit and New</button>
+                <button type="button" className="btn btn-primary" onClick={() => handleCreateRequest(true)}>Submit and Close</button>
               </div>
-            </form>
+            </div>
           </div>
         </div>
       )}

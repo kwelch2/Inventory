@@ -244,9 +244,7 @@ export const RequestsPage = () => {
     }
   };
 
-  const handleCreateRequest = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
+  const handleCreateRequest = async (closeModal: boolean = true) => {
     if (isUnlistedItem) {
       if (!unlistedItemName.trim()) {
         alert('Please enter the item name');
@@ -290,7 +288,11 @@ export const RequestsPage = () => {
       setIsUnlistedItem(false);
       setUnlistedItemName('');
       setItemSearchTerm('');
-      setShowNewRequestModal(false);
+      
+      if (closeModal) {
+        setShowNewRequestModal(false);
+      }
+      
       alert('Request submitted successfully!');
     } catch (error) {
       console.error('Error creating request:', error);
@@ -677,7 +679,7 @@ export const RequestsPage = () => {
               <button className="close-btn" onClick={() => setShowNewRequestModal(false)}>&times;</button>
             </div>
 
-            <form onSubmit={handleCreateRequest} className="modal-body">
+            <div className="modal-body">
               <div className="form-group">
                 <div className="form-row space-between">
                   <label>Item from Catalog</label>
@@ -817,11 +819,14 @@ export const RequestsPage = () => {
                 <button type="button" className="btn btn-cancel" onClick={() => setShowNewRequestModal(false)}>
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-primary">
-                  Submit Request
+                <button type="button" className="btn btn-primary" onClick={() => handleCreateRequest(false)}>
+                  Submit and New
+                </button>
+                <button type="button" className="btn btn-primary" onClick={() => handleCreateRequest(true)}>
+                  Submit and Close
                 </button>
               </div>
-            </form>
+            </div>
           </div>
         </div>
       )}
