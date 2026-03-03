@@ -65,7 +65,18 @@ export const RequestsPage = () => {
     let filtered = requests.filter(request => {
       const itemName = getItemName(request).toLowerCase();
       const searchTerm = (mainSearchTerm || '').toLowerCase();
-      const matchesSearch = !searchTerm || itemName.includes(searchTerm);
+      
+      // Get catalog item for itemRef search
+      let itemRef = '';
+      if (request.catalogId) {
+        const catalogItem = catalog.find(c => (c as any).catalogId === request.catalogId);
+        itemRef = (catalogItem?.itemRef || '').toLowerCase();
+      } else if (request.itemId) {
+        const catalogItem = catalogMap.get(request.itemId);
+        itemRef = (catalogItem?.itemRef || '').toLowerCase();
+      }
+      
+      const matchesSearch = !searchTerm || itemName.includes(searchTerm) || itemRef.includes(searchTerm);
       const normalizedStatus = request.status || 'Open';
       const matchesStatus = statusFilter === 'Active'
         ? activeStatuses.includes(normalizedStatus)
@@ -732,7 +743,7 @@ export const RequestsPage = () => {
                       onBlur={() => setTimeout(() => setItemSearchFocused(false), 200)}
                       className="search-input"
                     />
-                    {(itemSearchFocused && itemSearchTerm) && (
+                    {itemSearchFocused && (
                       <div className="select-list">
                         {catalog
                           .filter(item => item.active !== false)
@@ -741,6 +752,7 @@ export const RequestsPage = () => {
                             const searchTerms = itemSearchTerm.toLowerCase().split(' ').filter(term => term.length > 0);
                             const itemNameLower = item.itemName.toLowerCase();
                             const altNamesLower = (item.altNames || []).map(alt => alt.toLowerCase());
+                            const itemRefLower = (item.itemRef || '').toLowerCase();
                             
                             return searchTerms.every(term => {
                               // Get all variations of the search term (e.g., "3ml" and "3 ml")
@@ -749,6 +761,10 @@ export const RequestsPage = () => {
                               // Check if any variation matches in item name
                               const matchesName = variations.some(variation => itemNameLower.includes(variation));
                               if (matchesName) return true;
+                              
+                              // Check if any variation matches in item ref
+                              const matchesRef = variations.some(variation => itemRefLower.includes(variation));
+                              if (matchesRef) return true;
                               
                               // Check if any variation matches in alt names
                               return altNamesLower.some(altName => 

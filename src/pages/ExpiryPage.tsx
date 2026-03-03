@@ -129,6 +129,7 @@ export const ExpiryPage = () => {
         const compartmentLower = (item.compartment || '').toLowerCase();
         const unitNameLower = item.unitName.toLowerCase();
         const altNamesLower = (item.catalogItem?.altNames || []).map(alt => alt.toLowerCase());
+        const itemRefLower = (item.catalogItem?.itemRef || '').toLowerCase();
         const crewStatusLower = (item.crewStatus || '').toLowerCase();
         
         // Check if all search terms match somewhere in the item data
@@ -137,6 +138,9 @@ export const ExpiryPage = () => {
           
           // Check item name
           if (variations.some(v => itemNameLower.includes(v))) return true;
+          
+          // Check item reference
+          if (variations.some(v => itemRefLower.includes(v))) return true;
           
           // Check compartment
           if (variations.some(v => compartmentLower.includes(v))) return true;
@@ -751,7 +755,7 @@ export const ExpiryPage = () => {
                       onBlur={() => setTimeout(() => setItemSearchFocused(false), 200)}
                       className="search-input"
                     />
-                    {(itemSearchFocused || itemSearchTerm) && !newItem.catalogId && (
+                    {itemSearchFocused && !newItem.catalogId && (
                       <div className="select-list">
                         {catalog
                           .filter(item => {
@@ -760,8 +764,9 @@ export const ExpiryPage = () => {
                             const searchTerms = itemSearchTerm.toLowerCase().split(' ').filter(term => term.length > 0);
                             const itemNameLower = item.itemName.toLowerCase();
                             const altNamesLower = (item.altNames || []).map(alt => alt.toLowerCase());
+                            const itemRefLower = (item.itemRef || '').toLowerCase();
                             
-                            // Check if all search terms are found in item name or alt names
+                            // Check if all search terms are found in item name, alt names, or item ref
                             return searchTerms.every(term => {
                               // Get all variations of the search term (e.g., "3ml" and "3 ml")
                               const variations = getSearchVariations(term);
@@ -769,6 +774,10 @@ export const ExpiryPage = () => {
                               // Check if any variation matches in item name
                               const matchesName = variations.some(variation => itemNameLower.includes(variation));
                               if (matchesName) return true;
+                              
+                              // Check if any variation matches in item ref
+                              const matchesRef = variations.some(variation => itemRefLower.includes(variation));
+                              if (matchesRef) return true;
                               
                               // Check if any variation matches in alt names
                               return altNamesLower.some(altName => 

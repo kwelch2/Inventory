@@ -1688,7 +1688,7 @@ export const AdminPage = () => {
                       .sort((a, b) => a.itemName.localeCompare(b.itemName))
                       .map(c => (
                         <option key={c.id} value={(c as any).catalogId || c.id}>
-                          {c.itemName}
+                          {c.itemName}{c.itemRef ? ` (${c.itemRef})` : ''}
                         </option>
                       ))}
                   </select>
