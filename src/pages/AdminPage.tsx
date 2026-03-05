@@ -19,7 +19,7 @@ type BestVendorPricing = {
   vendorId: string;
   vendorName: string;
   vendorOrderNumber: string;
-  vendorStatus: string;
+  vendorStatus: 'In Stock' | 'Backordered' | 'Out of Stock';
   unitPrice: number;
   serviceFee: number;
   effectivePrice: number;
