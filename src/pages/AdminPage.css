@@ -537,15 +537,22 @@
 .btn-status-receive {
   padding: 0.25rem 0.5rem;
   font-size: 0.75rem;
-  background: #4caf50;
-  color: white;
-  border: none;
+  background: white;
+  color: #333;
+  border: 1px solid #ddd;
   border-radius: 4px;
   cursor: pointer;
+  transition: all 0.2s;
 }
 
 .btn-status-receive:hover {
-  background: #388e3c;
+  background: #e0e0e0;
+}
+
+.btn-status-receive.active {
+  background: #4caf50;
+  color: white;
+  border-color: #4caf50;
 }
 
 .edit-buttons {
@@ -782,6 +789,13 @@
 }
 
 /* Catalog Tab */
+.catalog-header-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .catalog-count {
   margin-bottom: 1rem;
   color: #666;
@@ -790,6 +804,37 @@
 
 .catalog-table td {
   vertical-align: top;
+}
+
+.label-print-modal {
+  max-width: 680px;
+}
+
+.label-modal-subtitle {
+  margin: 0 0 0.5rem 0;
+  font-weight: 600;
+}
+
+.label-field-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.5rem 1rem;
+  margin-top: 1rem;
+}
+
+.label-field-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid #eee;
+  border-radius: 6px;
+  background: #fafafa;
+  font-size: 0.95rem;
+}
+
+.label-field-option input {
+  margin: 0;
 }
 
 /* Settings Tab */
@@ -903,6 +948,82 @@
   border-top: 1px solid #eee;
 }
 
+/* Searchable Select */
+.searchable-select {
+  position: relative;
+  display: block;
+  width: 100%;
+}
+
+.searchable-select .search-input {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: white;
+  font-size: 0.95rem;
+  font-family: inherit;
+  transition: all 0.2s;
+  box-sizing: border-box;
+}
+
+.searchable-select .search-input:focus {
+  outline: none;
+  border-color: #0066cc;
+  background: white;
+  box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.1);
+}
+
+.select-list {
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid #ddd;
+  border-top: none;
+  border-radius: 0 0 4px 4px;
+  background: white;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  position: relative;
+  z-index: 100;
+  margin-top: -1px;
+}
+
+.select-item {
+  padding: 0.75rem 0.75rem;
+  cursor: pointer;
+  transition: background 0.15s;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.select-item:last-child {
+  border-bottom: none;
+}
+
+.select-item:hover {
+  background: #f5f5f5;
+}
+
+.select-item.selected {
+  background: #e3f2fd;
+  color: #0066cc;
+  font-weight: 500;
+  border-left: 3px solid #0066cc;
+}
+
+.select-item-empty {
+  padding: 1rem 0.75rem;
+  text-align: center;
+  color: #999;
+  font-style: italic;
+}
+
+.select-item .alt-names {
+  color: #999;
+  font-size: 0.85rem;
+  font-style: italic;
+  display: block;
+  margin-top: 0.25rem;
+}
+
 /* Danger Button */
 .btn-danger {
   background: #d32f2f !important;
@@ -911,6 +1032,24 @@
 
 .btn-danger:hover {
   background: #b71c1c !important;
+}
+
+/* Delete Status Button */
+.btn-status-delete {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  background: white;
+  color: #333;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-status-delete:hover {
+  background: #d32f2f;
+  color: white;
+  border-color: #d32f2f;
 }
 
 /* Status Badge Colors */

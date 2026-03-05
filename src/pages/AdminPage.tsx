@@ -13,9 +13,39 @@ import './AdminPage.css';
 type AdminTab = 'orders' | 'catalog' | 'settings';
 type OrderView = 'item' | 'vendor';
 
+type LabelFieldKey = 'itemName' | 'itemRef' | 'compartment' | 'unitPack' | 'bestVendorPrice' | 'barcode';
+
+type BestVendorPricing = {
+  vendorId: string;
+  vendorName: string;
+  vendorOrderNumber: string;
+  vendorStatus: string;
+  unitPrice: number;
+  serviceFee: number;
+  effectivePrice: number;
+};
+
+type CatalogExportRow = {
+  itemName: string;
+  itemRef: string;
+  category: string;
+  unit: string;
+  packSize: string;
+  parLevel: string;
+  compartments: string;
+  bestVendorName: string;
+  bestVendorOrderNumber: string;
+  bestVendorStatus: string;
+  unitPrice: string;
+  serviceFeePercent: string;
+  effectivePrice: string;
+  barcode: string;
+  sortPrice: number;
+};
+
 export const AdminPage = () => {
   const { user, loading } = useAuth();
-  const { catalog, vendors, categories, compartments, requests, pricing, units, loading: dataLoading } = useInventoryData();
+  const { catalog, vendors, categories, compartments, requests, pricing, inventory, units, loading: dataLoading } = useInventoryData();
   const [activeTab, setActiveTab] = useState<AdminTab>('orders');
   
   // Orders tab state
@@ -38,6 +68,15 @@ export const AdminPage = () => {
   const [showPricingModal, setShowPricingModal] = useState(false);
   const [editingCatalogItem, setEditingCatalogItem] = useState<CatalogItem | null>(null);
   const [editingPrice, setEditingPrice] = useState<{ itemId: string; price?: VendorPrice } | null>(null);
+  const [showLabelPrintModal, setShowLabelPrintModal] = useState(false);
+  const [labelFields, setLabelFields] = useState<Record<LabelFieldKey, boolean>>({
+    itemName: true,
+    itemRef: true,
+    compartment: true,
+    unitPack: true,
+    bestVendorPrice: true,
+    barcode: true
+  });
   
   // Settings tab state
   const [settingsSection, setSettingsSection] = useState<'units' | 'compartments' | 'categories' | 'vendors'>('vendors');
@@ -55,6 +94,8 @@ export const AdminPage = () => {
     isOtherItem: false,
     otherItemName: ''
   });
+  const [itemSearchTerm, setItemSearchTerm] = useState('');
+  const [itemSearchFocused, setItemSearchFocused] = useState(false);
   
   // Form states
   const [catalogForm, setCatalogForm] = useState({
@@ -157,6 +198,26 @@ export const AdminPage = () => {
       return pricingMap.get(catId) || [];
     }
     return pricingMap.get(item.id) || [];
+  };
+
+  // Helper to generate search variations for terms like "3ml" -> ["3ml", "3 ml"]
+  const getSearchVariations = (term: string): string[] => {
+    const variations = [term];
+    // Check if term is like "3ml", "20g", etc. (number followed by letters)
+    const numberLetterPattern = /^(\d+)([a-z]+)$/i;
+    const match = term.match(numberLetterPattern);
+    if (match) {
+      // Add version with space: "3ml" -> "3 ml"
+      variations.push(`${match[1]} ${match[2]}`);
+    }
+    // Check if term is like "3 ml" (number space letters)
+    const spacedPattern = /^(\d+)\s+([a-z]+)$/i;
+    const spacedMatch = term.match(spacedPattern);
+    if (spacedMatch) {
+      // Add version without space: "3 ml" -> "3ml"
+      variations.push(`${spacedMatch[1]}${spacedMatch[2]}`);
+    }
+    return variations;
   };
 
   // ===================== ORDER FUNCTIONS =====================
@@ -855,14 +916,14 @@ export const AdminPage = () => {
                 </button>
               ))}
               <button
-                className="btn btn-status-receive"
+                className={`btn btn-status-receive ${status === 'Received' ? 'active' : ''}`}
                 onClick={() => handleStatusChange(r.id, 'Received')}
               >
                 Received
               </button>
             </div>
             <div className="edit-buttons">
-              <button className="btn btn-small btn-danger" onClick={() => handleDeleteRequest(r.id)}>Delete</button>
+              <button className="btn btn-small btn-status-delete" onClick={() => handleDeleteRequest(r.id)}>Delete</button>
             </div>
           </td>
         </tr>
@@ -906,6 +967,8 @@ export const AdminPage = () => {
       isOtherItem: false,
       otherItemName: ''
     });
+    setItemSearchTerm('');
+    setItemSearchFocused(false);
     setShowNewRequestModal(true);
   };
 
@@ -966,6 +1029,8 @@ export const AdminPage = () => {
         isOtherItem: false,
         otherItemName: ''
       });
+      setItemSearchTerm('');
+      setItemSearchFocused(false);
       
       if (closeModal) {
         setShowNewRequestModal(false);
@@ -1014,6 +1079,414 @@ export const AdminPage = () => {
 
     return filtered;
   }, [catalog, catalogSearch, catalogCategoryFilter, catalogActiveFilter]);
+
+  const getCatalogItemKeys = (item: CatalogItem): string[] => {
+    const keys = new Set<string>();
+    if (item.id) {
+      keys.add(item.id);
+    }
+    const catalogId = (item as any).catalogId;
+    if (typeof catalogId === 'string' && catalogId) {
+      keys.add(catalogId);
+    }
+    return Array.from(keys);
+  };
+
+  const inventoryCompartmentMap = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+
+    const addCompartment = (key: string, compartmentName: string) => {
+      if (!key || !compartmentName) {
+        return;
+      }
+      const existing = map.get(key) || new Set<string>();
+      existing.add(compartmentName);
+      map.set(key, existing);
+    };
+
+    inventory.forEach((inventoryItem: any) => {
+      const compartmentName = (inventoryItem.compartment || '').trim();
+      if (!compartmentName) {
+        return;
+      }
+
+      const keys = new Set<string>();
+
+      if (typeof inventoryItem.catalogId === 'string' && inventoryItem.catalogId) {
+        keys.add(inventoryItem.catalogId);
+
+        const itemById = catalogMap.get(inventoryItem.catalogId);
+        if (itemById) {
+          keys.add(itemById.id);
+          const mappedCatalogId = (itemById as any).catalogId;
+          if (typeof mappedCatalogId === 'string' && mappedCatalogId) {
+            keys.add(mappedCatalogId);
+          }
+        }
+
+        const itemByCatalogId = catalogByCatalogId.get(inventoryItem.catalogId);
+        if (itemByCatalogId) {
+          keys.add(itemByCatalogId.id);
+          const mappedCatalogId = (itemByCatalogId as any).catalogId;
+          if (typeof mappedCatalogId === 'string' && mappedCatalogId) {
+            keys.add(mappedCatalogId);
+          }
+        }
+      }
+
+      if (typeof inventoryItem.itemId === 'string' && inventoryItem.itemId) {
+        keys.add(inventoryItem.itemId);
+      }
+
+      keys.forEach((key) => addCompartment(key, compartmentName));
+    });
+
+    return map;
+  }, [inventory, catalogMap, catalogByCatalogId]);
+
+  const getItemCompartments = (item: CatalogItem): string[] => {
+    const compartmentSet = new Set<string>();
+    getCatalogItemKeys(item).forEach((key) => {
+      const matches = inventoryCompartmentMap.get(key);
+      if (matches) {
+        matches.forEach((compartmentName) => compartmentSet.add(compartmentName));
+      }
+    });
+
+    return Array.from(compartmentSet).sort((a, b) => a.localeCompare(b));
+  };
+
+  const getBestInStockVendorPricing = (item: CatalogItem): BestVendorPricing | null => {
+    const bestPricing = getCatalogItemPricing(item)
+      .filter((price) => (price.vendorStatus || 'In Stock').toLowerCase() === 'in stock')
+      .map((price) => {
+        const numericUnitPrice = typeof price.unitPrice === 'number'
+          ? price.unitPrice
+          : Number(price.unitPrice);
+
+        if (!Number.isFinite(numericUnitPrice)) {
+          return null;
+        }
+
+        const vendor = vendorMap.get(price.vendorId);
+        const serviceFee = vendor?.serviceFee || 0;
+
+        return {
+          vendorId: price.vendorId,
+          vendorName: vendor?.name || 'Unknown Vendor',
+          vendorOrderNumber: price.vendorOrderNumber || '',
+          vendorStatus: price.vendorStatus || 'In Stock',
+          unitPrice: numericUnitPrice,
+          serviceFee,
+          effectivePrice: numericUnitPrice * (1 + serviceFee / 100)
+        };
+      })
+      .filter((row): row is BestVendorPricing => row !== null)
+      .sort((a, b) => {
+        if (a.effectivePrice !== b.effectivePrice) {
+          return a.effectivePrice - b.effectivePrice;
+        }
+        if (a.unitPrice !== b.unitPrice) {
+          return a.unitPrice - b.unitPrice;
+        }
+        return a.vendorName.localeCompare(b.vendorName);
+      });
+
+    return bestPricing[0] || null;
+  };
+
+  const getCatalogExportRows = (): CatalogExportRow[] => {
+    return filteredCatalog
+      .map((item) => {
+        const bestVendor = getBestInStockVendorPricing(item);
+        const barcodeValue = Array.isArray(item.barcodes) && item.barcodes.length > 0
+          ? item.barcodes[0]
+          : '';
+
+        const compartmentsForItem = getItemCompartments(item).join(', ');
+
+        return {
+          itemName: item.itemName,
+          itemRef: item.itemRef || '',
+          category: categoryMap.get(item.category || '') || item.category || '',
+          unit: item.unit || '',
+          packSize: item.packSize !== undefined && item.packSize !== null ? String(item.packSize) : '',
+          parLevel: item.parLevel !== undefined && item.parLevel !== null ? String(item.parLevel) : '',
+          compartments: compartmentsForItem,
+          bestVendorName: bestVendor?.vendorName || '',
+          bestVendorOrderNumber: bestVendor?.vendorOrderNumber || '',
+          bestVendorStatus: bestVendor?.vendorStatus || '',
+          unitPrice: bestVendor ? bestVendor.unitPrice.toFixed(2) : '',
+          serviceFeePercent: bestVendor ? bestVendor.serviceFee.toString() : '',
+          effectivePrice: bestVendor ? bestVendor.effectivePrice.toFixed(2) : '',
+          barcode: barcodeValue,
+          sortPrice: bestVendor?.effectivePrice ?? Number.POSITIVE_INFINITY
+        };
+      })
+      .sort((a, b) => {
+        if (a.sortPrice !== b.sortPrice) {
+          return a.sortPrice - b.sortPrice;
+        }
+        return a.itemName.localeCompare(b.itemName);
+      });
+  };
+
+  const escapeCsvValue = (value: string | number): string => {
+    const raw = String(value ?? '');
+    if (/[,\n"]/.test(raw)) {
+      return `"${raw.replace(/"/g, '""')}"`;
+    }
+    return raw;
+  };
+
+  const escapeHtml = (value: string): string => {
+    return value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  };
+
+  const handleExportCatalogPricing = () => {
+    const rows = getCatalogExportRows();
+
+    if (rows.length === 0) {
+      alert('No catalog items available to export for the current filters.');
+      return;
+    }
+
+    const header = [
+      'Item Name',
+      'Item Ref',
+      'Category',
+      'Unit',
+      'Pack Size',
+      'PAR Level',
+      'Compartment/Shelf',
+      'Best Vendor (In Stock)',
+      'Vendor Item #',
+      'Vendor Status',
+      'Unit Price',
+      'Service Fee %',
+      'Effective Price',
+      'Barcode'
+    ];
+
+    const csvRows = rows.map((row) => [
+      row.itemName,
+      row.itemRef,
+      row.category,
+      row.unit,
+      row.packSize,
+      row.parLevel,
+      row.compartments,
+      row.bestVendorName,
+      row.bestVendorOrderNumber,
+      row.bestVendorStatus,
+      row.unitPrice,
+      row.serviceFeePercent,
+      row.effectivePrice,
+      row.barcode
+    ]);
+
+    const csvContent = [header, ...csvRows]
+      .map((line) => line.map((value) => escapeCsvValue(value)).join(','))
+      .join('\r\n');
+
+    const csvBlob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const downloadUrl = URL.createObjectURL(csvBlob);
+    const link = document.createElement('a');
+    const datePart = new Date().toISOString().slice(0, 10);
+
+    link.href = downloadUrl;
+    link.setAttribute('download', `catalog_vendor_pricing_${datePart}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(downloadUrl);
+  };
+
+  const handleOpenLabelPrint = () => {
+    if (filteredCatalog.length === 0) {
+      alert('No catalog items available for label printing with current filters.');
+      return;
+    }
+    setShowLabelPrintModal(true);
+  };
+
+  const toggleLabelField = (field: LabelFieldKey) => {
+    setLabelFields((prev) => ({
+      ...prev,
+      [field]: !prev[field]
+    }));
+  };
+
+  const handlePrintLabels = () => {
+    const rows = getCatalogExportRows();
+    const hasSelectedFields = Object.values(labelFields).some(Boolean);
+
+    if (!hasSelectedFields) {
+      alert('Select at least one label field to print.');
+      return;
+    }
+
+    if (rows.length === 0) {
+      alert('No catalog items available for label printing with current filters.');
+      return;
+    }
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      return;
+    }
+
+    const labelsPerPage = 30;
+    const pages: CatalogExportRow[][] = [];
+    for (let idx = 0; idx < rows.length; idx += labelsPerPage) {
+      pages.push(rows.slice(idx, idx + labelsPerPage));
+    }
+
+    const labelMarkup = (row: CatalogExportRow): string => {
+      const lines: string[] = [];
+
+      if (labelFields.itemName) {
+        lines.push(`<div class="label-title">${escapeHtml(row.itemName)}</div>`);
+      }
+
+      if (labelFields.itemRef) {
+        lines.push(`<div class="label-line"><strong>Ref:</strong> ${escapeHtml(row.itemRef || '—')}</div>`);
+      }
+
+      if (labelFields.compartment) {
+        lines.push(`<div class="label-line"><strong>Compartment:</strong> ${escapeHtml(row.compartments || '—')}</div>`);
+      }
+
+      if (labelFields.unitPack) {
+        const unitValue = row.unit || '—';
+        const packValue = row.packSize || '—';
+        lines.push(`<div class="label-line"><strong>Unit:</strong> ${escapeHtml(unitValue)} &nbsp; <strong>Pack:</strong> ${escapeHtml(packValue)}</div>`);
+      }
+
+      if (labelFields.bestVendorPrice) {
+        const vendorText = row.bestVendorName
+          ? `${row.bestVendorName} ($${row.effectivePrice || '0.00'})`
+          : 'No In-Stock Vendor';
+        lines.push(`<div class="label-line"><strong>Best:</strong> ${escapeHtml(vendorText)}</div>`);
+      }
+
+      if (labelFields.barcode) {
+        lines.push(`<div class="label-line"><strong>Barcode:</strong> ${escapeHtml(row.barcode || '—')}</div>`);
+      }
+
+      return lines.join('');
+    };
+
+    const pagesMarkup = pages
+      .map((pageRows) => {
+        const labels = Array.from({ length: labelsPerPage }, (_, labelIndex) => {
+          const row = pageRows[labelIndex];
+          if (!row) {
+            return '<div class="label empty"></div>';
+          }
+          return `<div class="label">${labelMarkup(row)}</div>`;
+        }).join('');
+
+        return `<section class="label-sheet">${labels}</section>`;
+      })
+      .join('');
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Shelf Labels</title>
+          <style>
+            @page {
+              size: letter;
+              margin: 0.5in 0.1875in;
+            }
+
+            * {
+              box-sizing: border-box;
+            }
+
+            body {
+              margin: 0;
+              font-family: Arial, sans-serif;
+              color: #111;
+            }
+
+            .label-sheet {
+              width: 8.125in;
+              display: grid;
+              grid-template-columns: repeat(3, 2.625in);
+              grid-template-rows: repeat(10, 1in);
+              column-gap: 0.125in;
+              row-gap: 0;
+              page-break-after: always;
+            }
+
+            .label-sheet:last-child {
+              page-break-after: auto;
+            }
+
+            .label {
+              padding: 0.06in 0.08in;
+              overflow: hidden;
+              display: flex;
+              flex-direction: column;
+              justify-content: flex-start;
+              gap: 0.03in;
+            }
+
+            .label.empty {
+              visibility: hidden;
+            }
+
+            .label-title {
+              font-size: 10px;
+              font-weight: 700;
+              line-height: 1.15;
+              max-height: 0.42in;
+              overflow: hidden;
+            }
+
+            .label-line {
+              font-size: 8px;
+              line-height: 1.2;
+              white-space: nowrap;
+              overflow: hidden;
+              text-overflow: ellipsis;
+            }
+
+            .no-print {
+              font-size: 12px;
+              padding: 10px 0;
+              color: #666;
+            }
+
+            @media print {
+              .no-print {
+                display: none;
+              }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="no-print">Printing ${rows.length} labels from current catalog filters.</div>
+          ${pagesMarkup}
+        </body>
+      </html>
+    `);
+
+    printWindow.document.close();
+    setShowLabelPrintModal(false);
+
+    setTimeout(() => {
+      printWindow.print();
+    }, 250);
+  };
 
   const openEditCatalog = (item?: CatalogItem) => {
     if (item) {
@@ -1302,6 +1775,8 @@ export const AdminPage = () => {
               getCatalogItemPricing={getCatalogItemPricing}
               vendorMap={vendorMap}
               categoryMap={categoryMap}
+              onExportCatalogPricing={handleExportCatalogPricing}
+              onOpenLabelPrint={handleOpenLabelPrint}
             />
           )}
 
@@ -1324,6 +1799,77 @@ export const AdminPage = () => {
             />
           )}
         </>
+      )}
+
+      {/* ===================== LABEL PRINT MODAL ===================== */}
+      {showLabelPrintModal && (
+        <div className="modal-overlay" onClick={() => setShowLabelPrintModal(false)}>
+          <div className="modal-content label-print-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Print Shelf Labels</h3>
+              <button className="close-btn" onClick={() => setShowLabelPrintModal(false)}>&times;</button>
+            </div>
+            <div className="modal-body">
+              <p className="label-modal-subtitle">Template: Avery 5160 (30 labels per page)</p>
+              <p className="muted">Using {filteredCatalog.length} item(s) from the current catalog filters.</p>
+
+              <div className="label-field-grid">
+                <label className="label-field-option">
+                  <input
+                    type="checkbox"
+                    checked={labelFields.itemName}
+                    onChange={() => toggleLabelField('itemName')}
+                  />
+                  Item Name
+                </label>
+                <label className="label-field-option">
+                  <input
+                    type="checkbox"
+                    checked={labelFields.itemRef}
+                    onChange={() => toggleLabelField('itemRef')}
+                  />
+                  Item Ref / SKU
+                </label>
+                <label className="label-field-option">
+                  <input
+                    type="checkbox"
+                    checked={labelFields.compartment}
+                    onChange={() => toggleLabelField('compartment')}
+                  />
+                  Compartment / Shelf
+                </label>
+                <label className="label-field-option">
+                  <input
+                    type="checkbox"
+                    checked={labelFields.unitPack}
+                    onChange={() => toggleLabelField('unitPack')}
+                  />
+                  Unit / Pack Size
+                </label>
+                <label className="label-field-option">
+                  <input
+                    type="checkbox"
+                    checked={labelFields.bestVendorPrice}
+                    onChange={() => toggleLabelField('bestVendorPrice')}
+                  />
+                  Best Vendor + Price
+                </label>
+                <label className="label-field-option">
+                  <input
+                    type="checkbox"
+                    checked={labelFields.barcode}
+                    onChange={() => toggleLabelField('barcode')}
+                  />
+                  Barcode (text)
+                </label>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn" onClick={() => setShowLabelPrintModal(false)}>Cancel</button>
+              <button type="button" className="btn btn-primary" onClick={handlePrintLabels}>🖨️ Print Labels</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ===================== CATALOG MODAL ===================== */}
@@ -1638,11 +2184,19 @@ export const AdminPage = () => {
 
       {/* ===================== NEW REQUEST MODAL ===================== */}
       {showNewRequestModal && (
-        <div className="modal-overlay" onClick={() => setShowNewRequestModal(false)}>
+        <div className="modal-overlay" onClick={() => {
+          setShowNewRequestModal(false);
+          setItemSearchTerm('');
+          setItemSearchFocused(false);
+        }}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>Create New Request</h3>
-              <button className="close-btn" onClick={() => setShowNewRequestModal(false)}>&times;</button>
+              <button className="close-btn" onClick={() => {
+                setShowNewRequestModal(false);
+                setItemSearchTerm('');
+                setItemSearchFocused(false);
+              }}>&times;</button>
             </div>
             <div className="modal-body">
               <div className="form-group">
@@ -1650,7 +2204,16 @@ export const AdminPage = () => {
                   <input
                     type="checkbox"
                     checked={newRequestForm.isOtherItem}
-                    onChange={(e) => setNewRequestForm({ ...newRequestForm, isOtherItem: e.target.checked })}
+                    onChange={(e) => {
+                      setNewRequestForm({ 
+                        ...newRequestForm, 
+                        isOtherItem: e.target.checked,
+                        catalogId: '',
+                        otherItemName: ''
+                      });
+                      setItemSearchTerm('');
+                      setItemSearchFocused(false);
+                    }}
                   />
                   Request unlisted/custom item
                 </label>
@@ -1670,28 +2233,101 @@ export const AdminPage = () => {
               ) : (
                 <div className="form-group">
                   <label>Select Item *</label>
-                  <select
-                    value={newRequestForm.catalogId}
-                    onChange={(e) => {
-                      const selectedItem = catalog.find(c => (c as any).catalogId === e.target.value);
-                      setNewRequestForm({
-                        ...newRequestForm,
-                        catalogId: e.target.value,
-                        unit: selectedItem?.unit || newRequestForm.unit
-                      });
-                    }}
-                    required
-                  >
-                    <option value="">Select an item...</option>
-                    {catalog
-                      .filter(c => c.active !== false)
-                      .sort((a, b) => a.itemName.localeCompare(b.itemName))
-                      .map(c => (
-                        <option key={c.id} value={(c as any).catalogId || c.id}>
-                          {c.itemName}{c.itemRef ? ` (${c.itemRef})` : ''}
-                        </option>
-                      ))}
-                  </select>
+                  <div className="searchable-select">
+                    {newRequestForm.catalogId && (
+                      <div style={{ marginBottom: '0.5rem', padding: '0.5rem', background: '#e3f2fd', borderRadius: '4px', color: '#0066cc', fontWeight: '500', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span>Selected: {catalog.find(c => (c as any).catalogId === newRequestForm.catalogId)?.itemName || 'Unknown'}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setNewRequestForm({ ...newRequestForm, catalogId: '' });
+                            setItemSearchTerm('');
+                            setItemSearchFocused(false);
+                          }}
+                          style={{ background: '#ff6b6b', color: 'white', border: 'none', padding: '0.25rem 0.5rem', borderRadius: '3px', cursor: 'pointer', fontSize: '0.8rem' }}
+                        >
+                          Clear
+                        </button>
+                      </div>
+                    )}
+                    <input
+                      type="text"
+                      placeholder="Search for an item..."
+                      value={itemSearchTerm}
+                      onChange={(e) => setItemSearchTerm(e.target.value)}
+                      onFocus={() => setItemSearchFocused(true)}
+                      onBlur={() => setTimeout(() => setItemSearchFocused(false), 200)}
+                      className="search-input"
+                    />
+                    {itemSearchFocused && (
+                      <div className="select-list">
+                        {catalog
+                          .filter(item => item.active !== false)
+                          .filter(item => {
+                            if (!itemSearchTerm) return true;
+                            const searchTerms = itemSearchTerm.toLowerCase().split(' ').filter(term => term.length > 0);
+                            const itemNameLower = item.itemName.toLowerCase();
+                            const altNamesLower = (item.altNames || []).map(alt => alt.toLowerCase());
+                            const itemRefLower = (item.itemRef || '').toLowerCase();
+                            
+                            return searchTerms.every(term => {
+                              // Get all variations of the search term (e.g., "3ml" and "3 ml")
+                              const variations = getSearchVariations(term);
+                              
+                              // Check if any variation matches in item name
+                              const matchesName = variations.some(variation => itemNameLower.includes(variation));
+                              if (matchesName) return true;
+                              
+                              // Check if any variation matches in item ref
+                              const matchesRef = variations.some(variation => itemRefLower.includes(variation));
+                              if (matchesRef) return true;
+                              
+                              // Check if any variation matches in alt names
+                              return altNamesLower.some(altName => 
+                                variations.some(variation => altName.includes(variation))
+                              );
+                            });
+                          })
+                          .sort((a, b) => a.itemName.localeCompare(b.itemName))
+                          .map(item => (
+                            <div
+                              key={item.id}
+                              className={`select-item ${newRequestForm.catalogId === ((item as any).catalogId || item.id) ? 'selected' : ''}`}
+                              onClick={() => {
+                                setNewRequestForm({
+                                  ...newRequestForm,
+                                  catalogId: (item as any).catalogId || item.id,
+                                  unit: item.unit || newRequestForm.unit
+                                });
+                                setItemSearchTerm('');
+                                setItemSearchFocused(false);
+                              }}
+                            >
+                              {item.itemName}
+                              {item.altNames && item.altNames.length > 0 && (
+                                <span className="alt-names"> ({item.altNames.join(', ')})</span>
+                              )}
+                            </div>
+                          ))}
+                        {catalog.filter(item => item.active !== false).filter(item => {
+                          if (!itemSearchTerm) return true;
+                          const searchTerms = itemSearchTerm.toLowerCase().split(' ').filter(term => term.length > 0);
+                          const itemNameLower = item.itemName.toLowerCase();
+                          const altNamesLower = (item.altNames || []).map(alt => alt.toLowerCase());
+                          return searchTerms.every(term => {
+                            const variations = getSearchVariations(term);
+                            const matchesName = variations.some(variation => itemNameLower.includes(variation));
+                            if (matchesName) return true;
+                            return altNamesLower.some(altName => 
+                              variations.some(variation => altName.includes(variation))
+                            );
+                          });
+                        }).length === 0 && (
+                          <div className="select-item-empty">No items found</div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
               
@@ -1730,7 +2366,11 @@ export const AdminPage = () => {
               </div>
               
               <div className="modal-footer">
-                <button type="button" className="btn" onClick={() => setShowNewRequestModal(false)}>Cancel</button>
+                <button type="button" className="btn" onClick={() => {
+                  setShowNewRequestModal(false);
+                  setItemSearchTerm('');
+                  setItemSearchFocused(false);
+                }}>Cancel</button>
                 <button type="button" className="btn btn-primary" onClick={() => handleCreateRequest(false)}>Submit and New</button>
                 <button type="button" className="btn btn-primary" onClick={() => handleCreateRequest(true)}>Submit and Close</button>
               </div>

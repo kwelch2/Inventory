@@ -16,6 +16,8 @@ type CatalogTabProps = {
   getCatalogItemPricing: (item: CatalogItem) => VendorPrice[];
   vendorMap: Map<string, Vendor>;
   categoryMap: Map<string, string>;
+  onExportCatalogPricing: () => void;
+  onOpenLabelPrint: () => void;
 };
 
 export const CatalogTab = ({
@@ -33,15 +35,25 @@ export const CatalogTab = ({
   handleDeleteCatalogItem,
   getCatalogItemPricing,
   vendorMap,
-  categoryMap
+  categoryMap,
+  onExportCatalogPricing,
+  onOpenLabelPrint
 }: CatalogTabProps) => {
   return (
     <div className="content-card">
       <div className="section-header">
         <h2>Catalog & Vendor Pricing</h2>
-        <button className="btn btn-primary" onClick={() => openEditCatalog()}>
-          + Add Item
-        </button>
+        <div className="catalog-header-actions">
+          <button className="btn" onClick={onExportCatalogPricing}>
+            ⬇️ Export to Excel (CSV)
+          </button>
+          <button className="btn" onClick={onOpenLabelPrint}>
+            🖨️ Print Labels
+          </button>
+          <button className="btn btn-primary" onClick={() => openEditCatalog()}>
+            + Add Item
+          </button>
+        </div>
       </div>
 
       <div className="toolbar">
