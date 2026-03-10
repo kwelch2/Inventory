@@ -34,7 +34,14 @@ export const RequestsPage = () => {
   }, [catalog]);
 
   const catalogByCatalogId = useMemo(() => {
-    return new Map(catalog.map(item => [(item as any).catalogId, item]));
+    const map = new Map<string, any>();
+    catalog.forEach(item => {
+      const catId = (item as any).catalogId;
+      if (catId) map.set(catId, item);
+      // Also map by item.id for newly created items that don't have catalogId field
+      map.set(item.id, item);
+    });
+    return map;
   }, [catalog]);
 
   // Helper functions defined before useMemo hooks that use them
@@ -45,8 +52,12 @@ export const RequestsPage = () => {
     }
     // Check for catalog items by catalogId field
     if (request.catalogId) {
-      const item = catalog.find(c => (c as any).catalogId === request.catalogId);
-      return item?.itemName || 'Unknown Item';
+      // First try catalogByCatalogId map (supports both catalogId field and item.id)
+      const item = catalogByCatalogId.get(request.catalogId);
+      if (item) return item.itemName;
+      // Fallback to find
+      const foundItem = catalog.find(c => (c as any).catalogId === request.catalogId || c.id === request.catalogId);
+      return foundItem?.itemName || 'Unknown Item';
     }
     // Also support legacy itemId field
     if (request.itemId) {
@@ -69,7 +80,8 @@ export const RequestsPage = () => {
       // Get catalog item for itemRef search
       let itemRef = '';
       if (request.catalogId) {
-        const catalogItem = catalog.find(c => (c as any).catalogId === request.catalogId);
+        const catalogItem = catalogByCatalogId.get(request.catalogId) || 
+                           catalog.find(c => (c as any).catalogId === request.catalogId || c.id === request.catalogId);
         itemRef = (catalogItem?.itemRef || '').toLowerCase();
       } else if (request.itemId) {
         const catalogItem = catalogMap.get(request.itemId);
