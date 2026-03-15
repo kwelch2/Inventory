@@ -229,8 +229,7 @@ export const RequestsPage = () => {
     try {
       await updateDoc(doc(db, 'requests', requestId), {
         status: 'Received',
-        receivedAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
+        receivedAt: serverTimestamp()
       });
     } catch (error) {
       console.error('Error marking as received:', error);
@@ -241,8 +240,7 @@ export const RequestsPage = () => {
   const handleSaveNote = async (requestId: string, newNote: string) => {
     try {
       await updateDoc(doc(db, 'requests', requestId), {
-        notes: newNote,
-        updatedAt: serverTimestamp()
+        notes: newNote
       });
       setEditingNoteId(null);
       setEditNoteValue('');
