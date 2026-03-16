@@ -137,8 +137,6 @@ export const AdminPage = () => {
     catalog.forEach(item => {
       const catId = (item as any).catalogId;
       if (catId) map.set(catId, item);
-      // Also map by item.id for newly created items that don't have catalogId field
-      map.set(item.id, item);
     });
     return map;
   }, [catalog]);
