@@ -795,6 +795,7 @@ export const AdminPage = () => {
     const { vendorId: effectiveVendorId, vendor: effectiveVendor } = getEffectiveVendor(r);
     const effectivePrice = prices.find(p => p.vendorId === effectiveVendorId) || prices[0];
     const catalogItem = r.catalogId ? catalogByCatalogId.get(r.catalogId) : null;
+    const itemRef = catalogItem?.itemRef?.trim();
     const defaultUnit = catalogItem?.unit || '';
     const isExpanded = expandedRows.has(r.id);
 
@@ -821,6 +822,7 @@ export const AdminPage = () => {
             >
               {itemName}
             </strong>
+            {itemRef && <span className="order-item-ref">Ref: {itemRef}</span>}
             {r.otherItemName && <span className="tag unlisted-tag">Unlisted</span>}
             <button className="btn-expand" onClick={() => toggleRowExpand(r.id)}>
               {isExpanded ? '▲' : '▼'}

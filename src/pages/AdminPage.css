@@ -625,6 +625,14 @@
   margin-left: 0.5rem;
 }
 
+.order-item-ref {
+  display: inline-block;
+  margin-left: 0.5rem;
+  font-size: 0.72rem;
+  color: #888;
+  letter-spacing: 0.01em;
+}
+
 .unlisted-tag {
   background: #fff3e0;
   color: #e65100;
