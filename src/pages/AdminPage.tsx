@@ -137,6 +137,7 @@ export const AdminPage = () => {
     catalog.forEach(item => {
       const catId = (item as any).catalogId;
       if (catId) map.set(catId, item);
+      map.set(item.id, item);
     });
     return map;
   }, [catalog]);
@@ -178,10 +179,10 @@ export const AdminPage = () => {
   // ===================== HELPER FUNCTIONS =====================
   const getItemName = (request: any) => {
     if (request.otherItemName) return request.otherItemName;
-    const item = catalogByCatalogId.get(request.catalogId);
-    if (item) return item.itemName;
-    const itemById = catalogMap.get(request.itemId);
-    return itemById?.itemName || 'Unknown Item';
+    const lookupKey = request.catalogId || request.itemId;
+    if (!lookupKey) return 'Unknown Item';
+    const item = catalogByCatalogId.get(lookupKey) || catalogMap.get(lookupKey);
+    return item?.itemName || 'Unknown Item';
   };
 
   const getItemPricing = (catalogId?: string) => {
@@ -2238,7 +2239,7 @@ export const AdminPage = () => {
                   <div className="searchable-select">
                     {newRequestForm.catalogId && (
                       <div style={{ marginBottom: '0.5rem', padding: '0.5rem', background: '#e3f2fd', borderRadius: '4px', color: '#0066cc', fontWeight: '500', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span>Selected: {catalog.find(c => (c as any).catalogId === newRequestForm.catalogId)?.itemName || 'Unknown'}</span>
+                        <span>Selected: {catalogByCatalogId.get(newRequestForm.catalogId)?.itemName || catalogMap.get(newRequestForm.catalogId)?.itemName || 'Unknown'}</span>
                         <button
                           type="button"
                           onClick={() => {
