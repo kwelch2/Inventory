@@ -7,6 +7,8 @@ import './RequestsPage.css';
 
 type StatusFilter = 'Active' | 'Open' | 'Ordered' | 'Backordered' | 'Received' | 'Cancelled';
 
+const ACTIVE_REQUEST_STATUSES = ['Open', 'Ordered', 'Backordered', 'Back ordered'];
+
 export const RequestsPage = () => {
   const { catalog, requests, vendors, pricing, loading } = useInventoryData();
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('Active');
@@ -27,6 +29,10 @@ export const RequestsPage = () => {
   const [editQtyValue, setEditQtyValue] = useState('');
   const [selectedUnit] = useState<string>('all');
   const [mainSearchTerm, setMainSearchTerm] = useState('');
+  const [duplicateRequestChoice, setDuplicateRequestChoice] = useState<{
+    existingRequest: any;
+    closeModal: boolean;
+  } | null>(null);
 
   // Create a map for fast catalog lookups
   const catalogMap = useMemo(() => {
@@ -68,10 +74,34 @@ export const RequestsPage = () => {
     return 'Unknown Item';
   }
 
+  const duplicateRequestCandidate = useMemo(() => {
+    if (isUnlistedItem) {
+      const targetName = unlistedItemName.trim().toLowerCase();
+      if (!targetName) return null;
+
+      return requests.find(request => {
+        const normalizedStatus = request.status || 'Open';
+        return ACTIVE_REQUEST_STATUSES.includes(normalizedStatus)
+          && !!request.otherItemName
+          && request.otherItemName.trim().toLowerCase() === targetName;
+      }) || null;
+    }
+
+    if (!selectedItemId) return null;
+
+    const selectedItem = catalogMap.get(selectedItemId);
+    const selectedCatalogId = (selectedItem as any)?.catalogId;
+
+    return requests.find(request => {
+      const normalizedStatus = request.status || 'Open';
+      if (!ACTIVE_REQUEST_STATUSES.includes(normalizedStatus)) return false;
+      const requestKey = request.catalogId || request.itemId;
+      return requestKey === selectedCatalogId || requestKey === selectedItemId;
+    }) || null;
+  }, [isUnlistedItem, unlistedItemName, selectedItemId, requests, catalogMap]);
+
   const filteredRequests = useMemo(() => {
     if (!requests) return [];
-    
-    const activeStatuses = ['Open', 'Ordered', 'Backordered', 'Back ordered'];
 
     let filtered = requests.filter(request => {
       const itemName = getItemName(request).toLowerCase();
@@ -91,7 +121,7 @@ export const RequestsPage = () => {
       const matchesSearch = !searchTerm || itemName.includes(searchTerm) || itemRef.includes(searchTerm);
       const normalizedStatus = request.status || 'Open';
       const matchesStatus = statusFilter === 'Active'
-        ? activeStatuses.includes(normalizedStatus)
+        ? ACTIVE_REQUEST_STATUSES.includes(normalizedStatus)
         : normalizedStatus === statusFilter;
 
       const matchesUnit = selectedUnit === 'all' || request.unit === selectedUnit;
@@ -265,7 +295,86 @@ export const RequestsPage = () => {
     }
   };
 
-  const handleCreateRequest = async (closeModal: boolean = true) => {
+  const getRequestQuantity = (request: any) => String(request.quantity || request.qty || '').trim();
+
+  const combineQuantities = (existingQty: string, additionalQty: string) => {
+    const current = existingQty.trim();
+    const added = additionalQty.trim();
+
+    if (!current) return added;
+    if (!added) return current;
+
+    const parseQuantity = (value: string) => {
+      const match = value.match(/^(\d+(?:\.\d+)?)\s*(.*)$/);
+      if (!match) return null;
+
+      return {
+        amount: Number(match[1]),
+        unit: match[2].trim().toLowerCase(),
+        displayUnit: match[2].trim()
+      };
+    };
+
+    const currentParsed = parseQuantity(current);
+    const addedParsed = parseQuantity(added);
+
+    if (currentParsed && addedParsed) {
+      if (!currentParsed.unit || !addedParsed.unit || currentParsed.unit === addedParsed.unit) {
+        const total = currentParsed.amount + addedParsed.amount;
+        const totalText = Number.isInteger(total) ? String(total) : total.toString();
+        const unitLabel = currentParsed.displayUnit || addedParsed.displayUnit;
+        return unitLabel ? `${totalText} ${unitLabel}` : totalText;
+      }
+    }
+
+    return `${current} + ${added}`;
+  };
+
+  const resetNewRequestForm = () => {
+    setSelectedItemId('');
+    setQuantity('');
+    setNotes('');
+    setIsUnlistedItem(false);
+    setUnlistedItemName('');
+    setItemSearchTerm('');
+    setItemSearchFocused(false);
+  };
+
+  const handleIncreaseExistingRequest = async () => {
+    if (!duplicateRequestChoice) return;
+    if (!quantity.trim()) {
+      alert('Enter a quantity to add, or choose Add Separate Request.');
+      return;
+    }
+
+    const { existingRequest, closeModal } = duplicateRequestChoice;
+
+    try {
+      const mergedQty = combineQuantities(getRequestQuantity(existingRequest), quantity);
+      const updatedNotes = [existingRequest.notes?.trim(), notes.trim()].filter(Boolean).join(' | ');
+
+      await updateDoc(doc(db, 'requests', existingRequest.id), {
+        quantity: mergedQty,
+        qty: mergedQty,
+        notes: updatedNotes,
+        updatedAt: serverTimestamp()
+      });
+
+      setDuplicateRequestChoice(null);
+      resetNewRequestForm();
+
+      if (closeModal) {
+        setShowNewRequestModal(false);
+      }
+
+      alert('Existing request quantity updated.');
+    } catch (error) {
+      console.error('Error updating existing request quantity:', error);
+      alert('Failed to update the existing request');
+    }
+  };
+
+  const handleCreateRequest = async (closeModal: boolean = true, skipDuplicateCheck: boolean = false) => {
     if (isUnlistedItem) {
       if (!unlistedItemName.trim()) {
         alert('Please enter the item name');
@@ -276,6 +385,14 @@ export const RequestsPage = () => {
         alert('Please select an item');
         return;
       }
+    }
+
+    if (!skipDuplicateCheck && duplicateRequestCandidate) {
+      setDuplicateRequestChoice({
+        existingRequest: duplicateRequestCandidate,
+        closeModal
+      });
+      return;
     }
 
     try {
@@ -290,30 +407,19 @@ export const RequestsPage = () => {
       if (isUnlistedItem) {
         requestData.otherItemName = unlistedItemName.trim();
       } else {
-        // Store the catalogId from the selected catalog item
         const selectedItem = catalogMap.get(selectedItemId);
-        if (selectedItem && (selectedItem as any).catalogId) {
-          requestData.catalogId = (selectedItem as any).catalogId;
-        } else {
-          // Fallback to itemId if no catalogId exists
-          requestData.itemId = selectedItemId;
-        }
+        requestData.catalogId = (selectedItem as any)?.catalogId || selectedItemId;
       }
 
       await addDoc(collection(db, 'requests'), requestData);
-      
-      // Reset form
-      setSelectedItemId('');
-      setQuantity('');
-      setNotes('');
-      setIsUnlistedItem(false);
-      setUnlistedItemName('');
-      setItemSearchTerm('');
-      
+
+      setDuplicateRequestChoice(null);
+      resetNewRequestForm();
+
       if (closeModal) {
         setShowNewRequestModal(false);
       }
-      
+
       alert('Request submitted successfully!');
     } catch (error) {
       console.error('Error creating request:', error);
@@ -821,6 +927,15 @@ export const RequestsPage = () => {
                 )}
               </div>
 
+              {duplicateRequestCandidate && (
+                <div className="duplicate-warning">
+                  <strong>⚠️ This item is already on the request list.</strong>
+                  <div style={{ marginTop: '0.35rem' }}>
+                    Current qty: {getRequestQuantity(duplicateRequestCandidate) || 'Not set'} • Status: {duplicateRequestCandidate.status || 'Open'}
+                  </div>
+                </div>
+              )}
+
               <div className="form-group">
                 <label>Quantity (Optional)</label>
                 <input
@@ -852,6 +967,42 @@ export const RequestsPage = () => {
                   Submit and Close
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {duplicateRequestChoice && (
+        <div className="modal-overlay" onClick={() => setDuplicateRequestChoice(null)}>
+          <div className="modal-content duplicate-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Duplicate Request Warning</h3>
+              <button className="close-btn" onClick={() => setDuplicateRequestChoice(null)}>&times;</button>
+            </div>
+
+            <div className="modal-body">
+              <div className="duplicate-warning" style={{ marginTop: 0 }}>
+                <strong>{getItemName(duplicateRequestChoice.existingRequest)}</strong> is already on the request list.
+                <div style={{ marginTop: '0.35rem' }}>
+                  Current qty: {getRequestQuantity(duplicateRequestChoice.existingRequest) || 'Not set'} • Status: {duplicateRequestChoice.existingRequest.status || 'Open'}
+                </div>
+              </div>
+
+              <p style={{ marginTop: '1rem', marginBottom: 0 }}>
+                Would you like to increase the existing request quantity or add a separate request anyway?
+              </p>
+            </div>
+
+            <div className="modal-footer duplicate-actions">
+              <button type="button" className="btn btn-cancel" onClick={() => setDuplicateRequestChoice(null)}>
+                Cancel
+              </button>
+              <button type="button" className="btn" onClick={() => handleCreateRequest(duplicateRequestChoice.closeModal, true)}>
+                Add Separate Request
+              </button>
+              <button type="button" className="btn btn-primary" onClick={handleIncreaseExistingRequest}>
+                Increase Existing Qty
+              </button>
             </div>
           </div>
         </div>

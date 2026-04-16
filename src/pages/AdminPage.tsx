@@ -638,7 +638,7 @@ export const AdminPage = () => {
                 <th>Item Name</th>
                 <th>Ref #</th>
                 <th>Vendor Item #</th>
-                <th>Quantity Needed</th>
+                <th>Qty / UOI</th>
                 ${includePricing ? '<th>Unit Price</th>' : ''}
               </tr>
             </thead>
@@ -2336,7 +2336,7 @@ export const AdminPage = () => {
               
               <div className="form-row">
                 <div className="form-group">
-                  <label>Quantity</label>
+                  <label>Qty</label>
                   <input
                     type="text"
                     value={newRequestForm.qty}
@@ -2345,7 +2345,7 @@ export const AdminPage = () => {
                   />
                 </div>
                 <div className="form-group">
-                  <label>Unit</label>
+                  <label>UOI</label>
                   <select
                     value={newRequestForm.unit}
                     onChange={(e) => setNewRequestForm({ ...newRequestForm, unit: e.target.value })}
@@ -2411,7 +2411,7 @@ export const AdminPage = () => {
                     <th>#</th>
                     <th>Item</th>
                     <th>Qty</th>
-                    <th>Unit</th>
+                    <th>UOI</th>
                     <th>Vendor Item #</th>
                     <th>Unit Price</th>
                     <th>Line Total</th>

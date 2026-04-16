@@ -271,6 +271,25 @@
   cursor: pointer;
 }
 
+.duplicate-warning {
+  margin-bottom: 1rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid #f3cc75;
+  border-left: 4px solid #f59e0b;
+  border-radius: 8px;
+  background: #fff8e6;
+  color: #7a4b00;
+}
+
+.duplicate-modal {
+  max-width: 560px;
+}
+
+.duplicate-actions {
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
 /* Searchable Select */
 .searchable-select {
   position: relative;
