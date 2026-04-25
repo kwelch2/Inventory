@@ -95,6 +95,16 @@
   color: white;
 }
 
+.hub-card {
+  background: linear-gradient(135deg, #ffb347 0%, #ff5f6d 100%);
+  color: white;
+}
+
+.hub-card h2,
+.hub-card p {
+  color: white;
+}
+
 .supply-card {
   background: linear-gradient(135deg, #43cea2 0%, #185a9d 100%);
   color: white;

@@ -38,7 +38,7 @@ export const Dashboard = () => {
           <p>Manage supply orders and requests</p>
         </Link>
 
-        <a href="https://hub.gemfireems.org/" className="dashboard-card external-card">
+        <a href="https://hub.gemfireems.org/" className="dashboard-card hub-card">
           <div className="card-icon">🏢</div>
           <h2>EMS Hub</h2>
           <p>Employee directory, payroll, training, and FTO</p>
