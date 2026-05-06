@@ -311,6 +311,13 @@
   background-color: #ffd6d6;
 }
 
+/* Fleet Needs tab — compact rows */
+.fleet-table th,
+.fleet-table td {
+  padding: 0.4rem 0.75rem;
+  vertical-align: middle;
+}
+
 /* Section headers */
 .orders-section {
   margin-bottom: 1.5rem;

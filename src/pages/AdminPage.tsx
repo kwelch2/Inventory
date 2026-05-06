@@ -8,9 +8,10 @@ import type { CatalogItem, Vendor, VendorPrice } from '../types';
 import { OrdersTab } from '../components/admin/OrdersTab';
 import { CatalogTab } from '../components/admin/CatalogTab';
 import { SettingsTab } from '../components/admin/SettingsTab';
+import { FleetNeedsTab } from '../components/admin/FleetNeedsTab';
 import './AdminPage.css';
 
-type AdminTab = 'orders' | 'catalog' | 'settings';
+type AdminTab = 'orders' | 'fleet' | 'catalog' | 'settings';
 type OrderView = 'item' | 'vendor';
 
 type LabelFieldKey = 'itemName' | 'itemRef' | 'compartment' | 'unitPack' | 'bestVendorPrice' | 'barcode';
@@ -142,6 +143,79 @@ export const AdminPage = () => {
     return map;
   }, [catalog]);
   
+  // Fleet needs: aggregate expiring inventory across all units (90-day window)
+  const unitsMap = useMemo(() => new Map(units.map(u => [u.id, u])), [units]);
+
+  const fleetNeedsSummary = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const getExpiryDate = (item: any): Date | null => {
+      if (!item.expiryDate) return null;
+      if (typeof item.expiryDate === 'object' && 'seconds' in item.expiryDate) {
+        return new Date(item.expiryDate.seconds * 1000);
+      }
+      return item.expiryDate instanceof Date ? item.expiryDate : null;
+    };
+
+    const grouped = new Map<string, {
+      catalogId?: string;
+      itemName: string;
+      totalQty: number;
+      unitNames: Set<string>;
+      worstDays: number;
+    }>();
+
+    inventory
+      .filter(item => {
+        const status = (item.status || '').toLowerCase();
+        return status !== 'ok' && status !== 'replaced';
+      })
+      .forEach(item => {
+        const expiryDate = getExpiryDate(item);
+        if (!expiryDate) return;
+
+        const diffTime = expiryDate.getTime() - today.getTime();
+        const daysUntilExpiry = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+        if (daysUntilExpiry > 90) return;
+
+        const catalogItem = item.catalogId ? (catalogByCatalogId.get(item.catalogId) || catalogMap.get(item.catalogId)) : null;
+        const itemName = catalogItem ? catalogItem.itemName : (item.itemName || 'Unknown Item');
+        const groupKey = item.catalogId || itemName;
+        const qty = item.qty ?? item.quantity ?? 1;
+        const unitName = unitsMap.get(item.unitId)?.name || item.unitId || 'Unknown';
+
+        const existing = grouped.get(groupKey);
+        if (existing) {
+          existing.totalQty += qty;
+          existing.unitNames.add(unitName);
+          if (daysUntilExpiry < existing.worstDays) {
+            existing.worstDays = daysUntilExpiry;
+          }
+        } else {
+          grouped.set(groupKey, {
+            catalogId: item.catalogId,
+            itemName,
+            totalQty: qty,
+            unitNames: new Set([unitName]),
+            worstDays: daysUntilExpiry
+          });
+        }
+      });
+
+    return Array.from(grouped.entries())
+      .map(([key, value]) => ({
+        key,
+        catalogId: value.catalogId,
+        itemName: value.itemName,
+        totalQty: value.totalQty,
+        unitNames: Array.from(value.unitNames).sort(),
+        worstDays: value.worstDays
+      }))
+      .sort((a, b) => a.worstDays - b.worstDays);
+  }, [inventory, catalogMap, catalogByCatalogId, unitsMap]);
+
   // Pricing map keyed by catalogId (the field in vendorPricing collection)
   const pricingMap = useMemo(() => {
     const map = new Map<string, VendorPrice[]>();
@@ -1725,6 +1799,9 @@ export const AdminPage = () => {
         <button className={`tab-btn ${activeTab === 'orders' ? 'active' : ''}`} onClick={() => setActiveTab('orders')}>
           📦 Orders
         </button>
+        <button className={`tab-btn ${activeTab === 'fleet' ? 'active' : ''}`} onClick={() => setActiveTab('fleet')}>
+          🚑 Fleet Needs
+        </button>
         <button className={`tab-btn ${activeTab === 'catalog' ? 'active' : ''}`} onClick={() => setActiveTab('catalog')}>
           📋 Catalog & Pricing
         </button>
@@ -1757,6 +1834,26 @@ export const AdminPage = () => {
               setVendorFilter={setVendorFilter}
               requestsByVendorAndStatus={requestsByVendorAndStatus}
               getItemName={getItemName}
+            />
+          )}
+
+          {/* ===================== FLEET NEEDS TAB ===================== */}
+          {activeTab === 'fleet' && (
+            <FleetNeedsTab
+              fleetNeedsSummary={fleetNeedsSummary}
+              onCreateRequest={(row) => {
+                setNewRequestForm({
+                  catalogId: row.catalogId || '',
+                  qty: String(row.totalQty),
+                  unit: '',
+                  notes: `Fleet replenishment — affected units: ${row.unitNames.join(', ')}`,
+                  isOtherItem: !row.catalogId,
+                  otherItemName: row.catalogId ? '' : row.itemName
+                });
+                setItemSearchTerm(row.catalogId ? row.itemName : '');
+                setItemSearchFocused(false);
+                setShowNewRequestModal(true);
+              }}
             />
           )}
 
