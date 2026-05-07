@@ -1,9 +1,20 @@
 // Type definitions for the application
 
+export interface ItemReference {
+  ref: string;           // The actual reference/SKU number
+  vendorId?: string;     // Optional vendor this ref is associated with
+  vendorName?: string;   // Display name of vendor for UI
+  isCurrent: boolean;    // Whether this is the current/preferred reference
+  addedAt?: Date | { seconds: number; nanoseconds: number };
+  description?: string;  // Optional notes (e.g., "Vendor A's branded version")
+}
+
 export interface CatalogItem {
   id: string;
   itemName: string;
-  itemRef?: string;
+  itemRef?: string;      // DEPRECATED: Kept for backward compat, use itemReferences instead
+  itemReferences?: ItemReference[];  // New: Array of current + historical references
+  preferredVendorId?: string;  // Optional: Preferred vendor for pricing when multiple vendors have item
   category?: string;
   unit?: string;
   packSize?: number;

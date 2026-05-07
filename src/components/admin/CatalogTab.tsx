@@ -127,7 +127,19 @@ export const CatalogTab = ({
                         <span className="alt-names-small">({item.altNames.join(', ')})</span>
                       )}
                     </div>
-                    {item.itemRef && <span className="muted">Ref: {item.itemRef}</span>}
+                    {(() => {
+                      const refs = (item as any).itemReferences;
+                      const currentRef = Array.isArray(refs) && refs.length > 0 
+                        ? refs.find((r: any) => r.isCurrent)?.ref || refs[0].ref
+                        : item.itemRef;
+                      const altCount = Array.isArray(refs) ? refs.length - 1 : 0;
+                      
+                      return (
+                        <>
+                          {currentRef && <span className="muted">Ref: {currentRef}{altCount > 0 ? ` (+${altCount} alt)` : ''}</span>}
+                        </>
+                      );
+                    })()}
                   </td>
                   <td>{categoryName}</td>
                   <td>{item.parLevel || 0}</td>

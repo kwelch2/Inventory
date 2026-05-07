@@ -101,7 +101,8 @@ export const AdminPage = () => {
   // Form states
   const [catalogForm, setCatalogForm] = useState({
     itemName: '',
-    itemRef: '',
+    itemRef: '',  // DEPRECATED field - kept for backward compat
+    itemReferences: [] as any[],
     category: '',
     unit: '',
     packSize: '',
@@ -109,6 +110,17 @@ export const AdminPage = () => {
     isActive: true,
     altNames: ''
   });
+  
+  const [refForm, setRefForm] = useState({
+    ref: '',
+    vendorId: '',
+    vendorName: '',
+    description: '',
+    isCurrent: false
+  });
+  
+  const [editingRefIndex, setEditingRefIndex] = useState<number | null>(null);
+  const [showRefForm, setShowRefForm] = useState(false);
   
   const [pricingForm, setPricingForm] = useState({
     vendorId: '',
@@ -548,7 +560,7 @@ export const AdminPage = () => {
     // Generate table rows
     const tableRows = orderPreviewData.items.map((item) => {
       const catalogItem = item.catalogId ? catalogByCatalogId.get(item.catalogId) : null;
-      const itemRef = catalogItem?.itemRef || 'N/A';
+      const itemRef = getCurrentItemRef(catalogItem) || 'N/A';
       
       if (includePricing) {
         return `
@@ -775,7 +787,7 @@ export const AdminPage = () => {
     
     orderPreviewData.items.forEach(item => {
       const catalogItem = item.catalogId ? catalogByCatalogId.get(item.catalogId) : null;
-      const itemRef = catalogItem?.itemRef || 'N/A';
+      const itemRef = getCurrentItemRef(catalogItem) || 'N/A';
       const qty = item.qty || item.quantity || '1';
       const uoi = item.unit || '';
       const vendorNum = item.vendorOrderNumber || 'N/A';
@@ -870,7 +882,7 @@ export const AdminPage = () => {
     const { vendorId: effectiveVendorId, vendor: effectiveVendor } = getEffectiveVendor(r);
     const effectivePrice = prices.find(p => p.vendorId === effectiveVendorId) || prices[0];
     const catalogItem = r.catalogId ? catalogByCatalogId.get(r.catalogId) : null;
-    const itemRef = catalogItem?.itemRef?.trim();
+    const itemRef = getCurrentItemRef(catalogItem)?.trim();
     const defaultUnit = catalogItem?.unit || '';
     const isExpanded = expandedRows.has(r.id);
 
@@ -1035,6 +1047,38 @@ export const AdminPage = () => {
     );
   };
 
+  // ===================== HELPER FUNCTIONS =====================
+  const getCurrentItemRef = (item?: CatalogItem): string => {
+    if (!item) return '';
+    // Check new format first
+    const refs = (item as any).itemReferences;
+    if (Array.isArray(refs) && refs.length > 0) {
+      const currentRef = refs.find((r: any) => r.isCurrent);
+      return currentRef?.ref || refs[0].ref || '';
+    }
+    // Fallback to old format
+    return item.itemRef || '';
+  };
+  
+  const getItemReferencesArray = (item?: CatalogItem): any[] => {
+    if (!item) return [];
+    const refs = (item as any).itemReferences;
+    if (Array.isArray(refs) && refs.length > 0) {
+      return refs;
+    }
+    // Migrate old single itemRef to new format
+    if (item.itemRef) {
+      return [
+        {
+          ref: item.itemRef,
+          isCurrent: true,
+          addedAt: new Date()
+        }
+      ];
+    }
+    return [];
+  };
+
   const openNewRequest = () => {
     setNewRequestForm({
       catalogId: '',
@@ -1130,7 +1174,7 @@ export const AdminPage = () => {
       filtered = filtered.filter(item =>
         item.itemName.toLowerCase().includes(search) ||
         (item.altNames || []).some(alt => alt.toLowerCase().includes(search)) ||
-        (item.itemRef || '').toLowerCase().includes(search)
+        (getCurrentItemRef(item) || '').toLowerCase().includes(search)
       );
     }
 
@@ -1284,7 +1328,7 @@ export const AdminPage = () => {
 
         return {
           itemName: item.itemName,
-          itemRef: item.itemRef || '',
+          itemRef: getCurrentItemRef(item) || '',
           category: categoryMap.get(item.category || '') || item.category || '',
           unit: item.unit || '',
           packSize: item.packSize !== undefined && item.packSize !== null ? String(item.packSize) : '',
@@ -1432,7 +1476,8 @@ export const AdminPage = () => {
       }
 
       if (labelFields.itemRef) {
-        lines.push(`<div class="label-line"><strong>Ref:</strong> ${escapeHtml(row.itemRef || '—')}</div>`);
+        const currentRef = row.itemReferences?.find((r: any) => r.isCurrent)?.ref || row.itemRef || '—';
+        lines.push(`<div class="label-line"><strong>Ref:</strong> ${escapeHtml(currentRef)}</div>`);
       }
 
       if (labelFields.compartment) {
@@ -1571,6 +1616,7 @@ export const AdminPage = () => {
       setCatalogForm({
         itemName: item.itemName,
         itemRef: item.itemRef || '',
+        itemReferences: getItemReferencesArray(item),
         category: item.category || '',
         unit: item.unit || '',
         packSize: item.packSize?.toString() || '',
@@ -1583,6 +1629,7 @@ export const AdminPage = () => {
       setCatalogForm({
         itemName: '',
         itemRef: '',
+        itemReferences: [],
         category: '',
         unit: '',
         packSize: '',
@@ -1591,15 +1638,87 @@ export const AdminPage = () => {
         altNames: ''
       });
     }
+    setRefForm({ ref: '', vendorId: '', vendorName: '', description: '', isCurrent: false });
+    setEditingRefIndex(null);
+    setShowRefForm(false);
     setShowCatalogModal(true);
+  };
+
+  const addOrUpdateReference = () => {
+    if (!refForm.ref.trim()) {
+      alert('Please enter a reference number');
+      return;
+    }
+
+    // If marking as current, unmark all others
+    let updatedRefs = [...catalogForm.itemReferences];
+    if (refForm.isCurrent) {
+      updatedRefs = updatedRefs.map(r => ({ ...r, isCurrent: false }));
+    }
+
+    if (editingRefIndex !== null) {
+      // Update existing
+      updatedRefs[editingRefIndex] = {
+        ref: refForm.ref.trim(),
+        vendorId: refForm.vendorId || undefined,
+        vendorName: refForm.vendorName || undefined,
+        description: refForm.description || undefined,
+        isCurrent: refForm.isCurrent,
+        addedAt:
+          (catalogForm.itemReferences[editingRefIndex] as any)?.addedAt || new Date()
+      };
+      setEditingRefIndex(null);
+    } else {
+      // Add new
+      updatedRefs.push({
+        ref: refForm.ref.trim(),
+        vendorId: refForm.vendorId || undefined,
+        vendorName: refForm.vendorName || undefined,
+        description: refForm.description || undefined,
+        isCurrent: refForm.isCurrent || updatedRefs.length === 0, // First ref is current by default
+        addedAt: new Date()
+      });
+    }
+
+    setCatalogForm({ ...catalogForm, itemReferences: updatedRefs });
+    setRefForm({ ref: '', vendorId: '', vendorName: '', description: '', isCurrent: false });
+    setShowRefForm(false);
+    setEditingRefIndex(null);
+  };
+
+  const deleteReference = (index: number) => {
+    const updatedRefs = catalogForm.itemReferences.filter((_, i) => i !== index);
+    // If deleted ref was current and refs remain, mark first as current
+    if (catalogForm.itemReferences[index].isCurrent && updatedRefs.length > 0) {
+      updatedRefs[0].isCurrent = true;
+    }
+    setCatalogForm({ ...catalogForm, itemReferences: updatedRefs });
+  };
+
+  const startEditReference = (index: number) => {
+    const ref = catalogForm.itemReferences[index];
+    setRefForm({
+      ref: ref.ref,
+      vendorId: ref.vendorId || '',
+      vendorName: ref.vendorName || '',
+      description: ref.description || '',
+      isCurrent: ref.isCurrent
+    });
+    setEditingRefIndex(index);
+    setShowRefForm(true);
   };
 
   const handleSaveCatalogItem = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      // Validate at least one reference or old itemRef
+      if (catalogForm.itemReferences.length === 0 && !catalogForm.itemRef) {
+        alert('Please add at least one item reference');
+        return;
+      }
+
       const data: any = {
         itemName: catalogForm.itemName,
-        itemRef: catalogForm.itemRef,
         category: catalogForm.category,
         unit: catalogForm.unit,
         packSize: catalogForm.packSize ? parseInt(catalogForm.packSize) : 0,
@@ -1609,13 +1728,21 @@ export const AdminPage = () => {
         updatedAt: serverTimestamp()
       };
 
+      // Save new itemReferences format
+      if (catalogForm.itemReferences.length > 0) {
+        data.itemReferences = catalogForm.itemReferences;
+      } else {
+        // Fallback: if no references yet, save old itemRef format
+        data.itemRef = catalogForm.itemRef;
+      }
+
       if (editingCatalogItem) {
         await updateDoc(doc(db, 'catalog', editingCatalogItem.id), data);
       } else {
         data.createdAt = serverTimestamp();
         await addDoc(collection(db, 'catalog'), data);
       }
-      
+
       setShowCatalogModal(false);
       setEditingCatalogItem(null);
     } catch (error) {
@@ -1992,13 +2119,116 @@ export const AdminPage = () => {
               </div>
               <div className="form-row">
                 <div className="form-group">
-                  <label>Item Reference</label>
-                  <input
-                    type="text"
-                    value={catalogForm.itemRef}
-                    onChange={(e) => setCatalogForm({ ...catalogForm, itemRef: e.target.value })}
-                  />
+                  <label>Item References</label>
+                  <div style={{ marginBottom: '1rem', padding: '0.75rem', backgroundColor: '#f9f9f9', borderRadius: '6px' }}>
+                    {catalogForm.itemReferences.length === 0 ? (
+                      <p className="muted" style={{ margin: '0 0 1rem 0' }}>No references yet. Add one below.</p>
+                    ) : (
+                      <div style={{ marginBottom: '1rem' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                          <thead>
+                            <tr style={{ borderBottom: '1px solid #ddd' }}>
+                              <th style={{ textAlign: 'left', padding: '0.5rem' }}>Reference</th>
+                              <th style={{ textAlign: 'left', padding: '0.5rem' }}>Vendor</th>
+                              <th style={{ textAlign: 'center', padding: '0.5rem', width: '70px' }}>Current</th>
+                              <th style={{ textAlign: 'center', padding: '0.5rem', width: '80px' }}>Action</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {catalogForm.itemReferences.map((ref, idx) => (
+                              <tr key={idx} style={{ borderBottom: '1px solid #eee' }}>
+                                <td style={{ padding: '0.5rem' }}>
+                                  <strong>{ref.ref}</strong>
+                                  {ref.description && <div style={{ fontSize: '0.8rem', color: '#666', marginTop: '0.2rem' }}>({ref.description})</div>}
+                                </td>
+                                <td style={{ padding: '0.5rem', fontSize: '0.9rem', color: '#666' }}>
+                                  {ref.vendorName || ref.vendorId || '—'}
+                                </td>
+                                <td style={{ textAlign: 'center', padding: '0.5rem' }}>
+                                  {ref.isCurrent ? '✓ Current' : ''}
+                                </td>
+                                <td style={{ textAlign: 'center', padding: '0.5rem' }}>
+                                  <button type="button" className="btn btn-small" onClick={() => startEditReference(idx)}>Edit</button>
+                                  <button type="button" className="btn btn-small" onClick={() => deleteReference(idx)} style={{ marginLeft: '0.25rem', color: '#d32f2f' }}>Del</button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                    
+                    {/* Add/Edit Reference Button and Form */}
+                    {!showRefForm && (
+                      <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid #ddd' }}>
+                        <button
+                          type="button"
+                          className="btn btn-small btn-primary"
+                          onClick={() => setShowRefForm(true)}
+                        >
+                          + Add Reference
+                        </button>
+                      </div>
+                    )}
+                    
+                    {showRefForm && (
+                      <div style={{ borderTop: '1px solid #ddd', paddingTop: '1rem', marginTop: '1rem' }}>
+                        <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '0.95rem' }}>{editingRefIndex !== null ? 'Edit' : 'Add'} Reference</h4>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                        <input
+                          type="text"
+                          placeholder="Reference #"
+                          value={refForm.ref}
+                          onChange={(e) => setRefForm({ ...refForm, ref: e.target.value })}
+                          style={{ padding: '0.5rem', border: '1px solid #ddd', borderRadius: '4px', fontSize: '0.9rem' }}
+                        />
+                        <input
+                          type="text"
+                          placeholder="Vendor (optional)"
+                          value={refForm.vendorName}
+                          onChange={(e) => setRefForm({ ...refForm, vendorName: e.target.value })}
+                          style={{ padding: '0.5rem', border: '1px solid #ddd', borderRadius: '4px', fontSize: '0.9rem' }}
+                        />
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="Description/Notes (optional)"
+                        value={refForm.description}
+                        onChange={(e) => setRefForm({ ...refForm, description: e.target.value })}
+                        style={{ width: '100%', padding: '0.5rem', border: '1px solid #ddd', borderRadius: '4px', fontSize: '0.9rem', marginBottom: '0.75rem' }}
+                      />
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem', fontSize: '0.9rem' }}>
+                        <input
+                          type="checkbox"
+                          checked={refForm.isCurrent}
+                          onChange={(e) => setRefForm({ ...refForm, isCurrent: e.target.checked })}
+                        />
+                        Mark as Current (for orders & labels)
+                      </label>
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <button type="button" className="btn btn-small btn-primary" onClick={addOrUpdateReference}>
+                          {editingRefIndex !== null ? 'Update' : 'Add'} Reference
+                        </button>
+                        {editingRefIndex !== null && (
+                          <button
+                            type="button"
+                            className="btn btn-small"
+                            onClick={() => {
+                              setEditingRefIndex(null);
+                              setShowRefForm(false);
+                              setRefForm({ ref: '', vendorId: '', vendorName: '', description: '', isCurrent: false });
+                            }}
+                          >
+                            Cancel
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    )}
+                  </div>
                 </div>
+              </div>
+              <div className="form-row">
                 <div className="form-group">
                   <label>Category</label>
                   <select
@@ -2448,9 +2678,18 @@ export const AdminPage = () => {
                     onChange={(e) => setNewRequestForm({ ...newRequestForm, unit: e.target.value })}
                   >
                     <option value="">Select...</option>
-                    {units.map(u => (
-                      <option key={u.id} value={u.name}>{u.name}</option>
-                    ))}
+                    <option value="Each">Each</option>
+                    <option value="Box">Box</option>
+                    <option value="Case">Case</option>
+                    <option value="Kit">Kit</option>
+                    <option value="Brick">Brick</option>
+                    <option value="Bag">Bag</option>
+                    <option value="Bottle">Bottle</option>
+                    <option value="Pack">Pack</option>
+                    <option value="Vial">Vial</option>
+                    <option value="Tube">Tube</option>
+                    <option value="Roll">Roll</option>
+                    <option value="Pair">Pair</option>
                   </select>
                 </div>
               </div>
