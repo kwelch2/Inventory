@@ -29,6 +29,7 @@ type BestVendorPricing = {
 type CatalogExportRow = {
   itemName: string;
   itemRef: string;
+  itemReferences: any[];
   category: string;
   unit: string;
   packSize: string;
@@ -1048,7 +1049,7 @@ export const AdminPage = () => {
   };
 
   // ===================== HELPER FUNCTIONS =====================
-  const getCurrentItemRef = (item?: CatalogItem): string => {
+  const getCurrentItemRef = (item?: CatalogItem | null): string => {
     if (!item) return '';
     // Check new format first
     const refs = (item as any).itemReferences;
@@ -1329,6 +1330,7 @@ export const AdminPage = () => {
         return {
           itemName: item.itemName,
           itemRef: getCurrentItemRef(item) || '',
+          itemReferences: getItemReferencesArray(item),
           category: categoryMap.get(item.category || '') || item.category || '',
           unit: item.unit || '',
           packSize: item.packSize !== undefined && item.packSize !== null ? String(item.packSize) : '',
