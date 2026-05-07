@@ -26,6 +26,7 @@ const getRowClass = (days: number): string => {
 export const FleetNeedsTab = ({ fleetNeedsSummary, onCreateRequest }: FleetNeedsTabProps) => {
   const [sortField, setSortField] = useState<SortField>('worstDays');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
+  const generatedAt = useMemo(() => new Date().toLocaleString(), []);
 
   const handleSort = (field: SortField) => {
     if (field === sortField) {
@@ -51,17 +52,30 @@ export const FleetNeedsTab = ({ fleetNeedsSummary, onCreateRequest }: FleetNeeds
 
   const arrow = (field: SortField) => sortField === field ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '';
 
+  const handlePrint = () => {
+    window.print();
+  };
+
   return (
-    <div className="content-card">
+    <div className="content-card fleet-print-view">
       <div className="section-header">
-        <h2>Fleet Replenishment Insight</h2>
-        <p className="muted">Items expiring within 90 days across all units (excluding OK / Replaced)</p>
+        <div>
+          <h2>Fleet Replenishment Insight</h2>
+          <p className="muted">Items expiring within 90 days across all units (excluding OK / Replaced)</p>
+          <p className="muted print-only">Generated: {generatedAt}</p>
+        </div>
+        <div className="fleet-header-actions no-print">
+          <button className="btn btn-secondary" onClick={handlePrint}>
+            Print View
+          </button>
+        </div>
       </div>
 
       {fleetNeedsSummary.length === 0 ? (
         <p className="muted" style={{ padding: '1rem' }}>No items expiring within 90 days across the fleet.</p>
       ) : (
-        <div className="table-container">
+        <>
+        <div className="table-container screen-only">
           <table className="admin-table fleet-table">
             <thead>
               <tr>
@@ -103,6 +117,32 @@ export const FleetNeedsTab = ({ fleetNeedsSummary, onCreateRequest }: FleetNeeds
             </tbody>
           </table>
         </div>
+        <div className="print-only">
+          <table className="fleet-print-table">
+            <thead>
+              <tr>
+                <th>Item Name</th>
+                <th>Worst Expiry</th>
+                <th>Total Qty</th>
+                <th>Affected Units</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.map(row => (
+                <tr key={`print-${row.key}`} className={`fleet-print-row ${getRowClass(row.worstDays)}`}>
+                  <td>
+                    {row.itemName}
+                    {!row.catalogId && ' (Custom)'}
+                  </td>
+                  <td>{row.worstDays <= 0 ? 'Expired' : `${row.worstDays}d`}</td>
+                  <td>{row.totalQty}</td>
+                  <td>{row.unitNames.join(', ')}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        </>
       )}
     </div>
   );
