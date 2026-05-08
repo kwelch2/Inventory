@@ -3,6 +3,7 @@ import { useInventoryData } from '../hooks/useInventoryData';
 import { db } from '../config/firebase';
 import { doc, updateDoc, serverTimestamp, collection, addDoc } from 'firebase/firestore';
 import type { InventoryItem } from '../types';
+import { getSearchVariations, parseFirebaseDate } from '../utils/helpers';
 import './CommonPages.css';
 import './ExpiryPage.css';
 
@@ -33,13 +34,7 @@ export const ExpiryPage = () => {
   });
 
   const getExpiryDate = (item: InventoryItem): Date | null => {
-    if (!item.expiryDate) return null;
-    
-    if (typeof item.expiryDate === 'object' && 'seconds' in item.expiryDate) {
-      return new Date(item.expiryDate.seconds * 1000);
-    }
-    
-    return item.expiryDate instanceof Date ? item.expiryDate : null;
+    return parseFirebaseDate(item.expiryDate);
   };
 
   const getDaysUntilExpiry = (expiryDate: Date): number => {
@@ -47,26 +42,6 @@ export const ExpiryPage = () => {
     now.setHours(0, 0, 0, 0);
     const diffTime = expiryDate.getTime() - now.getTime();
     return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  };
-
-  // Helper to generate search variations for terms like "3ml" -> ["3ml", "3 ml"]
-  const getSearchVariations = (term: string): string[] => {
-    const variations = [term];
-    // Check if term is like "3ml", "20g", etc. (number followed by letters)
-    const numberLetterPattern = /^(\d+)([a-z]+)$/i;
-    const match = term.match(numberLetterPattern);
-    if (match) {
-      // Add version with space: "3ml" -> "3 ml"
-      variations.push(`${match[1]} ${match[2]}`);
-    }
-    // Check if term is like "3 ml" (number space letters)
-    const spacedPattern = /^(\d+)\s+([a-z]+)$/i;
-    const spacedMatch = term.match(spacedPattern);
-    if (spacedMatch) {
-      // Add version without space: "3 ml" -> "3ml"
-      variations.push(`${spacedMatch[1]}${spacedMatch[2]}`);
-    }
-    return variations;
   };
 
   const getRowClass = (days: number): string => {
@@ -234,7 +209,7 @@ export const ExpiryPage = () => {
     setEditValues({
       unitId: item.unitId,
       compartment: item.compartment || '',
-      quantity: item.qty ?? item.quantity ?? 1,
+      quantity: item.quantity ?? (item as any).qty ?? 1,
       crewStatus: item.crewStatus || '',
       expiryDate: formatDateInput(getExpiryDate(item))
     });
@@ -255,7 +230,7 @@ export const ExpiryPage = () => {
       await updateDoc(doc(db, 'inventory', id), {
         unitId: editValues.unitId,
         compartment: editValues.compartment,
-        qty: editValues.quantity,
+        quantity: editValues.quantity,
         crewStatus: editValues.crewStatus.trim(),
         expiryDate: editValues.expiryDate ? new Date(editValues.expiryDate) : null,
         updatedAt: serverTimestamp()
@@ -281,7 +256,7 @@ export const ExpiryPage = () => {
 
   const formatDateTime = (timestamp: any): string => {
     if (!timestamp) return 'N/A';
-    const date = timestamp.seconds ? new Date(timestamp.seconds * 1000) : new Date(timestamp);
+    const date = parseFirebaseDate(timestamp as any) || new Date(timestamp);
     return date.toLocaleString();
   };
 
@@ -358,7 +333,7 @@ export const ExpiryPage = () => {
         unitId: newItem.unitId,
         compartment: newItem.compartment.trim(),
         expiryDate: expiryDateObj,
-        qty: newItem.quantity,
+        quantity: newItem.quantity,
         status: '',
         crewStatus: newItem.note.trim(),
         createdAt: serverTimestamp(),
@@ -559,7 +534,7 @@ export const ExpiryPage = () => {
                             style={{ width: '60px' }}
                           />
                         ) : (
-                          item.qty ?? item.quantity ?? 'N/A'
+                          item.quantity ?? (item as any).qty ?? 'N/A'
                         )}
                       </td>
                       <td>

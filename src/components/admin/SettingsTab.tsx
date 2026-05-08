@@ -1,5 +1,16 @@
 import type { Vendor, CatalogItem } from '../../types';
 
+type MigrationSummary = {
+  inventoryScanned: number;
+  inventoryUpdated: number;
+  inventoryInvalid: number;
+  requestsScanned: number;
+  requestsUpdated: number;
+  requestsInvalid: number;
+  failedUpdates: number;
+  failures: string[];
+};
+
 type SettingsTabProps = {
   settingsSection: 'units' | 'compartments' | 'categories' | 'vendors';
   setSettingsSection: (value: 'units' | 'compartments' | 'categories' | 'vendors') => void;
@@ -14,6 +25,10 @@ type SettingsTabProps = {
   handleDeleteSettingsItem: (collectionName: string, id: string) => void;
   newItemName: string;
   setNewItemName: (value: string) => void;
+  migrationRunning: boolean;
+  migrationStatus: string;
+  migrationSummary: MigrationSummary | null;
+  runDataMigration: () => void;
 };
 
 export const SettingsTab = ({
@@ -29,7 +44,11 @@ export const SettingsTab = ({
   handleAddSettingsItem,
   handleDeleteSettingsItem,
   newItemName,
-  setNewItemName
+  setNewItemName,
+  migrationRunning,
+  migrationStatus,
+  migrationSummary,
+  runDataMigration
 }: SettingsTabProps) => {
   return (
     <div className="content-card">
@@ -85,6 +104,36 @@ export const SettingsTab = ({
               ))}
             </tbody>
           </table>
+
+          <details style={{ marginTop: '1rem' }}>
+            <summary style={{ cursor: 'pointer', color: '#666', fontSize: '0.9rem' }}>
+              Advanced Utilities
+            </summary>
+            <div style={{ marginTop: '0.75rem', padding: '0.75rem', border: '1px dashed #ccc', borderRadius: '6px' }}>
+              <p className="muted" style={{ marginTop: 0 }}>
+                One-off data migration for legacy fields (qty to quantity and itemId to catalogId).
+              </p>
+              <button className="btn btn-small" onClick={runDataMigration} disabled={migrationRunning}>
+                {migrationRunning ? 'Running Migration...' : 'Run Legacy Data Migration'}
+              </button>
+              {migrationStatus && (
+                <p className="muted" style={{ marginTop: '0.5rem', marginBottom: 0 }}>{migrationStatus}</p>
+              )}
+              {migrationSummary && (
+                <div style={{ marginTop: '0.75rem', fontSize: '0.9rem' }}>
+                  <p style={{ margin: '0.2rem 0' }}>
+                    Inventory: scanned {migrationSummary.inventoryScanned}, updated {migrationSummary.inventoryUpdated}, invalid {migrationSummary.inventoryInvalid}
+                  </p>
+                  <p style={{ margin: '0.2rem 0' }}>
+                    Requests: scanned {migrationSummary.requestsScanned}, updated {migrationSummary.requestsUpdated}, invalid {migrationSummary.requestsInvalid}
+                  </p>
+                  <p style={{ margin: '0.2rem 0' }}>
+                    Failed updates: {migrationSummary.failedUpdates}
+                  </p>
+                </div>
+              )}
+            </div>
+          </details>
         </div>
       )}
 

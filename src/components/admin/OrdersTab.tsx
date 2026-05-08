@@ -21,6 +21,9 @@ type OrdersTabProps = {
   orderedRequests: any[];
   backorderRequests: any[];
   historyRequests: any[];
+  archiveLoaded: boolean;
+  archiveLoading: boolean;
+  onLoadArchive: () => void;
   expandHistorySection: boolean;
   setExpandHistorySection: (next: boolean) => void;
   renderOrderRow: (r: any, rowClassName?: string) => ReactNode;
@@ -41,6 +44,9 @@ export const OrdersTab = ({
   orderedRequests,
   backorderRequests,
   historyRequests,
+  archiveLoaded,
+  archiveLoading,
+  onLoadArchive,
   expandHistorySection,
   setExpandHistorySection,
   renderOrderRow,
@@ -218,7 +224,23 @@ export const OrdersTab = ({
                   📋 History
                   <span className="count-badge">{historyRequests.length}</span>
                 </h3>
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                  {!archiveLoaded ? (
+                    <button
+                      className="btn btn-small"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onLoadArchive();
+                      }}
+                      disabled={archiveLoading}
+                    >
+                      {archiveLoading ? 'Loading Archive...' : 'Load Archive'}
+                    </button>
+                  ) : (
+                    <span className="muted">Archive loaded</span>
+                  )}
                 <span className="expand-icon">{expandHistorySection ? '▼' : '▶'}</span>
+                </div>
               </div>
               {expandHistorySection && (
                 <div className="orders-section-content">
@@ -241,8 +263,8 @@ export const OrdersTab = ({
                             </td>
                             <td>{r.qty || r.quantity || ''}</td>
                             <td><span className={`status-badge status-${(r.status || '').toLowerCase()}`}>{r.status}</span></td>
-                            <td>{r.receivedAt && typeof r.receivedAt === 'object' && 'seconds' in r.receivedAt
-                              ? new Date(r.receivedAt.seconds * 1000).toLocaleDateString()
+                            <td>{(r.receivedAt || r.updatedAt || r.createdAt) && typeof (r.receivedAt || r.updatedAt || r.createdAt) === 'object' && 'seconds' in (r.receivedAt || r.updatedAt || r.createdAt)
+                              ? new Date((r.receivedAt || r.updatedAt || r.createdAt).seconds * 1000).toLocaleDateString()
                               : 'N/A'}</td>
                           </tr>
                         ))}
@@ -489,11 +511,11 @@ export const OrdersTab = ({
                     group.history.map((r: any) => ({ ...r, vendorName: group.vendorName }))
                   )
                   .sort((a, b) => {
-                    const aDate = a.receivedAt && typeof a.receivedAt === 'object' && 'seconds' in a.receivedAt
-                      ? a.receivedAt.seconds
+                    const aDate = (a.receivedAt || a.updatedAt || a.createdAt) && typeof (a.receivedAt || a.updatedAt || a.createdAt) === 'object' && 'seconds' in (a.receivedAt || a.updatedAt || a.createdAt)
+                      ? (a.receivedAt || a.updatedAt || a.createdAt).seconds
                       : 0;
-                    const bDate = b.receivedAt && typeof b.receivedAt === 'object' && 'seconds' in b.receivedAt
-                      ? b.receivedAt.seconds
+                    const bDate = (b.receivedAt || b.updatedAt || b.createdAt) && typeof (b.receivedAt || b.updatedAt || b.createdAt) === 'object' && 'seconds' in (b.receivedAt || b.updatedAt || b.createdAt)
+                      ? (b.receivedAt || b.updatedAt || b.createdAt).seconds
                       : 0;
                     return bDate - aDate; // Most recent first
                   });
@@ -508,7 +530,23 @@ export const OrdersTab = ({
                         📋 History
                         <span className="count-badge">{allHistory.length}</span>
                       </h3>
+                      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                        {!archiveLoaded ? (
+                          <button
+                            className="btn btn-small"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onLoadArchive();
+                            }}
+                            disabled={archiveLoading}
+                          >
+                            {archiveLoading ? 'Loading Archive...' : 'Load Archive'}
+                          </button>
+                        ) : (
+                          <span className="muted">Archive loaded</span>
+                        )}
                       <span className="expand-icon">{expandHistorySection ? '▼' : '▶'}</span>
+                      </div>
                     </div>
                     {expandHistorySection && (
                       <div className="orders-section-content">
@@ -533,8 +571,8 @@ export const OrdersTab = ({
                                   <td>{r.vendorName}</td>
                                   <td>{r.qty || r.quantity || ''} {r.unit || ''}</td>
                                   <td><span className={`status-badge status-${(r.status || '').toLowerCase()}`}>{r.status}</span></td>
-                                  <td>{r.receivedAt && typeof r.receivedAt === 'object' && 'seconds' in r.receivedAt
-                                    ? new Date(r.receivedAt.seconds * 1000).toLocaleDateString()
+                                  <td>{(r.receivedAt || r.updatedAt || r.createdAt) && typeof (r.receivedAt || r.updatedAt || r.createdAt) === 'object' && 'seconds' in (r.receivedAt || r.updatedAt || r.createdAt)
+                                    ? new Date((r.receivedAt || r.updatedAt || r.createdAt).seconds * 1000).toLocaleDateString()
                                     : 'N/A'}</td>
                                 </tr>
                               ))}

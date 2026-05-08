@@ -1,27 +1,67 @@
-import { useState, useMemo } from 'react';
-import { doc, updateDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { useState, useMemo, useCallback } from 'react';
+import { doc, updateDoc, addDoc, collection, serverTimestamp, where, orderBy, limit, type QueryConstraint } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useInventoryData } from '../hooks/useInventoryData';
+import { useFirestoreCollection } from '../hooks/useFirestoreCollection';
+import type { OrderRequest } from '../types';
+import { getItemName, getSearchVariations, parseFirebaseDate } from '../utils/helpers';
 import './CommonPages.css';
 import './RequestsPage.css';
 
 type StatusFilter = 'Active' | 'Open' | 'Ordered' | 'Backordered' | 'Received' | 'Cancelled';
+type HistoryWindow = 30 | 60 | 90 | 180 | 'ALL';
 
 const ACTIVE_REQUEST_STATUSES = ['Open', 'Ordered', 'Backordered', 'Back ordered'];
+const HISTORY_REQUEST_STATUSES = ['Received', 'Cancelled'];
+const HISTORY_DEFAULT_DAYS = 180;
+const ARCHIVE_FETCH_LIMIT = 1200;
 
 export const RequestsPage = () => {
-  const { catalog, requests, vendors, pricing, loading } = useInventoryData();
+  const historyCutoffDate = useMemo(() => {
+    const cutoff = new Date();
+    cutoff.setHours(0, 0, 0, 0);
+    cutoff.setDate(cutoff.getDate() - HISTORY_DEFAULT_DAYS);
+    return cutoff;
+  }, []);
+
+  const activeRequestConstraints = useMemo<QueryConstraint[]>(() => [
+    where('status', 'in', ACTIVE_REQUEST_STATUSES),
+    orderBy('updatedAt', 'desc')
+  ], []);
+
+  const historyRequestConstraints = useMemo<QueryConstraint[]>(() => [
+    where('status', 'in', HISTORY_REQUEST_STATUSES),
+    where('updatedAt', '>=', historyCutoffDate),
+    orderBy('updatedAt', 'desc'),
+    limit(300)
+  ], [historyCutoffDate]);
+
+  const archiveRequestConstraints = useMemo<QueryConstraint[]>(() => [
+    where('status', 'in', HISTORY_REQUEST_STATUSES),
+    where('updatedAt', '<', historyCutoffDate),
+    orderBy('updatedAt', 'desc'),
+    limit(ARCHIVE_FETCH_LIMIT)
+  ], [historyCutoffDate]);
+
+  const { catalog, requests, vendors, pricing, loading: activeLoading } = useInventoryData({
+    requestConstraints: activeRequestConstraints
+  });
+  const { data: historyRequests, loading: historyLoading } = useFirestoreCollection<OrderRequest>('requests', historyRequestConstraints);
+  const [loadArchive, setLoadArchive] = useState(false);
+  const { data: archiveRequests, loading: archiveLoading } = useFirestoreCollection<OrderRequest>('requests', archiveRequestConstraints, loadArchive);
+  const loading = activeLoading || historyLoading || archiveLoading;
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('Active');
   const [showHistory, setShowHistory] = useState(false);
   const [showNewRequestModal, setShowNewRequestModal] = useState(false);
   const [selectedItemId, setSelectedItemId] = useState('');
   const [quantity, setQuantity] = useState('');
+  const [requestUnit, setRequestUnit] = useState('');
   const [notes, setNotes] = useState('');
   const [isUnlistedItem, setIsUnlistedItem] = useState(false);
   const [unlistedItemName, setUnlistedItemName] = useState('');
   const [itemSearchTerm, setItemSearchTerm] = useState('');
   const [itemSearchFocused, setItemSearchFocused] = useState(false);
-  const [historyDays, setHistoryDays] = useState(30);
+  const [historyDays, setHistoryDays] = useState<HistoryWindow>(HISTORY_DEFAULT_DAYS);
   const [historySearch, setHistorySearch] = useState('');
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [editNoteValue, setEditNoteValue] = useState('');
@@ -50,29 +90,10 @@ export const RequestsPage = () => {
     return map;
   }, [catalog]);
 
-  // Helper functions defined before useMemo hooks that use them
-  function getItemName(request: any) {
-    // Check for unlisted/other items first
-    if (request.otherItemName) {
-      return request.otherItemName;
-    }
-    // Check for catalog items by catalogId field
-    if (request.catalogId) {
-      // First try catalogByCatalogId map (supports both catalogId field and item.id)
-      const item = catalogByCatalogId.get(request.catalogId);
-      if (item) return item.itemName;
-      // Fallback to find
-      const foundItem = catalog.find(c => (c as any).catalogId === request.catalogId || c.id === request.catalogId);
-      return foundItem?.itemName || 'Unknown Item';
-    }
-    // Also support legacy itemId field
-    if (request.itemId) {
-      const item = catalogMap.get(request.itemId);
-      return item?.itemName || 'Unknown Item';
-    }
-    // Fallback
-    return 'Unknown Item';
-  }
+  const resolveItemName = useCallback(
+    (request: any) => getItemName(request, catalogByCatalogId, catalogMap),
+    [catalogByCatalogId, catalogMap]
+  );
 
   const duplicateRequestCandidate = useMemo(() => {
     if (isUnlistedItem) {
@@ -103,8 +124,8 @@ export const RequestsPage = () => {
   const filteredRequests = useMemo(() => {
     if (!requests) return [];
 
-    let filtered = requests.filter(request => {
-      const itemName = getItemName(request).toLowerCase();
+    const filtered = requests.filter(request => {
+      const itemName = resolveItemName(request).toLowerCase();
       const searchTerm = (mainSearchTerm || '').toLowerCase();
       
       // Get catalog item for itemRef search
@@ -149,33 +170,34 @@ export const RequestsPage = () => {
       }
       
       // Then sort by item name
-      const nameA = getItemName(a).toLowerCase();
-      const nameB = getItemName(b).toLowerCase();
+      const nameA = resolveItemName(a).toLowerCase();
+      const nameB = resolveItemName(b).toLowerCase();
       
       return nameA.localeCompare(nameB);
     });
-  }, [requests, mainSearchTerm, statusFilter, selectedUnit, catalog]);
+  }, [requests, mainSearchTerm, statusFilter, selectedUnit, catalog, catalogByCatalogId, catalogMap, resolveItemName]);
 
   const historyItems = useMemo(() => {
-    const historyStatuses = ['Received', 'Cancelled', 'Completed', 'Closed'];
-    let filtered = requests.filter(r => r.status && historyStatuses.includes(r.status));
+    const mergedHistory = loadArchive
+      ? Array.from(new Map([...historyRequests, ...archiveRequests].map(item => [item.id, item])).values())
+      : historyRequests;
+
+    let filtered = mergedHistory.filter(r => r.status && HISTORY_REQUEST_STATUSES.includes(r.status));
     
     // Apply history day filter
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - historyDays);
-    filtered = filtered.filter(r => {
-      const timestamp = r.updatedAt && typeof r.updatedAt === 'object' && 'seconds' in r.updatedAt
-        ? new Date(r.updatedAt.seconds * 1000)
-        : r.createdAt && typeof r.createdAt === 'object' && 'seconds' in r.createdAt
-        ? new Date(r.createdAt.seconds * 1000)
-        : null;
-      return timestamp && timestamp >= cutoff;
-    });
+    if (historyDays !== 'ALL') {
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - historyDays);
+      filtered = filtered.filter(r => {
+        const timestamp = parseFirebaseDate(r.updatedAt) || parseFirebaseDate(r.createdAt);
+        return timestamp && timestamp >= cutoff;
+      });
+    }
     
     // Apply history search
     if (historySearch) {
       filtered = filtered.filter(r => {
-        const itemName = getItemName(r).toLowerCase();
+        const itemName = resolveItemName(r).toLowerCase();
         const noteText = (r.notes || '').toLowerCase();
         const search = historySearch.toLowerCase();
         return itemName.includes(search) || noteText.includes(search);
@@ -184,17 +206,13 @@ export const RequestsPage = () => {
 
     // Sort by update date (newest first)
     filtered.sort((a, b) => {
-      const aTime = a.updatedAt && typeof a.updatedAt === 'object' && 'seconds' in a.updatedAt 
-        ? a.updatedAt.seconds 
-        : 0;
-      const bTime = b.updatedAt && typeof b.updatedAt === 'object' && 'seconds' in b.updatedAt 
-        ? b.updatedAt.seconds 
-        : 0;
+      const aTime = parseFirebaseDate(a.updatedAt)?.getTime() || 0;
+      const bTime = parseFirebaseDate(b.updatedAt)?.getTime() || 0;
       return bTime - aTime;
     });
 
-    return filtered.slice(0, 50);
-  }, [requests, historyDays, historySearch]);
+    return loadArchive ? filtered : filtered.slice(0, 50);
+  }, [historyRequests, archiveRequests, loadArchive, historyDays, historySearch, resolveItemName]);
 
   function getItemAltNames(request: any) {
     // Check for catalog items by catalogId field
@@ -229,26 +247,6 @@ export const RequestsPage = () => {
       .sort((a, b) => (a.unitPrice || Infinity) - (b.unitPrice || Infinity));
   }
 
-  // Helper to generate search variations for terms like "3ml" -> ["3ml", "3 ml"]
-  function getSearchVariations(term: string): string[] {
-    const variations = [term];
-    // Check if term is like "3ml", "20g", etc. (number followed by letters)
-    const numberLetterPattern = /^(\d+)([a-z]+)$/i;
-    const match = term.match(numberLetterPattern);
-    if (match) {
-      // Add version with space: "3ml" -> "3 ml"
-      variations.push(`${match[1]} ${match[2]}`);
-    }
-    // Check if term is like "3 ml" (number space letters)
-    const spacedPattern = /^(\d+)\s+([a-z]+)$/i;
-    const spacedMatch = term.match(spacedPattern);
-    if (spacedMatch) {
-      // Add version without space: "3 ml" -> "3ml"
-      variations.push(`${spacedMatch[1]}${spacedMatch[2]}`);
-    }
-    return variations;
-  }
-
   function getVendorName(vendorId?: string) {
     if (!vendorId) return 'Not Assigned';
     const vendor = vendors.find(v => v.id === vendorId);
@@ -281,10 +279,15 @@ export const RequestsPage = () => {
   };
 
   const handleSaveQty = async (requestId: string, newQty: string) => {
+    const parsedQuantity = Number(newQty);
+    if (!Number.isFinite(parsedQuantity) || parsedQuantity < 0) {
+      alert('Please enter a valid number for quantity');
+      return;
+    }
+
     try {
       await updateDoc(doc(db, 'requests', requestId), {
-        quantity: newQty,
-        qty: newQty,
+        quantity: parsedQuantity,
         updatedAt: serverTimestamp()
       });
       setEditingQtyId(null);
@@ -295,44 +298,38 @@ export const RequestsPage = () => {
     }
   };
 
-  const getRequestQuantity = (request: any) => String(request.quantity || request.qty || '').trim();
+  const getRequestQuantity = (request: any) => Number(request.quantity ?? (request as any).qty ?? 0) || 0;
 
-  const combineQuantities = (existingQty: string, additionalQty: string) => {
-    const current = existingQty.trim();
-    const added = additionalQty.trim();
+  const combineQuantities = (
+    existingQty: number,
+    existingUnit: string | undefined,
+    additionalQty: number,
+    additionalUnit: string | undefined
+  ): { quantity: number; unit: string } | null => {
+    const current = Number(existingQty) || 0;
+    const incoming = Number(additionalQty);
 
-    if (!current) return added;
-    if (!added) return current;
-
-    const parseQuantity = (value: string) => {
-      const match = value.match(/^(\d+(?:\.\d+)?)\s*(.*)$/);
-      if (!match) return null;
-
-      return {
-        amount: Number(match[1]),
-        unit: match[2].trim().toLowerCase(),
-        displayUnit: match[2].trim()
-      };
-    };
-
-    const currentParsed = parseQuantity(current);
-    const addedParsed = parseQuantity(added);
-
-    if (currentParsed && addedParsed) {
-      if (!currentParsed.unit || !addedParsed.unit || currentParsed.unit === addedParsed.unit) {
-        const total = currentParsed.amount + addedParsed.amount;
-        const totalText = Number.isInteger(total) ? String(total) : total.toString();
-        const unitLabel = currentParsed.displayUnit || addedParsed.displayUnit;
-        return unitLabel ? `${totalText} ${unitLabel}` : totalText;
-      }
+    if (!Number.isFinite(incoming) || incoming <= 0) {
+      return null;
     }
 
-    return `${current} + ${added}`;
+    const normalizedExistingUnit = (existingUnit || '').trim().toLowerCase();
+    const normalizedIncomingUnit = (additionalUnit || '').trim().toLowerCase();
+
+    if (normalizedExistingUnit && normalizedIncomingUnit && normalizedExistingUnit !== normalizedIncomingUnit) {
+      return null;
+    }
+
+    return {
+      quantity: current + incoming,
+      unit: (existingUnit || additionalUnit || '').trim()
+    };
   };
 
   const resetNewRequestForm = () => {
     setSelectedItemId('');
     setQuantity('');
+    setRequestUnit('');
     setNotes('');
     setIsUnlistedItem(false);
     setUnlistedItemName('');
@@ -350,12 +347,29 @@ export const RequestsPage = () => {
     const { existingRequest, closeModal } = duplicateRequestChoice;
 
     try {
-      const mergedQty = combineQuantities(getRequestQuantity(existingRequest), quantity);
+      const additionalQuantity = Number(quantity.trim());
+      if (!Number.isFinite(additionalQuantity) || additionalQuantity <= 0) {
+        alert('Enter a valid numeric quantity greater than zero.');
+        return;
+      }
+
+      const merged = combineQuantities(
+        getRequestQuantity(existingRequest),
+        existingRequest.unit,
+        additionalQuantity,
+        requestUnit
+      );
+
+      if (!merged) {
+        alert('Cannot merge quantities because the units do not match.');
+        return;
+      }
+
       const updatedNotes = [existingRequest.notes?.trim(), notes.trim()].filter(Boolean).join(' | ');
 
       await updateDoc(doc(db, 'requests', existingRequest.id), {
-        quantity: mergedQty,
-        qty: mergedQty,
+        quantity: merged.quantity,
+        unit: merged.unit,
         notes: updatedNotes,
         updatedAt: serverTimestamp()
       });
@@ -396,8 +410,15 @@ export const RequestsPage = () => {
     }
 
     try {
+      const numericQuantity = Number(quantity.trim() || 0);
+      if (!Number.isFinite(numericQuantity) || numericQuantity < 0) {
+        alert('Please enter a valid numeric quantity.');
+        return;
+      }
+
       const requestData: any = {
-        quantity: quantity.trim() || '',
+        quantity: numericQuantity,
+        unit: requestUnit.trim(),
         notes: notes.trim() || '',
         status: 'Open',
         createdAt: serverTimestamp(),
@@ -429,10 +450,8 @@ export const RequestsPage = () => {
 
   const formatDate = (date: Date | { seconds: number; nanoseconds: number } | undefined) => {
     if (!date) return 'N/A';
-    const timestamp = typeof date === 'object' && 'seconds' in date 
-      ? new Date(date.seconds * 1000)
-      : date;
-    return timestamp.toLocaleDateString();
+    const timestamp = parseFirebaseDate(date);
+    return timestamp ? timestamp.toLocaleDateString() : 'N/A';
   };
 
   const stats = useMemo(() => {
@@ -522,7 +541,7 @@ export const RequestsPage = () => {
               </thead>
               <tbody>
                 {filteredRequests.map(request => {
-                  const itemName = getItemName(request);
+                  const itemName = resolveItemName(request);
                   const altNames = getItemAltNames(request);
                   const statusLabel = request.status || 'Open';
                   const statusClass = String(statusLabel).toLowerCase().replace(/\s+/g, '-');
@@ -646,11 +665,11 @@ export const RequestsPage = () => {
                           <span
                             onClick={() => {
                               setEditingQtyId(request.id);
-                              setEditQtyValue(request.quantity || request.qty || '');
+                              setEditQtyValue(String(request.quantity ?? (request as any).qty ?? ''));
                             }}
                             style={{ cursor: 'pointer' }}
                           >
-                            {request.quantity || request.qty || ''}
+                            {request.quantity ?? (request as any).qty ?? ''}
                           </span>
                         )}
                       </td>
@@ -739,6 +758,34 @@ export const RequestsPage = () => {
               >
                 Last 90 Days
               </button>
+              <button
+                className={`filter-btn ${historyDays === 180 ? 'active' : ''}`}
+                onClick={() => setHistoryDays(180)}
+              >
+                Last 180 Days
+              </button>
+              {!loadArchive ? (
+                <button
+                  className="btn btn-small"
+                  onClick={() => {
+                    setLoadArchive(true);
+                    setHistoryDays('ALL');
+                  }}
+                  disabled={archiveLoading}
+                >
+                  {archiveLoading ? 'Loading Archive...' : 'Load Archive'}
+                </button>
+              ) : (
+                <span className="muted" style={{ alignSelf: 'center' }}>Archive loaded</span>
+              )}
+              {loadArchive && (
+                <button
+                  className={`filter-btn ${historyDays === 'ALL' ? 'active' : ''}`}
+                  onClick={() => setHistoryDays('ALL')}
+                >
+                  All History
+                </button>
+              )}
               <input
                 type="text"
                 placeholder="Search history..."
@@ -748,7 +795,9 @@ export const RequestsPage = () => {
               />
             </div>
             {historyItems.length === 0 ? (
-              <p className="muted">No history in the last {historyDays} days.</p>
+              <p className="muted">
+                {historyDays === 'ALL' ? 'No history found.' : `No history in the last ${historyDays} days.`}
+              </p>
             ) : (
               <div className="table-container">
                 <table className="requests-table history-table">
@@ -763,7 +812,7 @@ export const RequestsPage = () => {
                   </thead>
                   <tbody>
                     {historyItems.map(request => {
-                      const itemName = getItemName(request);
+                      const itemName = resolveItemName(request);
                       const altNames = getItemAltNames(request);
                       const statusLabel = request.status || 'Unknown';
                       const statusClass = String(statusLabel).toLowerCase().replace(/\s+/g, '-');
@@ -778,7 +827,7 @@ export const RequestsPage = () => {
                               )}
                             </div>
                           </td>
-                          <td>{request.quantity || request.qty || ''}</td>
+                          <td>{request.quantity ?? (request as any).qty ?? ''}</td>
                           <td>
                             <span className={`status-badge status-${statusClass}`}>
                               {statusLabel}
@@ -936,14 +985,40 @@ export const RequestsPage = () => {
                 </div>
               )}
 
-              <div className="form-group">
-                <label>Quantity (Optional)</label>
-                <input
-                  type="text"
-                  placeholder="e.g., 1 Box or 5 EA"
-                  value={quantity}
-                  onChange={(e) => setQuantity(e.target.value)}
-                />
+              <div className="form-row" style={{ gap: '0.75rem', alignItems: 'flex-end' }}>
+                <div className="form-group" style={{ flex: '0 0 120px' }}>
+                  <label>Qty</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    placeholder="5"
+                    value={quantity}
+                    onChange={(e) => setQuantity(e.target.value)}
+                  />
+                </div>
+
+                <div className="form-group" style={{ flex: '0 0 180px' }}>
+                  <label>Unit</label>
+                  <select
+                    value={requestUnit}
+                    onChange={(e) => setRequestUnit(e.target.value)}
+                  >
+                    <option value="">Select unit...</option>
+                    <option value="Each">Each</option>
+                    <option value="Box">Box</option>
+                    <option value="Case">Case</option>
+                    <option value="Kit">Kit</option>
+                    <option value="Brick">Brick</option>
+                    <option value="Bag">Bag</option>
+                    <option value="Bottle">Bottle</option>
+                    <option value="Pack">Pack</option>
+                    <option value="Vial">Vial</option>
+                    <option value="Tube">Tube</option>
+                    <option value="Roll">Roll</option>
+                    <option value="Pair">Pair</option>
+                  </select>
+                </div>
               </div>
 
               <div className="form-group">
@@ -982,7 +1057,7 @@ export const RequestsPage = () => {
 
             <div className="modal-body">
               <div className="duplicate-warning" style={{ marginTop: 0 }}>
-                <strong>{getItemName(duplicateRequestChoice.existingRequest)}</strong> is already on the request list.
+                <strong>{resolveItemName(duplicateRequestChoice.existingRequest)}</strong> is already on the request list.
                 <div style={{ marginTop: '0.35rem' }}>
                   Current qty: {getRequestQuantity(duplicateRequestChoice.existingRequest) || 'Not set'} • Status: {duplicateRequestChoice.existingRequest.status || 'Open'}
                 </div>

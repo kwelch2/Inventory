@@ -1,10 +1,12 @@
 import React, { useState, useMemo } from 'react';
 import { Navigate } from 'react-router-dom';
-import { doc, updateDoc, addDoc, collection, deleteDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, updateDoc, addDoc, collection, deleteDoc, serverTimestamp, where, orderBy, limit, query, getDocs, writeBatch, deleteField, type QueryConstraint, type DocumentReference } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useInventoryData } from '../hooks/useInventoryData';
-import type { CatalogItem, Vendor, VendorPrice } from '../types';
+import { useFirestoreCollection } from '../hooks/useFirestoreCollection';
+import type { CatalogItem, OrderRequest, Vendor, VendorPrice } from '../types';
+import { getCatalogItemPricing, getItemName, getSearchVariations, parseFirebaseDate } from '../utils/helpers';
 import { OrdersTab } from '../components/admin/OrdersTab';
 import { CatalogTab } from '../components/admin/CatalogTab';
 import { SettingsTab } from '../components/admin/SettingsTab';
@@ -13,6 +15,11 @@ import './AdminPage.css';
 
 type AdminTab = 'orders' | 'fleet' | 'catalog' | 'settings';
 type OrderView = 'item' | 'vendor';
+
+const ACTIVE_REQUEST_STATUSES = ['Open', 'Ordered', 'Backordered', 'Back ordered'];
+const HISTORY_REQUEST_STATUSES = ['Received', 'Cancelled'];
+const HISTORY_DEFAULT_DAYS = 180;
+const ARCHIVE_FETCH_LIMIT = 2000;
 
 type LabelFieldKey = 'itemName' | 'itemRef' | 'compartment' | 'unitPack' | 'bestVendorPrice' | 'barcode';
 
@@ -45,9 +52,53 @@ type CatalogExportRow = {
   sortPrice: number;
 };
 
+type MigrationSummary = {
+  inventoryScanned: number;
+  inventoryUpdated: number;
+  inventoryInvalid: number;
+  requestsScanned: number;
+  requestsUpdated: number;
+  requestsInvalid: number;
+  failedUpdates: number;
+  failures: string[];
+};
+
 export const AdminPage = () => {
   const { user, loading } = useAuth();
-  const { catalog, vendors, categories, compartments, requests, pricing, inventory, units, loading: dataLoading } = useInventoryData();
+
+  const historyCutoffDate = useMemo(() => {
+    const cutoff = new Date();
+    cutoff.setHours(0, 0, 0, 0);
+    cutoff.setDate(cutoff.getDate() - HISTORY_DEFAULT_DAYS);
+    return cutoff;
+  }, []);
+
+  const activeRequestConstraints = useMemo<QueryConstraint[]>(() => [
+    where('status', 'in', ACTIVE_REQUEST_STATUSES),
+    orderBy('updatedAt', 'desc')
+  ], []);
+
+  const historyRequestConstraints = useMemo<QueryConstraint[]>(() => [
+    where('status', 'in', HISTORY_REQUEST_STATUSES),
+    where('updatedAt', '>=', historyCutoffDate),
+    orderBy('updatedAt', 'desc'),
+    limit(400)
+  ], [historyCutoffDate]);
+
+  const archiveRequestConstraints = useMemo<QueryConstraint[]>(() => [
+    where('status', 'in', HISTORY_REQUEST_STATUSES),
+    where('updatedAt', '<', historyCutoffDate),
+    orderBy('updatedAt', 'desc'),
+    limit(ARCHIVE_FETCH_LIMIT)
+  ], [historyCutoffDate]);
+
+  const { catalog, vendors, categories, compartments, requests, pricing, inventory, units, loading: activeDataLoading } = useInventoryData({
+    requestConstraints: activeRequestConstraints
+  });
+  const [loadArchive, setLoadArchive] = useState(false);
+  const { data: historyRequestsData, loading: historyLoading } = useFirestoreCollection<OrderRequest>('requests', historyRequestConstraints);
+  const { data: archiveRequestsData, loading: archiveLoading } = useFirestoreCollection<OrderRequest>('requests', archiveRequestConstraints, loadArchive);
+  const dataLoading = activeDataLoading || historyLoading || archiveLoading;
   const [activeTab, setActiveTab] = useState<AdminTab>('orders');
   
   // Orders tab state
@@ -85,6 +136,9 @@ export const AdminPage = () => {
   const [newItemName, setNewItemName] = useState('');
   const [showVendorModal, setShowVendorModal] = useState(false);
   const [editingVendor, setEditingVendor] = useState<Vendor | null>(null);
+  const [migrationRunning, setMigrationRunning] = useState(false);
+  const [migrationStatus, setMigrationStatus] = useState('');
+  const [migrationSummary, setMigrationSummary] = useState<MigrationSummary | null>(null);
   
   // New request modal state
   const [showNewRequestModal, setShowNewRequestModal] = useState(false);
@@ -196,7 +250,7 @@ export const AdminPage = () => {
         const catalogItem = item.catalogId ? (catalogByCatalogId.get(item.catalogId) || catalogMap.get(item.catalogId)) : null;
         const itemName = catalogItem ? catalogItem.itemName : (item.itemName || 'Unknown Item');
         const groupKey = item.catalogId || itemName;
-        const qty = item.qty ?? item.quantity ?? 1;
+        const qty = item.quantity ?? (item as any).qty ?? 1;
         const unitName = unitsMap.get(item.unitId)?.name || item.unitId || 'Unknown';
 
         const existing = grouped.get(groupKey);
@@ -264,13 +318,7 @@ export const AdminPage = () => {
   }
 
   // ===================== HELPER FUNCTIONS =====================
-  const getItemName = (request: any) => {
-    if (request.otherItemName) return request.otherItemName;
-    const lookupKey = request.catalogId || request.itemId;
-    if (!lookupKey) return 'Unknown Item';
-    const item = catalogByCatalogId.get(lookupKey) || catalogMap.get(lookupKey);
-    return item?.itemName || 'Unknown Item';
-  };
+  const resolveItemName = (request: any) => getItemName(request, catalogByCatalogId, catalogMap);
 
   const getItemPricing = (catalogId?: string) => {
     if (catalogId) {
@@ -279,73 +327,48 @@ export const AdminPage = () => {
     return [];
   };
 
-  const getCatalogItemPricing = (item: CatalogItem) => {
-    // First try the catalogId field, then fall back to item.id
-    const catId = (item as any).catalogId;
-    if (catId && pricingMap.has(catId)) {
-      return pricingMap.get(catId) || [];
-    }
-    return pricingMap.get(item.id) || [];
-  };
-
-  // Helper to generate search variations for terms like "3ml" -> ["3ml", "3 ml"]
-  const getSearchVariations = (term: string): string[] => {
-    const variations = [term];
-    // Check if term is like "3ml", "20g", etc. (number followed by letters)
-    const numberLetterPattern = /^(\d+)([a-z]+)$/i;
-    const match = term.match(numberLetterPattern);
-    if (match) {
-      // Add version with space: "3ml" -> "3 ml"
-      variations.push(`${match[1]} ${match[2]}`);
-    }
-    // Check if term is like "3 ml" (number space letters)
-    const spacedPattern = /^(\d+)\s+([a-z]+)$/i;
-    const spacedMatch = term.match(spacedPattern);
-    if (spacedMatch) {
-      // Add version without space: "3 ml" -> "3ml"
-      variations.push(`${spacedMatch[1]}${spacedMatch[2]}`);
-    }
-    return variations;
-  };
+  const resolveCatalogItemPricing = (item: CatalogItem) => getCatalogItemPricing(item, pricingMap);
 
   // ===================== ORDER FUNCTIONS =====================
   // Separate requests into sections
   const openRequests = useMemo(() => {
     return requests
       .filter(r => (r.status || 'Open') === 'Open')
-      .sort((a, b) => getItemName(a).localeCompare(getItemName(b)));
+        .sort((a, b) => resolveItemName(a).localeCompare(resolveItemName(b)));
   }, [requests, catalog]);
 
   const orderedRequests = useMemo(() => {
     return requests
       .filter(r => r.status === 'Ordered')
-      .sort((a, b) => getItemName(a).localeCompare(getItemName(b)));
+        .sort((a, b) => resolveItemName(a).localeCompare(resolveItemName(b)));
   }, [requests, catalog]);
 
   const backorderRequests = useMemo(() => {
     return requests
       .filter(r => r.status === 'Backordered')
-      .sort((a, b) => getItemName(a).localeCompare(getItemName(b)));
+        .sort((a, b) => resolveItemName(a).localeCompare(resolveItemName(b)));
   }, [requests, catalog]);
 
   const historyRequests = useMemo(() => {
-    const historyStatuses = ['Received', 'Completed', 'Closed', 'Cancelled'];
-    return requests
-      .filter(r => historyStatuses.includes(r.status || ''))
+    const mergedHistory = loadArchive
+      ? Array.from(new Map([...historyRequestsData, ...archiveRequestsData].map(item => [item.id, item])).values())
+      : historyRequestsData;
+
+    return mergedHistory
+      .filter(r => HISTORY_REQUEST_STATUSES.includes(r.status || ''))
       .sort((a, b) => {
-        const aDate = a.receivedAt && typeof a.receivedAt === 'object' && 'seconds' in a.receivedAt ? a.receivedAt.seconds : 0;
-        const bDate = b.receivedAt && typeof b.receivedAt === 'object' && 'seconds' in b.receivedAt ? b.receivedAt.seconds : 0;
-        return bDate - aDate; // Most recent first
+        const aDate = parseFirebaseDate(a.updatedAt || a.receivedAt)?.getTime() || 0;
+        const bDate = parseFirebaseDate(b.updatedAt || b.receivedAt)?.getTime() || 0;
+        return bDate - aDate;
       });
-  }, [requests]);
+  }, [historyRequestsData, archiveRequestsData, loadArchive]);
 
   // Legacy filtered requests for backward compatibility
   const filteredRequests = useMemo(() => {
-    const historyStatuses = ['Received', 'Completed', 'Closed', 'Cancelled'];
     let filtered = [...requests];
 
     // Filter out history requests (they're shown in separate section)
-    filtered = filtered.filter(r => !historyStatuses.includes(r.status || ''));
+    filtered = filtered.filter(r => !HISTORY_REQUEST_STATUSES.includes(r.status || ''));
 
     // Sort by status priority then by item name
     const sortOrder: Record<string, number> = { Open: 1, Backordered: 2, Ordered: 3 };
@@ -355,7 +378,7 @@ export const AdminPage = () => {
       const aOrder = sortOrder[aStatus] || 99;
       const bOrder = sortOrder[bStatus] || 99;
       if (aOrder !== bOrder) return aOrder - bOrder;
-      return getItemName(a).localeCompare(getItemName(b));
+      return resolveItemName(a).localeCompare(resolveItemName(b));
     });
 
     return filtered;
@@ -371,8 +394,7 @@ export const AdminPage = () => {
       history: any[];
     }>();
 
-    const historyStatuses = ['Received', 'Completed', 'Closed', 'Cancelled'];
-    const allRequests = [...requests];
+    const allRequests = [...requests, ...historyRequests];
 
     allRequests.forEach(r => {
       // Get vendor info
@@ -400,7 +422,7 @@ export const AdminPage = () => {
       const group = grouped.get(vendorId)!;
       const status = r.status || 'Open';
 
-      if (historyStatuses.includes(status)) {
+      if (HISTORY_REQUEST_STATUSES.includes(status)) {
         group.history.push(r);
       } else if (status === 'Ordered') {
         group.ordered.push(r);
@@ -412,7 +434,7 @@ export const AdminPage = () => {
     });
 
     return grouped;
-  }, [requests, pricingMap, vendorMap]);
+  }, [requests, historyRequests, pricingMap, vendorMap]);
 
 
   const handleStatusChange = async (requestId: string, newStatus: string) => {
@@ -507,7 +529,7 @@ export const AdminPage = () => {
         
         byVendor.get(vKey)!.items.push({
           ...r,
-          itemName: getItemName(r),
+          itemName: resolveItemName(r),
           vendorOrderNumber: vendorPrice?.vendorOrderNumber || '',
           unitPrice: vendorPrice?.unitPrice || 0
         });
@@ -535,7 +557,7 @@ export const AdminPage = () => {
         const vendorPrice = prices.find(p => p.vendorId === vendorId) || prices[0];
         return {
           ...r,
-          itemName: getItemName(r),
+          itemName: resolveItemName(r),
           vendorOrderNumber: vendorPrice?.vendorOrderNumber || '',
           unitPrice: vendorPrice?.unitPrice || 0
         };
@@ -828,6 +850,54 @@ export const AdminPage = () => {
     
     const subject = encodeURIComponent(`EMS Order - ${orderPreviewData.vendorName} - ${dateStr}`);
     const encodedBody = encodeURIComponent(textBody);
+
+    if (encodedBody.length > 2000) {
+      const fallbackMessage = [
+        'Order body is too large for a compose URL.',
+        'The order text has been prepared for clipboard copy.',
+        'Paste it into your email client manually.'
+      ].join('\n');
+
+      const openManualCopyWindow = () => {
+        const fallbackWindow = window.open('', '_blank');
+        if (!fallbackWindow) {
+          alert('Unable to open fallback window. Please allow pop-ups and try again.');
+          return;
+        }
+
+        fallbackWindow.document.write(`
+          <!doctype html>
+          <html>
+            <head>
+              <title>Email Order Fallback</title>
+              <style>
+                body { font-family: Arial, sans-serif; padding: 16px; }
+                textarea { width: 100%; min-height: 420px; font-family: monospace; }
+              </style>
+            </head>
+            <body>
+              <h2>Email Order Fallback</h2>
+              <p>Copy the text below and paste it into your email client.</p>
+              <p><strong>To:</strong> ${email || 'Add vendor email manually'}</p>
+              <p><strong>Subject:</strong> EMS Order - ${orderPreviewData.vendorName} - ${dateStr}</p>
+              <textarea readonly>${textBody.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</textarea>
+            </body>
+          </html>
+        `);
+        fallbackWindow.document.close();
+      };
+
+      navigator.clipboard.writeText(textBody)
+        .then(() => {
+          alert(fallbackMessage);
+          openManualCopyWindow();
+        })
+        .catch(() => {
+          openManualCopyWindow();
+        });
+
+      return;
+    }
     
     // Open Gmail compose - when Gmail opens, you can select your work account
     const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${email}&su=${subject}&body=${encodedBody}`;
@@ -838,13 +908,14 @@ export const AdminPage = () => {
     if (!orderPreviewData) return;
     
     try {
-      const updates = orderPreviewData.items.map(item => 
-        updateDoc(doc(db, 'requests', item.id), {
+      const batch = writeBatch(db);
+      orderPreviewData.items.forEach(item => {
+        batch.update(doc(db, 'requests', item.id), {
           status: 'Ordered',
           updatedAt: serverTimestamp()
-        })
-      );
-      await Promise.all(updates);
+        });
+      });
+      await batch.commit();
       setShowOrderPreview(false);
       setSelectedRequests(new Set());
       alert('Items marked as Ordered!');
@@ -876,7 +947,7 @@ export const AdminPage = () => {
 
   // Helper to render order table rows with consistent logic
   const renderOrderRow = (r: any, rowClassName: string = '') => {
-    const itemName = getItemName(r);
+    const itemName = resolveItemName(r);
     const status = r.status || 'Open';
     const isEditable = status === 'Open' || status === 'Backordered';
     const prices = getItemPricing(r.catalogId);
@@ -1279,7 +1350,7 @@ export const AdminPage = () => {
   };
 
   const getBestInStockVendorPricing = (item: CatalogItem): BestVendorPricing | null => {
-    const bestPricing = getCatalogItemPricing(item)
+    const bestPricing = resolveCatalogItemPricing(item)
       .filter((price) => (price.vendorStatus || 'In Stock').toLowerCase() === 'in stock')
       .map((price) => {
         const numericUnitPrice = typeof price.unitPrice === 'number'
@@ -1755,7 +1826,37 @@ export const AdminPage = () => {
 
   const handleDeleteCatalogItem = async (id: string) => {
     if (!confirm('Delete this catalog item? This cannot be undone.')) return;
+
     try {
+      const catalogItem = catalogMap.get(id);
+      const keys = new Set<string>([id]);
+      const mappedCatalogId = (catalogItem as any)?.catalogId;
+      if (mappedCatalogId) {
+        keys.add(mappedCatalogId);
+      }
+
+      const pricingChecks = Array.from(keys).map((key) =>
+        Promise.all([
+          getDocs(query(collection(db, 'vendorPricing'), where('catalogId', '==', key), limit(1))),
+          getDocs(query(collection(db, 'vendorPricing'), where('itemId', '==', key), limit(1)))
+        ])
+      );
+      const requestChecks = Array.from(keys).flatMap((key) => ([
+        getDocs(query(collection(db, 'requests'), where('catalogId', '==', key), limit(1))),
+        getDocs(query(collection(db, 'requests'), where('itemId', '==', key), limit(1)))
+      ]));
+
+      const pricingResults = await Promise.all(pricingChecks);
+      const requestResults = await Promise.all(requestChecks);
+      const hasPricingDependencies = pricingResults.some(([byCatalogId, byItemId]) => !byCatalogId.empty || !byItemId.empty);
+      const hasRequestDependencies = requestResults.some(snapshot => !snapshot.empty);
+      const hasDependencies = hasPricingDependencies || hasRequestDependencies;
+
+      if (hasDependencies) {
+        alert('Cannot delete this catalog item because linked vendor pricing or request records still exist.');
+        return;
+      }
+
       await deleteDoc(doc(db, 'catalog', id));
     } catch (error) {
       console.error('Error deleting item:', error);
@@ -1908,11 +2009,196 @@ export const AdminPage = () => {
 
   const handleDeleteVendor = async (id: string) => {
     if (!confirm('Delete this vendor? This cannot be undone.')) return;
+
     try {
+      const [pricingLinks, vendorLinks, overrideVendorLinks] = await Promise.all([
+        getDocs(query(collection(db, 'vendorPricing'), where('vendorId', '==', id), limit(1))),
+        getDocs(query(collection(db, 'requests'), where('vendorId', '==', id), limit(1))),
+        getDocs(query(collection(db, 'requests'), where('overrideVendorId', '==', id), limit(1)))
+      ]);
+
+      if (!pricingLinks.empty || !vendorLinks.empty || !overrideVendorLinks.empty) {
+        alert('Cannot delete this vendor because linked vendor pricing or request records still exist.');
+        return;
+      }
+
       await deleteDoc(doc(db, 'vendors', id));
     } catch (error) {
       console.error('Error deleting vendor:', error);
       alert('Failed to delete vendor');
+    }
+  };
+
+  const handleRunLegacyDataMigration = async () => {
+    if (migrationRunning) {
+      return;
+    }
+
+    const confirmRun = confirm(
+      'Run one-off data migration now?\n\nThis will convert legacy qty/itemId fields to quantity/catalogId in inventory and requests.'
+    );
+    if (!confirmRun) {
+      return;
+    }
+
+    setMigrationRunning(true);
+    setMigrationStatus('Starting migration...');
+    setMigrationSummary(null);
+
+    const summary: MigrationSummary = {
+      inventoryScanned: 0,
+      inventoryUpdated: 0,
+      inventoryInvalid: 0,
+      requestsScanned: 0,
+      requestsUpdated: 0,
+      requestsInvalid: 0,
+      failedUpdates: 0,
+      failures: []
+    };
+
+    const normalizeQuantity = (value: unknown): number | null => {
+      if (typeof value === 'number') {
+        return Number.isFinite(value) ? value : null;
+      }
+
+      if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (!trimmed) return null;
+        const parsed = Number(trimmed);
+        return Number.isFinite(parsed) ? parsed : null;
+      }
+
+      return null;
+    };
+
+    const commitInChunks = async (
+      label: string,
+      updates: Array<{ ref: DocumentReference; data: Record<string, unknown> }>,
+      chunkSize = 400
+    ) => {
+      let committed = 0;
+
+      for (let start = 0; start < updates.length; start += chunkSize) {
+        const chunk = updates.slice(start, start + chunkSize);
+        setMigrationStatus(`Applying ${label} updates ${start + 1}-${start + chunk.length} of ${updates.length}...`);
+
+        try {
+          const batch = writeBatch(db);
+          chunk.forEach((entry) => {
+            batch.update(entry.ref, entry.data);
+          });
+          await batch.commit();
+          committed += chunk.length;
+        } catch (batchError) {
+          console.error(`Batch update failed for ${label} chunk`, batchError);
+
+          for (const entry of chunk) {
+            try {
+              await updateDoc(entry.ref, entry.data);
+              committed += 1;
+            } catch (singleError) {
+              summary.failedUpdates += 1;
+              summary.failures.push(`${label}:${entry.ref.id}`);
+              console.error(`Failed updating ${label}:${entry.ref.id}`, singleError);
+            }
+          }
+        }
+      }
+
+      return committed;
+    };
+
+    try {
+      setMigrationStatus('Scanning inventory and requests...');
+      const [inventorySnapshot, requestsSnapshot] = await Promise.all([
+        getDocs(collection(db, 'inventory')),
+        getDocs(collection(db, 'requests'))
+      ]);
+
+      summary.inventoryScanned = inventorySnapshot.size;
+      summary.requestsScanned = requestsSnapshot.size;
+
+      const inventoryUpdates: Array<{ ref: DocumentReference; data: Record<string, unknown> }> = [];
+      inventorySnapshot.forEach((snapshotDoc) => {
+        const data = snapshotDoc.data() as Record<string, unknown>;
+        const updateData: Record<string, unknown> = {};
+
+        const hasLegacyQty = data.qty !== undefined;
+        const normalizedQuantity = normalizeQuantity(data.quantity ?? data.qty);
+
+        if (hasLegacyQty) {
+          updateData.qty = deleteField();
+        }
+
+        if ((data.quantity !== undefined || hasLegacyQty) && normalizedQuantity === null) {
+          summary.inventoryInvalid += 1;
+        } else if (normalizedQuantity !== null && data.quantity !== normalizedQuantity) {
+          updateData.quantity = normalizedQuantity;
+        }
+
+        if (typeof data.itemId === 'string' && data.itemId.trim()) {
+          if (!data.catalogId) {
+            updateData.catalogId = data.itemId.trim();
+          }
+          updateData.itemId = deleteField();
+        }
+
+        if (Object.keys(updateData).length > 0) {
+          inventoryUpdates.push({ ref: doc(db, 'inventory', snapshotDoc.id), data: updateData });
+        }
+      });
+
+      const requestUpdates: Array<{ ref: DocumentReference; data: Record<string, unknown> }> = [];
+      requestsSnapshot.forEach((snapshotDoc) => {
+        const data = snapshotDoc.data() as Record<string, unknown>;
+        const updateData: Record<string, unknown> = {};
+
+        const hasLegacyQty = data.qty !== undefined;
+        const normalizedQuantity = normalizeQuantity(data.quantity ?? data.qty);
+
+        if (hasLegacyQty) {
+          updateData.qty = deleteField();
+        }
+
+        if ((data.quantity !== undefined || hasLegacyQty) && normalizedQuantity === null) {
+          summary.requestsInvalid += 1;
+        } else if (normalizedQuantity !== null && data.quantity !== normalizedQuantity) {
+          updateData.quantity = normalizedQuantity;
+        }
+
+        if (typeof data.itemId === 'string' && data.itemId.trim()) {
+          if (!data.catalogId) {
+            updateData.catalogId = data.itemId.trim();
+          }
+          updateData.itemId = deleteField();
+        }
+
+        if (Object.keys(updateData).length > 0) {
+          requestUpdates.push({ ref: doc(db, 'requests', snapshotDoc.id), data: updateData });
+        }
+      });
+
+      summary.inventoryUpdated = await commitInChunks('inventory', inventoryUpdates);
+      summary.requestsUpdated = await commitInChunks('requests', requestUpdates);
+
+      setMigrationSummary(summary);
+      setMigrationStatus('Migration complete.');
+
+      const failureSuffix = summary.failedUpdates > 0
+        ? `\nFailed updates: ${summary.failedUpdates}`
+        : '';
+      alert(
+        `Migration complete.\n\n` +
+        `Inventory: scanned ${summary.inventoryScanned}, updated ${summary.inventoryUpdated}, invalid ${summary.inventoryInvalid}\n` +
+        `Requests: scanned ${summary.requestsScanned}, updated ${summary.requestsUpdated}, invalid ${summary.requestsInvalid}` +
+        failureSuffix
+      );
+    } catch (error) {
+      console.error('Migration failed:', error);
+      setMigrationStatus('Migration failed. Check console for details.');
+      alert('Migration failed. No further changes were applied for the current run.');
+    } finally {
+      setMigrationRunning(false);
     }
   };
 
@@ -1956,13 +2242,16 @@ export const AdminPage = () => {
               orderedRequests={orderedRequests}
               backorderRequests={backorderRequests}
               historyRequests={historyRequests}
+              archiveLoaded={loadArchive}
+              archiveLoading={archiveLoading}
+              onLoadArchive={() => setLoadArchive(true)}
               expandHistorySection={expandHistorySection}
               setExpandHistorySection={setExpandHistorySection}
               renderOrderRow={renderOrderRow}
               vendorFilter={vendorFilter}
               setVendorFilter={setVendorFilter}
               requestsByVendorAndStatus={requestsByVendorAndStatus}
-              getItemName={getItemName}
+              getItemName={resolveItemName}
             />
           )}
 
@@ -2001,7 +2290,7 @@ export const AdminPage = () => {
               openEditCatalog={openEditCatalog}
               openEditPricing={openEditPricing}
               handleDeleteCatalogItem={handleDeleteCatalogItem}
-              getCatalogItemPricing={getCatalogItemPricing}
+              getCatalogItemPricing={resolveCatalogItemPricing}
               vendorMap={vendorMap}
               categoryMap={categoryMap}
               onExportCatalogPricing={handleExportCatalogPricing}
@@ -2025,6 +2314,10 @@ export const AdminPage = () => {
               handleDeleteSettingsItem={handleDeleteSettingsItem}
               newItemName={newItemName}
               setNewItemName={setNewItemName}
+              migrationRunning={migrationRunning}
+              migrationStatus={migrationStatus}
+              migrationSummary={migrationSummary}
+              runDataMigration={handleRunLegacyDataMigration}
             />
           )}
         </>
@@ -2310,7 +2603,7 @@ export const AdminPage = () => {
                   <div className="pricing-list">
                     {(() => {
                       const itemCatalogId = (editingCatalogItem as any).catalogId || editingCatalogItem.id;
-                      const itemPrices = getCatalogItemPricing(editingCatalogItem);
+                      const itemPrices = resolveCatalogItemPricing(editingCatalogItem);
                       
                       if (itemPrices.length === 0) {
                         return <p className="muted">No vendor pricing configured</p>;
@@ -2781,26 +3074,22 @@ export const AdminPage = () => {
                     const vendor = vendorMap.get(orderPreviewData.vendorId);
                     const fee = vendor?.serviceFee ? subtotal * (vendor.serviceFee / 100) : 0;
                     
-                    return (
-                      <>
-                        <tr>
-                          <td colSpan={6} style={{ textAlign: 'right' }}><strong>Subtotal:</strong></td>
-                          <td><strong>${subtotal.toFixed(2)}</strong></td>
+                    return [
+                      <tr key="subtotal">
+                        <td colSpan={6} style={{ textAlign: 'right' }}><strong>Subtotal:</strong></td>
+                        <td><strong>${subtotal.toFixed(2)}</strong></td>
+                      </tr>,
+                      ...(vendor?.serviceFee ? [
+                        <tr key="fee">
+                          <td colSpan={6} style={{ textAlign: 'right' }}>Service Fee ({vendor.serviceFee}%):</td>
+                          <td>${fee.toFixed(2)}</td>
+                        </tr>,
+                        <tr key="total">
+                          <td colSpan={6} style={{ textAlign: 'right' }}><strong>Total:</strong></td>
+                          <td><strong>${(subtotal + fee).toFixed(2)}</strong></td>
                         </tr>
-                        {vendor?.serviceFee && (
-                          <>
-                            <tr>
-                              <td colSpan={6} style={{ textAlign: 'right' }}>Service Fee ({vendor.serviceFee}%):</td>
-                              <td>${fee.toFixed(2)}</td>
-                            </tr>
-                            <tr>
-                              <td colSpan={6} style={{ textAlign: 'right' }}><strong>Total:</strong></td>
-                              <td><strong>${(subtotal + fee).toFixed(2)}</strong></td>
-                            </tr>
-                          </>
-                        )}
-                      </>
-                    );
+                      ] : [])
+                    ];
                   })()}
                 </tfoot>
               </table>

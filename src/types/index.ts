@@ -1,16 +1,29 @@
 // Type definitions for the application
 
+export type FirebaseTimestampLike = { seconds: number; nanoseconds: number };
+export type FirebaseDateLike = Date | FirebaseTimestampLike;
+
+export const REQUEST_STATUS_VALUES = ['Open', 'Ordered', 'Backordered', 'Received', 'Cancelled'] as const;
+export type RequestStatus = typeof REQUEST_STATUS_VALUES[number];
+
+export const INVENTORY_STATUS_VALUES = ['Pending', 'OK', 'Replaced', ''] as const;
+export type InventoryStatus = typeof INVENTORY_STATUS_VALUES[number];
+
+export const VENDOR_STATUS_VALUES = ['In Stock', 'Backordered', 'Out of Stock'] as const;
+export type VendorStatus = typeof VENDOR_STATUS_VALUES[number];
+
 export interface ItemReference {
   ref: string;           // The actual reference/SKU number
   vendorId?: string;     // Optional vendor this ref is associated with
   vendorName?: string;   // Display name of vendor for UI
   isCurrent: boolean;    // Whether this is the current/preferred reference
-  addedAt?: Date | { seconds: number; nanoseconds: number };
+  addedAt?: FirebaseDateLike;
   description?: string;  // Optional notes (e.g., "Vendor A's branded version")
 }
 
 export interface CatalogItem {
   id: string;
+  catalogId: string;
   itemName: string;
   itemRef?: string;      // DEPRECATED: Kept for backward compat, use itemReferences instead
   itemReferences?: ItemReference[];  // New: Array of current + historical references
@@ -23,9 +36,9 @@ export interface CatalogItem {
   barcodes?: string[];
   active?: boolean;
   pricing?: VendorPrice[];
-  expirationDate?: Date | { seconds: number; nanoseconds: number };
+  expirationDate?: FirebaseDateLike;
   lotNumber?: string;
-  quantity?: number;
+  quantity: number;
 }
 
 export interface VendorPrice {
@@ -35,7 +48,7 @@ export interface VendorPrice {
   vendorId: string;
   vendorOrderNumber?: string;
   unitPrice?: number;
-  vendorStatus?: 'In Stock' | 'Backordered' | 'Out of Stock';
+  vendorStatus?: VendorStatus;
 }
 
 export interface Vendor {
@@ -60,18 +73,17 @@ export interface OrderRequest {
   catalogId?: string; // Primary field for catalog items
   itemId?: string; // Legacy support
   otherItemName?: string; // For unlisted items
-  quantity?: string;
-  qty?: string; // Alternative quantity field
+  quantity: number;
   unit?: string; // Unit of measure (Box, Each, etc.)
-  status?: 'Open' | 'Ordered' | 'Backordered' | 'Received' | 'Cancelled' | 'Completed' | 'Closed';
+  status?: RequestStatus;
   vendorId?: string;
   vendorOverride?: string;
   overrideVendorId?: string; // Override vendor selection
   notes?: string;
-  receivedAt?: Date | { seconds: number; nanoseconds: number };
-  createdAt?: Date | { seconds: number; nanoseconds: number };
-  updatedAt?: Date | { seconds: number; nanoseconds: number };
-  lastOrdered?: Date | { seconds: number; nanoseconds: number };
+  receivedAt?: FirebaseDateLike;
+  createdAt?: FirebaseDateLike;
+  updatedAt?: FirebaseDateLike;
+  lastOrdered?: FirebaseDateLike;
   requesterEmail?: string;
 }
 
@@ -96,13 +108,12 @@ export interface InventoryItem {
   itemName?: string; // For custom/unlisted items
   unitId: string;
   compartment?: string;
-  expiryDate?: Date | { seconds: number; nanoseconds: number };
-  qty?: number;
-  quantity?: number;
-  status?: 'Pending' | 'OK' | 'Replaced' | '';
+  expiryDate?: FirebaseDateLike;
+  quantity: number;
+  status?: InventoryStatus;
   crewStatus?: string; // Note field
-  createdAt?: Date | { seconds: number; nanoseconds: number };
-  updatedAt?: Date | { seconds: number; nanoseconds: number };
+  createdAt?: FirebaseDateLike;
+  updatedAt?: FirebaseDateLike;
 }
 
 export interface UserProfile {

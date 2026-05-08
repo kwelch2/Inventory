@@ -19,5 +19,10 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
+
+// Note: IndexedDB persistence via enableIndexedDbPersistence() is deprecated in Firebase 12.8.0.
+// In the future, replace with FirestoreSettings.cache configuration when the new API is stable.
+// For now, we rely on browser storage and real-time Firestore subscriptions for data synchronization.
+
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
