@@ -1729,14 +1729,18 @@ export const AdminPage = () => {
       updatedRefs = updatedRefs.map(r => ({ ...r, isCurrent: false }));
     }
 
+    const normalizedRef = {
+      ref: refForm.ref.trim(),
+      ...(refForm.vendorId ? { vendorId: refForm.vendorId } : {}),
+      ...(refForm.vendorName ? { vendorName: refForm.vendorName } : {}),
+      ...(refForm.description ? { description: refForm.description } : {}),
+      isCurrent: refForm.isCurrent
+    };
+
     if (editingRefIndex !== null) {
       // Update existing
       updatedRefs[editingRefIndex] = {
-        ref: refForm.ref.trim(),
-        vendorId: refForm.vendorId || undefined,
-        vendorName: refForm.vendorName || undefined,
-        description: refForm.description || undefined,
-        isCurrent: refForm.isCurrent,
+        ...normalizedRef,
         addedAt:
           (catalogForm.itemReferences[editingRefIndex] as any)?.addedAt || new Date()
       };
@@ -1744,10 +1748,7 @@ export const AdminPage = () => {
     } else {
       // Add new
       updatedRefs.push({
-        ref: refForm.ref.trim(),
-        vendorId: refForm.vendorId || undefined,
-        vendorName: refForm.vendorName || undefined,
-        description: refForm.description || undefined,
+        ...normalizedRef,
         isCurrent: refForm.isCurrent || updatedRefs.length === 0, // First ref is current by default
         addedAt: new Date()
       });
