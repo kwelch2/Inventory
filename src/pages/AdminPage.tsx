@@ -6,7 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useInventoryData } from '../hooks/useInventoryData';
 import { useFirestoreCollection } from '../hooks/useFirestoreCollection';
 import type { CatalogItem, OrderRequest, Vendor, VendorPrice } from '../types';
-import { getCatalogItemPricing, getItemName, getSearchVariations, parseFirebaseDate } from '../utils/helpers';
+import { getCatalogItemPricing, getItemName, getSearchVariations, parseFirebaseDate, removeUndefinedFields } from '../utils/helpers';
 import { OrdersTab } from '../components/admin/OrdersTab';
 import { CatalogTab } from '../components/admin/CatalogTab';
 import { SettingsTab } from '../components/admin/SettingsTab';
@@ -1790,7 +1790,7 @@ export const AdminPage = () => {
         return;
       }
 
-      const data: any = {
+      const data: any = removeUndefinedFields({
         itemName: catalogForm.itemName,
         category: catalogForm.category,
         unit: catalogForm.unit,
@@ -1799,11 +1799,11 @@ export const AdminPage = () => {
         isActive: catalogForm.isActive,
         altNames: catalogForm.altNames.split(',').map(s => s.trim()).filter(Boolean),
         updatedAt: serverTimestamp()
-      };
+      });
 
       // Save new itemReferences format
       if (catalogForm.itemReferences.length > 0) {
-        data.itemReferences = catalogForm.itemReferences;
+        data.itemReferences = removeUndefinedFields(catalogForm.itemReferences);
       } else {
         // Fallback: if no references yet, save old itemRef format
         data.itemRef = catalogForm.itemRef;

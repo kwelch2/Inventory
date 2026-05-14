@@ -17,13 +17,13 @@ export const Dashboard = () => {
         <a href="https://chores-ems.gemfireems.org/" className="dashboard-card external-card">
           <div className="card-icon">✓</div>
           <h2>EMS-Chores</h2>
-          <p>Task management system</p>
+          <p>Task-Chore-Handoff System</p>
         </a>
 
         <a href="https://chores-ems.gemfireems.org/issues/" className="dashboard-card external-card">
           <div className="card-icon">⚠️</div>
           <h2>EMS-Issues</h2>
-          <p>Report and track issues</p>
+          <p>Report and track issues notify Admin </p>
         </a>
 
         <Link to="/expiry" className="dashboard-card supply-card">

@@ -15,6 +15,24 @@ export function parseFirebaseDate(value: FirebaseDateLike | null | undefined): D
   return null;
 }
 
+export function removeUndefinedFields<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => removeUndefinedFields(entry))
+      .filter((entry) => entry !== undefined) as T;
+  }
+
+  if (value && typeof value === 'object' && !(value instanceof Date)) {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .filter(([, entry]) => entry !== undefined)
+        .map(([key, entry]) => [key, removeUndefinedFields(entry)])
+    ) as T;
+  }
+
+  return value;
+}
+
 // Generates variations so search terms like "3ml" and "3 ml" both match.
 export function getSearchVariations(term: string): string[] {
   const normalizedTerm = term.trim();
