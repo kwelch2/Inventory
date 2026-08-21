@@ -452,8 +452,9 @@ export const AdminPage = () => {
 
   const handleQtyUpdate = async (requestId: string, qty: string, unit: string) => {
     try {
+      const parsedQuantity = Number(qty);
       await updateDoc(doc(db, 'requests', requestId), {
-        qty,
+        quantity: Number.isFinite(parsedQuantity) ? parsedQuantity : 0,
         unit,
         updatedAt: serverTimestamp()
       });
@@ -591,7 +592,7 @@ export const AdminPage = () => {
             <td>${item.itemName}</td>
             <td>${itemRef}</td>
             <td>${item.vendorOrderNumber || 'N/A'}</td>
-            <td>${item.qty || item.quantity || '1'} ${item.unit || ''}</td>
+            <td>${item.quantity ?? item.qty ?? '1'} ${item.unit || ''}</td>
             <td>$${item.unitPrice ? item.unitPrice.toFixed(2) : '0.00'}</td>
           </tr>
         `;
@@ -601,7 +602,7 @@ export const AdminPage = () => {
             <td>${item.itemName}</td>
             <td>${itemRef}</td>
             <td>${item.vendorOrderNumber || 'N/A'}</td>
-            <td>${item.qty || item.quantity || '1'} ${item.unit || ''}</td>
+            <td>${item.quantity ?? item.qty ?? '1'} ${item.unit || ''}</td>
           </tr>
         `;
       }
@@ -811,7 +812,7 @@ export const AdminPage = () => {
     orderPreviewData.items.forEach(item => {
       const catalogItem = item.catalogId ? catalogByCatalogId.get(item.catalogId) : null;
       const itemRef = getCurrentItemRef(catalogItem) || 'N/A';
-      const qty = item.qty || item.quantity || '1';
+      const qty = item.quantity ?? item.qty ?? '1';
       const uoi = item.unit || '';
       const vendorNum = item.vendorOrderNumber || 'N/A';
       
@@ -832,7 +833,7 @@ export const AdminPage = () => {
     
     if (includePricing) {
       const subtotal = orderPreviewData.items.reduce((sum, item) => {
-        const qty = parseFloat(item.qty || item.quantity || '1') || 1;
+        const qty = parseFloat(String(item.quantity ?? item.qty ?? '1')) || 1;
         return sum + (qty * (item.unitPrice || 0));
       }, 0);
       const fee = vendor?.serviceFee ? subtotal * (vendor.serviceFee / 100) : 0;
@@ -1056,10 +1057,10 @@ export const AdminPage = () => {
             ) : (
               <span
                 className={`qty-display ${isEditable ? 'editable' : ''}`}
-                onClick={() => isEditable && setEditingQty({ id: r.id, qty: r.qty || r.quantity || '', unit: r.unit || defaultUnit })}
+                onClick={() => isEditable && setEditingQty({ id: r.id, qty: String(r.quantity ?? r.qty ?? ''), unit: r.unit || defaultUnit })}
                 title={isEditable ? 'Click to edit' : ''}
               >
-                {r.qty || r.quantity || '—'} {r.unit || ''}
+                {r.quantity ?? r.qty ?? '—'} {r.unit || ''}
               </span>
             )}
           </td>
@@ -1202,7 +1203,7 @@ export const AdminPage = () => {
       }
 
       if (newRequestForm.qty) {
-        data.qty = newRequestForm.qty;
+        data.quantity = Number(newRequestForm.qty) || 0;
       }
       if (newRequestForm.unit) {
         data.unit = newRequestForm.unit;
@@ -3051,13 +3052,13 @@ export const AdminPage = () => {
                 </thead>
                 <tbody>
                   {orderPreviewData.items.map((item, idx) => {
-                    const qty = parseFloat(item.qty || item.quantity || '1') || 1;
+                    const qty = parseFloat(String(item.quantity ?? item.qty ?? '1')) || 1;
                     const lineTotal = qty * (item.unitPrice || 0);
                     return (
                       <tr key={item.id}>
                         <td>{idx + 1}</td>
                         <td>{item.itemName}</td>
-                        <td>{item.qty || item.quantity || '1'}</td>
+                        <td>{item.quantity ?? item.qty ?? '1'}</td>
                         <td>{item.unit || ''}</td>
                         <td>{item.vendorOrderNumber || 'N/A'}</td>
                         <td>{item.unitPrice ? `$${item.unitPrice.toFixed(2)}` : '—'}</td>
@@ -3069,7 +3070,7 @@ export const AdminPage = () => {
                 <tfoot>
                   {(() => {
                     const subtotal = orderPreviewData.items.reduce((sum, item) => {
-                      const qty = parseFloat(item.qty || item.quantity || '1') || 1;
+                      const qty = parseFloat(String(item.quantity ?? item.qty ?? '1')) || 1;
                       return sum + (qty * (item.unitPrice || 0));
                     }, 0);
                     const vendor = vendorMap.get(orderPreviewData.vendorId);

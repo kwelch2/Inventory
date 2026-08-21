@@ -261,7 +261,7 @@ export const OrdersTab = ({
                               <strong>{getItemName(r)}</strong>
                               <br /><span className="muted">{r.requesterEmail || ''}</span>
                             </td>
-                            <td>{r.qty || r.quantity || ''}</td>
+                            <td>{r.quantity ?? r.qty ?? ''}</td>
                             <td><span className={`status-badge status-${(r.status || '').toLowerCase()}`}>{r.status}</span></td>
                             <td>{(r.receivedAt || r.updatedAt || r.createdAt) && typeof (r.receivedAt || r.updatedAt || r.createdAt) === 'object' && 'seconds' in (r.receivedAt || r.updatedAt || r.createdAt)
                               ? new Date((r.receivedAt || r.updatedAt || r.createdAt).seconds * 1000).toLocaleDateString()
@@ -569,7 +569,7 @@ export const OrdersTab = ({
                                     <br /><span className="muted">{r.requesterEmail || ''}</span>
                                   </td>
                                   <td>{r.vendorName}</td>
-                                  <td>{r.qty || r.quantity || ''} {r.unit || ''}</td>
+                                  <td>{r.quantity ?? r.qty ?? ''} {r.unit || ''}</td>
                                   <td><span className={`status-badge status-${(r.status || '').toLowerCase()}`}>{r.status}</span></td>
                                   <td>{(r.receivedAt || r.updatedAt || r.createdAt) && typeof (r.receivedAt || r.updatedAt || r.createdAt) === 'object' && 'seconds' in (r.receivedAt || r.updatedAt || r.createdAt)
                                     ? new Date((r.receivedAt || r.updatedAt || r.createdAt).seconds * 1000).toLocaleDateString()

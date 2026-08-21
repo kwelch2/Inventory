@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useInventoryData } from '../hooks/useInventoryData';
 import { db } from '../config/firebase';
 import { doc, updateDoc, serverTimestamp, collection, addDoc } from 'firebase/firestore';
-import type { InventoryItem } from '../types';
+import type { CatalogItem, InventoryItem } from '../types';
 import { getSearchVariations, parseFirebaseDate } from '../utils/helpers';
 import './CommonPages.css';
 import './ExpiryPage.css';
@@ -51,7 +51,14 @@ export const ExpiryPage = () => {
   };
 
   const catalogMap = useMemo(() => {
-    return new Map(catalog.map(item => [item.id, item]));
+    const map = new Map<string, CatalogItem>();
+    catalog.forEach(item => {
+      // Inventory records reference catalog items by the catalogId field, which can differ from the doc id.
+      const catId = (item as any).catalogId;
+      if (catId) map.set(catId, item);
+      map.set(item.id, item);
+    });
+    return map;
   }, [catalog]);
 
   const unitsMap = useMemo(() => {
