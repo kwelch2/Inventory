@@ -73,9 +73,20 @@ export function getCatalogItemPricing(
   item: CatalogItem,
   pricingMap: Map<string, VendorPrice[]>
 ): VendorPrice[] {
-  if (item.catalogId && pricingMap.has(item.catalogId)) {
-    return pricingMap.get(item.catalogId) || [];
-  }
+  const pricesById = new Map<string, VendorPrice>();
+  const pricesWithoutId = new Set<VendorPrice>();
 
-  return pricingMap.get(item.id) || [];
+  [item.catalogId, item.id].forEach((key) => {
+    if (!key) return;
+
+    (pricingMap.get(key) || []).forEach((price) => {
+      if (price.id) {
+        pricesById.set(price.id, price);
+      } else {
+        pricesWithoutId.add(price);
+      }
+    });
+  });
+
+  return [...pricesById.values(), ...pricesWithoutId];
 }

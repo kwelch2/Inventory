@@ -42,11 +42,8 @@ type CatalogExportRow = {
   packSize: string;
   parLevel: string;
   compartments: string;
+  vendorPricing: string;
   bestVendorName: string;
-  bestVendorOrderNumber: string;
-  bestVendorStatus: string;
-  unitPrice: string;
-  serviceFeePercent: string;
   effectivePrice: string;
   barcode: string;
   sortPrice: number;
@@ -1351,14 +1348,20 @@ export const AdminPage = () => {
   };
 
   const getBestInStockVendorPricing = (item: CatalogItem): BestVendorPricing | null => {
-    const bestPricing = resolveCatalogItemPricing(item)
-      .filter((price) => (price.vendorStatus || 'In Stock').toLowerCase() === 'in stock')
+    const bestPricing = getSortedVendorPricing(item)
+      .filter((price) => (price.vendorStatus || 'In Stock').trim().toLowerCase() === 'in stock');
+
+    return bestPricing[0] || null;
+  };
+
+  const getSortedVendorPricing = (item: CatalogItem): BestVendorPricing[] => {
+    return resolveCatalogItemPricing(item)
       .map((price) => {
         const numericUnitPrice = typeof price.unitPrice === 'number'
           ? price.unitPrice
           : Number(price.unitPrice);
 
-        if (!Number.isFinite(numericUnitPrice)) {
+        if (!Number.isFinite(numericUnitPrice) || numericUnitPrice <= 0) {
           return null;
         }
 
@@ -1385,14 +1388,15 @@ export const AdminPage = () => {
         }
         return a.vendorName.localeCompare(b.vendorName);
       });
-
-    return bestPricing[0] || null;
   };
 
   const getCatalogExportRows = (): CatalogExportRow[] => {
     return filteredCatalog
       .map((item) => {
         const bestVendor = getBestInStockVendorPricing(item);
+        const vendorPricing = getSortedVendorPricing(item)
+          .map((price) => `${price.vendorName} > $${price.effectivePrice.toFixed(2)}`)
+          .join(' | ');
         const barcodeValue = Array.isArray(item.barcodes) && item.barcodes.length > 0
           ? item.barcodes[0]
           : '';
@@ -1408,11 +1412,8 @@ export const AdminPage = () => {
           packSize: item.packSize !== undefined && item.packSize !== null ? String(item.packSize) : '',
           parLevel: item.parLevel !== undefined && item.parLevel !== null ? String(item.parLevel) : '',
           compartments: compartmentsForItem,
+          vendorPricing,
           bestVendorName: bestVendor?.vendorName || '',
-          bestVendorOrderNumber: bestVendor?.vendorOrderNumber || '',
-          bestVendorStatus: bestVendor?.vendorStatus || '',
-          unitPrice: bestVendor ? bestVendor.unitPrice.toFixed(2) : '',
-          serviceFeePercent: bestVendor ? bestVendor.serviceFee.toString() : '',
           effectivePrice: bestVendor ? bestVendor.effectivePrice.toFixed(2) : '',
           barcode: barcodeValue,
           sortPrice: bestVendor?.effectivePrice ?? Number.POSITIVE_INFINITY
@@ -1459,12 +1460,7 @@ export const AdminPage = () => {
       'Pack Size',
       'PAR Level',
       'Compartment/Shelf',
-      'Best Vendor (In Stock)',
-      'Vendor Item #',
-      'Vendor Status',
-      'Unit Price',
-      'Service Fee %',
-      'Effective Price',
+      'Vendor Pricing (Best First)',
       'Barcode'
     ];
 
@@ -1476,12 +1472,7 @@ export const AdminPage = () => {
       row.packSize,
       row.parLevel,
       row.compartments,
-      row.bestVendorName,
-      row.bestVendorOrderNumber,
-      row.bestVendorStatus,
-      row.unitPrice,
-      row.serviceFeePercent,
-      row.effectivePrice,
+      row.vendorPricing,
       row.barcode
     ]);
 
@@ -1489,7 +1480,7 @@ export const AdminPage = () => {
       .map((line) => line.map((value) => escapeCsvValue(value)).join(','))
       .join('\r\n');
 
-    const csvBlob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const csvBlob = new Blob(['\uFEFF', csvContent], { type: 'text/csv;charset=utf-8;' });
     const downloadUrl = URL.createObjectURL(csvBlob);
     const link = document.createElement('a');
     const datePart = new Date().toISOString().slice(0, 10);
@@ -1890,12 +1881,18 @@ export const AdminPage = () => {
   const handleSavePricing = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingPrice) return;
+
+    const parsedUnitPrice = Number(pricingForm.unitPrice);
+    if (!Number.isFinite(parsedUnitPrice) || parsedUnitPrice <= 0) {
+      alert('Enter a unit price greater than $0.00.');
+      return;
+    }
     
     try {
       const data: any = {
         catalogId: editingPrice.itemId, // Save as catalogId
         vendorId: pricingForm.vendorId,
-        unitPrice: pricingForm.unitPrice ? parseFloat(pricingForm.unitPrice) : 0,
+        unitPrice: parsedUnitPrice,
         vendorOrderNumber: pricingForm.vendorOrderNumber,
         vendorStatus: pricingForm.vendorStatus,
         updatedAt: serverTimestamp()
@@ -2690,8 +2687,10 @@ export const AdminPage = () => {
                   <input
                     type="number"
                     step="0.01"
+                    min="0.01"
                     value={pricingForm.unitPrice}
                     onChange={(e) => setPricingForm({ ...pricingForm, unitPrice: e.target.value })}
+                    required
                   />
                 </div>
                 <div className="form-group">
