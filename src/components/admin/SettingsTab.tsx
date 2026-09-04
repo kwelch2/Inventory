@@ -89,7 +89,7 @@ export const SettingsTab = ({
               </tr>
             </thead>
             <tbody>
-              {vendors.sort((a, b) => a.name.localeCompare(b.name)).map(v => (
+              {[...vendors].sort((a, b) => a.name.localeCompare(b.name)).map(v => (
                 <tr key={v.id}>
                   <td><strong>{v.name}</strong></td>
                   <td>{v.email || 'N/A'}</td>
@@ -158,7 +158,7 @@ export const SettingsTab = ({
               </tr>
             </thead>
             <tbody>
-              {categories.sort((a, b) => a.name.localeCompare(b.name)).map(c => (
+              {[...categories].sort((a, b) => a.name.localeCompare(b.name)).map(c => (
                 <tr key={c.id}>
                   <td>{c.name}</td>
                   <td>{catalog.filter(item => item.category === c.id).length}</td>
@@ -192,7 +192,7 @@ export const SettingsTab = ({
               </tr>
             </thead>
             <tbody>
-              {compartments.sort((a, b) => a.name.localeCompare(b.name)).map(c => (
+              {[...compartments].sort((a, b) => a.name.localeCompare(b.name)).map(c => (
                 <tr key={c.id}>
                   <td>{c.name}</td>
                   <td>
@@ -225,7 +225,7 @@ export const SettingsTab = ({
               </tr>
             </thead>
             <tbody>
-              {units.sort((a, b) => a.name.localeCompare(b.name)).map(u => (
+              {[...units].sort((a, b) => a.name.localeCompare(b.name)).map(u => (
                 <tr key={u.id}>
                   <td>{u.name}</td>
                   <td>

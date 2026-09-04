@@ -91,6 +91,47 @@ The application is fully responsive with:
 
 Admin features require authentication with a `@gemfireems.org` email address.
 
+- Admin routes wait for Firebase authentication restoration before mounting Firestore listeners.
+- Signed-in users are logged out after 24 hours without keyboard, pointer, touch, or scroll activity.
+- Activity and inactivity logout are synchronized across browser tabs.
+- Requests and Expiry retain their existing unauthenticated access behavior. Authorization for those
+  workflows must be enforced by the deployed Firestore security rules.
+
+## Data Connection States
+
+Firestore-backed pages display whether data is loading, live, cached/offline, or unavailable. A
+terminal listener failure includes a **Retry** action that creates a replacement listener. Persistent
+browser caching is intentionally disabled because the application may be used on shared devices.
+
+## Verification
+
+```bash
+npm test
+npm run build
+npm run test:rules:emulator
+```
+
+The automated suite covers session timeout calculations, activity-based session extension, Admin
+route protection, collection subscription gating, snapshot source state, terminal errors, retry, and
+Firestore access boundaries. The rules test requires Java 21 or newer for the local Firestore emulator.
+
+## Firestore Security Configuration
+
+`firestore.rules` and `firestore.indexes.json` are versioned and referenced by `firebase.json`.
+Dashboard, Requests, and Expiry intentionally remain public and require no login. Anonymous request
+and inventory writes are limited to the fields, types, sizes, and state transitions used by those pages;
+anonymous deletion and admin-managed reference-data writes are denied. Admin writes require a verified
+`@gemfireems.org` Firebase Authentication account.
+
+Validate locally before deployment:
+
+```bash
+firebase deploy --only firestore:rules --dry-run --project supplies-ems
+```
+
+The model, access assumptions, and residual anonymous-access risk are documented in
+`docs/firestore-model-analysis.md`. Rules and indexes are not deployed automatically by the build.
+
 ## Migration Runbook (Legacy qty/itemId Cleanup)
 
 This app includes a one-off admin migration utility that normalizes legacy fields:

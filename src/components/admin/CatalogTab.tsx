@@ -69,7 +69,7 @@ export const CatalogTab = ({
           onChange={(e) => setCatalogCategoryFilter(e.target.value)}
         >
           <option value="all">All Categories</option>
-          {categories.sort((a, b) => a.name.localeCompare(b.name)).map(c => (
+          {[...categories].sort((a, b) => a.name.localeCompare(b.name)).map(c => (
             <option key={c.id} value={c.id}>{c.name}</option>
           ))}
         </select>

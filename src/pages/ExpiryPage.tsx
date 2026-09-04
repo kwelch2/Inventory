@@ -4,13 +4,17 @@ import { db } from '../config/firebase';
 import { doc, updateDoc, serverTimestamp, collection, addDoc } from 'firebase/firestore';
 import type { CatalogItem, InventoryItem } from '../types';
 import { getSearchVariations, parseFirebaseDate } from '../utils/helpers';
+import { DataStatus } from '../components/DataStatus';
 import './CommonPages.css';
 import './ExpiryPage.css';
 
 type ExpiryFilter = '30' | '60' | '90' | 'ALL';
+const EXPIRY_COLLECTIONS = ['catalog', 'inventory', 'units', 'compartments'] as const;
 
 export const ExpiryPage = () => {
-  const { catalog, inventory, units, compartments, loading } = useInventoryData();
+  const { catalog, inventory, units, compartments, loading, error, fromCache, retry } = useInventoryData({
+    collections: EXPIRY_COLLECTIONS
+  });
   const [rangeFilter, setRangeFilter] = useState<ExpiryFilter>('90');
   const [unitFilter, setUnitFilter] = useState<string>('ALL');
   const [searchTerm, setSearchTerm] = useState('');
@@ -401,7 +405,7 @@ export const ExpiryPage = () => {
   if (loading) {
     return (
       <div className="page-container">
-        <p>Loading expiry data...</p>
+        <DataStatus loading={loading} error={error} fromCache={fromCache} onRetry={retry} loadingLabel="Loading expiry data..." />
       </div>
     );
   }
@@ -414,6 +418,8 @@ export const ExpiryPage = () => {
           Monitoring expiration dates. Highlight upcoming expirations in pink or circle them in red 90 days out, and record them here.
         </p>
       </div>
+
+      <DataStatus loading={loading} error={error} fromCache={fromCache} onRetry={retry} />
 
       <div className="controls-section">
         <div className="control-group">

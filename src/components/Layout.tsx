@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/useAuth';
+import { isAuthorizedAdmin } from '../utils/auth';
 import './Layout.css';
 
 interface LayoutProps {
@@ -62,7 +63,7 @@ export const Layout = ({ children, showNav = true }: LayoutProps) => {
               <Link to="/requests" className="nav-link" onClick={closeMenu}>
                 Supply Requests
               </Link>
-              {user && (
+              {isAuthorizedAdmin(user) && (
                 <Link to="/admin" className="nav-link" onClick={closeMenu}>
                   Admin
                 </Link>

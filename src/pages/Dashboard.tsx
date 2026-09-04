@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/useAuth';
+import { isAuthorizedAdmin } from '../utils/auth';
 import './Dashboard.css';
 
 export const Dashboard = () => {
@@ -44,7 +45,7 @@ export const Dashboard = () => {
           <p>Employee directory, payroll, training, and FTO</p>
         </a>
 
-        {user && (
+        {isAuthorizedAdmin(user) && (
           <Link to="/admin" className="dashboard-card admin-card">
             <div className="card-icon">🔧</div>
             <h2>Admin Panel</h2>

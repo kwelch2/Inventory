@@ -5,6 +5,7 @@ import { useInventoryData } from '../hooks/useInventoryData';
 import { useFirestoreCollection } from '../hooks/useFirestoreCollection';
 import type { OrderRequest } from '../types';
 import { getItemName, getSearchVariations, parseFirebaseDate } from '../utils/helpers';
+import { DataStatus } from '../components/DataStatus';
 import './CommonPages.css';
 import './RequestsPage.css';
 
@@ -15,6 +16,7 @@ const ACTIVE_REQUEST_STATUSES = ['Open', 'Ordered', 'Backordered', 'Back ordered
 const HISTORY_REQUEST_STATUSES = ['Received', 'Cancelled'];
 const HISTORY_DEFAULT_DAYS = 180;
 const ARCHIVE_FETCH_LIMIT = 1200;
+const REQUEST_COLLECTIONS = ['catalog', 'requests', 'vendors', 'pricing'] as const;
 
 export const RequestsPage = () => {
   const historyCutoffDate = useMemo(() => {
@@ -43,13 +45,42 @@ export const RequestsPage = () => {
     limit(ARCHIVE_FETCH_LIMIT)
   ], [historyCutoffDate]);
 
-  const { catalog, requests, vendors, pricing, loading: activeLoading } = useInventoryData({
-    requestConstraints: activeRequestConstraints
+  const {
+    catalog,
+    requests,
+    vendors,
+    pricing,
+    loading: activeLoading,
+    error: activeError,
+    fromCache: activeFromCache,
+    retry: retryActive
+  } = useInventoryData({
+    requestConstraints: activeRequestConstraints,
+    collections: REQUEST_COLLECTIONS
   });
-  const { data: historyRequests, loading: historyLoading } = useFirestoreCollection<OrderRequest>('requests', historyRequestConstraints);
+  const {
+    data: historyRequests,
+    loading: historyLoading,
+    error: historyError,
+    source: historySource,
+    retry: retryHistory
+  } = useFirestoreCollection<OrderRequest>('requests', historyRequestConstraints);
   const [loadArchive, setLoadArchive] = useState(false);
-  const { data: archiveRequests, loading: archiveLoading } = useFirestoreCollection<OrderRequest>('requests', archiveRequestConstraints, loadArchive);
+  const {
+    data: archiveRequests,
+    loading: archiveLoading,
+    error: archiveError,
+    source: archiveSource,
+    retry: retryArchive
+  } = useFirestoreCollection<OrderRequest>('requests', archiveRequestConstraints, loadArchive);
   const loading = activeLoading || historyLoading || archiveLoading;
+  const dataError = activeError || historyError || archiveError;
+  const dataFromCache = activeFromCache || historySource === 'cache' || archiveSource === 'cache';
+  const retryData = () => {
+    retryActive();
+    retryHistory();
+    if (loadArchive) retryArchive();
+  };
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('Active');
   const [showHistory, setShowHistory] = useState(false);
   const [showNewRequestModal, setShowNewRequestModal] = useState(false);
@@ -464,7 +495,7 @@ export const RequestsPage = () => {
   if (loading) {
     return (
       <div className="page-container">
-        <p>Loading requests...</p>
+        <DataStatus loading={loading} error={dataError} fromCache={dataFromCache} onRetry={retryData} loadingLabel="Loading requests..." />
       </div>
     );
   }
@@ -475,6 +506,8 @@ export const RequestsPage = () => {
         <h1>Supply Requests</h1>
         <p className="page-subtitle">View and manage supply order requests</p>
       </div>
+
+      <DataStatus loading={loading} error={dataError} fromCache={dataFromCache} onRetry={retryData} />
 
       <div className="stats-grid">
         <div className="stat-card">

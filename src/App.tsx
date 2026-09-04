@@ -6,6 +6,7 @@ import { ExpiryPage } from './pages/ExpiryPage';
 import { RequestsPage } from './pages/RequestsPage';
 import { LoginPage } from './pages/LoginPage';
 import { AdminPage } from './pages/AdminPage';
+import { RequireAdmin } from './components/RequireAdmin';
 import './App.css';
 
 function App() {
@@ -17,7 +18,7 @@ function App() {
           <Route path="/expiry" element={<Layout><ExpiryPage /></Layout>} />
           <Route path="/requests" element={<Layout><RequestsPage /></Layout>} />
           <Route path="/login" element={<Layout showNav={false}><LoginPage /></Layout>} />
-          <Route path="/admin" element={<Layout><AdminPage /></Layout>} />
+          <Route path="/admin" element={<Layout><RequireAdmin><AdminPage /></RequireAdmin></Layout>} />
         </Routes>
       </Router>
     </AuthProvider>

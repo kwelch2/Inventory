@@ -1,24 +1,37 @@
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
-import { useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/useAuth';
+import { useEffect, useState } from 'react';
+import { isAuthorizedAdmin } from '../utils/auth';
+import { AUTH_MESSAGE_STORAGE_KEY } from '../utils/session';
 import './Login.css';
 
 export const LoginPage = () => {
-  const { user, signInWithGoogle, loading } = useAuth();
+  const { user, signInWithGoogle, signOut, loading } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [authMessage] = useState(() => {
+    const message = sessionStorage.getItem(AUTH_MESSAGE_STORAGE_KEY);
+    sessionStorage.removeItem(AUTH_MESSAGE_STORAGE_KEY);
+    return message;
+  });
+  const destination = (location.state as { from?: string } | null)?.from || '/admin';
 
   useEffect(() => {
-    if (user && !loading) {
-      navigate('/admin');
+    if (!user || loading) return;
+    if (isAuthorizedAdmin(user)) {
+      navigate(destination, { replace: true });
+    } else {
+      sessionStorage.setItem(AUTH_MESSAGE_STORAGE_KEY, 'Access denied. Please use a @gemfireems.org account.');
+      void signOut();
     }
-  }, [user, loading, navigate]);
+  }, [destination, user, loading, navigate, signOut]);
 
   const handleLogin = async () => {
     try {
       await signInWithGoogle();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Login failed:', error);
-      const errorMessage = error?.message || 'An unknown error occurred';
+      const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
       alert(`Login failed: ${errorMessage}. Please try again.`);
     }
   };
@@ -39,6 +52,11 @@ export const LoginPage = () => {
         <img src="/Logo-1.jpg" alt="EMS Logo" className="login-logo" />
         <h1>Admin Login</h1>
         <p className="login-subtitle">Sign in to access the admin panel</p>
+        {(authMessage || sessionStorage.getItem(AUTH_MESSAGE_STORAGE_KEY)) && (
+          <p className="login-message" role="status">
+            {authMessage || sessionStorage.getItem(AUTH_MESSAGE_STORAGE_KEY)}
+          </p>
+        )}
         
         <button onClick={handleLogin} className="btn btn-primary login-btn">
           <svg className="google-icon" viewBox="0 0 24 24">

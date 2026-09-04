@@ -1,10 +1,11 @@
-import React, { useState, useMemo } from 'react';
-import { Navigate } from 'react-router-dom';
+import React, { useCallback, useState, useMemo } from 'react';
 import { doc, updateDoc, addDoc, collection, deleteDoc, serverTimestamp, where, orderBy, limit, query, getDocs, writeBatch, deleteField, type QueryConstraint, type DocumentReference } from 'firebase/firestore';
 import { db } from '../config/firebase';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/useAuth';
 import { useInventoryData } from '../hooks/useInventoryData';
+import type { InventoryCollectionName } from '../hooks/useInventoryData';
 import { useFirestoreCollection } from '../hooks/useFirestoreCollection';
+import { DataStatus } from '../components/DataStatus';
 import type { CatalogItem, OrderRequest, Vendor, VendorPrice } from '../types';
 import { getCatalogItemPricing, getItemName, getSearchVariations, parseFirebaseDate, removeUndefinedFields } from '../utils/helpers';
 import { OrdersTab } from '../components/admin/OrdersTab';
@@ -15,6 +16,13 @@ import './AdminPage.css';
 
 type AdminTab = 'orders' | 'fleet' | 'catalog' | 'settings';
 type OrderView = 'item' | 'vendor';
+
+const ADMIN_TAB_COLLECTIONS: Record<AdminTab, readonly InventoryCollectionName[]> = {
+  orders: ['catalog', 'requests', 'vendors', 'pricing', 'units'],
+  fleet: ['catalog', 'inventory', 'units'],
+  catalog: ['catalog', 'vendors', 'categories', 'pricing', 'inventory', 'units', 'compartments'],
+  settings: ['catalog', 'vendors', 'categories', 'units', 'compartments']
+};
 
 const ACTIVE_REQUEST_STATUSES = ['Open', 'Ordered', 'Backordered', 'Back ordered'];
 const HISTORY_REQUEST_STATUSES = ['Received', 'Cancelled'];
@@ -61,8 +69,8 @@ type MigrationSummary = {
 };
 
 export const AdminPage = () => {
-  const { user, loading } = useAuth();
-
+  const { user } = useAuth();
+  const [activeTab, setActiveTab] = useState<AdminTab>('orders');
   const historyCutoffDate = useMemo(() => {
     const cutoff = new Date();
     cutoff.setHours(0, 0, 0, 0);
@@ -89,14 +97,46 @@ export const AdminPage = () => {
     limit(ARCHIVE_FETCH_LIMIT)
   ], [historyCutoffDate]);
 
-  const { catalog, vendors, categories, compartments, requests, pricing, inventory, units, loading: activeDataLoading } = useInventoryData({
-    requestConstraints: activeRequestConstraints
+  const {
+    catalog,
+    vendors,
+    categories,
+    compartments,
+    requests,
+    pricing,
+    inventory,
+    units,
+    loading: activeDataLoading,
+    error: activeDataError,
+    fromCache: activeFromCache,
+    retry: retryActiveData
+  } = useInventoryData({
+    requestConstraints: activeRequestConstraints,
+    collections: ADMIN_TAB_COLLECTIONS[activeTab]
   });
   const [loadArchive, setLoadArchive] = useState(false);
-  const { data: historyRequestsData, loading: historyLoading } = useFirestoreCollection<OrderRequest>('requests', historyRequestConstraints);
-  const { data: archiveRequestsData, loading: archiveLoading } = useFirestoreCollection<OrderRequest>('requests', archiveRequestConstraints, loadArchive);
+  const {
+    data: historyRequestsData,
+    loading: historyLoading,
+    error: historyError,
+    source: historySource,
+    retry: retryHistory
+  } = useFirestoreCollection<OrderRequest>('requests', historyRequestConstraints, activeTab === 'orders');
+  const {
+    data: archiveRequestsData,
+    loading: archiveLoading,
+    error: archiveError,
+    source: archiveSource,
+    retry: retryArchive
+  } = useFirestoreCollection<OrderRequest>('requests', archiveRequestConstraints, loadArchive && activeTab === 'orders');
   const dataLoading = activeDataLoading || historyLoading || archiveLoading;
-  const [activeTab, setActiveTab] = useState<AdminTab>('orders');
+  const dataError = activeDataError || historyError || archiveError;
+  const dataFromCache = activeFromCache || historySource === 'cache' || archiveSource === 'cache';
+  const retryData = () => {
+    retryActiveData();
+    if (activeTab === 'orders') retryHistory();
+    if (activeTab === 'orders' && loadArchive) retryArchive();
+  };
   
   // Orders tab state
   const [orderView, setOrderView] = useState<OrderView>('item');
@@ -294,28 +334,11 @@ export const AdminPage = () => {
     return map;
   }, [pricing]);
 
-  if (loading) {
-    return <div className="admin-loading"><p>Loading...</p></div>;
-  }
-
-  if (!user) {
-    return <Navigate to="/login" />;
-  }
-
-  const isAuthorized = user.email?.endsWith('@gemfireems.org');
-  if (!isAuthorized) {
-    return (
-      <div className="page-container">
-        <div className="content-card error-card">
-          <h1>Access Denied</h1>
-          <p>You must have a @gemfireems.org email to access the admin panel.</p>
-        </div>
-      </div>
-    );
-  }
-
   // ===================== HELPER FUNCTIONS =====================
-  const resolveItemName = (request: any) => getItemName(request, catalogByCatalogId, catalogMap);
+  const resolveItemName = useCallback(
+    (request: any) => getItemName(request, catalogByCatalogId, catalogMap),
+    [catalogByCatalogId, catalogMap]
+  );
 
   const getItemPricing = (catalogId?: string) => {
     if (catalogId) {
@@ -332,19 +355,19 @@ export const AdminPage = () => {
     return requests
       .filter(r => (r.status || 'Open') === 'Open')
         .sort((a, b) => resolveItemName(a).localeCompare(resolveItemName(b)));
-  }, [requests, catalog]);
+  }, [requests, resolveItemName]);
 
   const orderedRequests = useMemo(() => {
     return requests
       .filter(r => r.status === 'Ordered')
         .sort((a, b) => resolveItemName(a).localeCompare(resolveItemName(b)));
-  }, [requests, catalog]);
+  }, [requests, resolveItemName]);
 
   const backorderRequests = useMemo(() => {
     return requests
       .filter(r => r.status === 'Backordered')
         .sort((a, b) => resolveItemName(a).localeCompare(resolveItemName(b)));
-  }, [requests, catalog]);
+  }, [requests, resolveItemName]);
 
   const historyRequests = useMemo(() => {
     const mergedHistory = loadArchive
@@ -379,7 +402,7 @@ export const AdminPage = () => {
     });
 
     return filtered;
-  }, [requests, catalog]);
+  }, [requests, resolveItemName]);
 
   // Group requests by vendor AND status for vendor view sections
   const requestsByVendorAndStatus = useMemo(() => {
@@ -396,7 +419,7 @@ export const AdminPage = () => {
     allRequests.forEach(r => {
       // Get vendor info
       const prices = r.catalogId ? pricingMap.get(r.catalogId) || [] : [];
-      const bestPrice = prices.length > 0 ? prices.sort((a, b) => (a.unitPrice || Infinity) - (b.unitPrice || Infinity))[0] : null;
+      const bestPrice = prices.length > 0 ? [...prices].sort((a, b) => (a.unitPrice || Infinity) - (b.unitPrice || Infinity))[0] : null;
       
       let vendorId = 'unassigned';
       let vendorName = 'Unassigned';
@@ -492,7 +515,7 @@ export const AdminPage = () => {
     }
     const prices = getItemPricing(r.catalogId);
     if (prices.length > 0) {
-      const bestPrice = prices.sort((a, b) => (a.unitPrice || Infinity) - (b.unitPrice || Infinity))[0];
+      const bestPrice = [...prices].sort((a, b) => (a.unitPrice || Infinity) - (b.unitPrice || Infinity))[0];
       return { vendorId: bestPrice.vendorId, vendor: vendorMap.get(bestPrice.vendorId) };
     }
     return { vendorId: null, vendor: null };
@@ -1168,6 +1191,7 @@ export const AdminPage = () => {
       const data: any = {
         status: 'Open',
         requesterEmail: user?.email || '',
+        quantity: Number(newRequestForm.qty) || 0,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       };
@@ -1199,9 +1223,6 @@ export const AdminPage = () => {
         }
       }
 
-      if (newRequestForm.qty) {
-        data.quantity = Number(newRequestForm.qty) || 0;
-      }
       if (newRequestForm.unit) {
         data.unit = newRequestForm.unit;
       }
@@ -2209,6 +2230,8 @@ export const AdminPage = () => {
         <p className="page-subtitle">Manage orders, catalog, and system settings</p>
       </div>
 
+      <DataStatus loading={dataLoading} error={dataError} fromCache={dataFromCache} onRetry={retryData} />
+
       <div className="admin-tabs">
         <button className={`tab-btn ${activeTab === 'orders' ? 'active' : ''}`} onClick={() => setActiveTab('orders')}>
           📦 Orders
@@ -2676,7 +2699,7 @@ export const AdminPage = () => {
                   required
                 >
                   <option value="">Select Vendor...</option>
-                  {vendors.sort((a, b) => a.name.localeCompare(b.name)).map(v => (
+                  {[...vendors].sort((a, b) => a.name.localeCompare(b.name)).map(v => (
                     <option key={v.id} value={v.id}>{v.name}</option>
                   ))}
                 </select>
