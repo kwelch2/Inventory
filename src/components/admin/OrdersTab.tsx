@@ -79,11 +79,16 @@ export const OrdersTab = ({
               {/* Sections replace filter buttons */}
             </div>
             <div className="toolbar-right">
-              {selectedRequests.size > 0 && (
-                <button className="btn btn-primary" onClick={() => openOrderPreview()}>
-                  📋 Generate Order ({selectedRequests.size})
-                </button>
+              {selectedRequests.size === 0 && (
+                <span className="order-selection-hint">Select items to generate an order.</span>
               )}
+              <button
+                className="btn btn-primary"
+                onClick={() => openOrderPreview()}
+                disabled={selectedRequests.size === 0}
+              >
+                📋 Generate Order ({selectedRequests.size})
+              </button>
             </div>
           </div>
 
@@ -307,11 +312,16 @@ export const OrdersTab = ({
               </select>
             </div>
             <div className="toolbar-right">
-              {selectedRequests.size > 0 && (
-                <button className="btn btn-primary" onClick={() => openOrderPreview()}>
-                  📋 Generate Order ({selectedRequests.size})
-                </button>
+              {selectedRequests.size === 0 && (
+                <span className="order-selection-hint">Select items to generate an order.</span>
               )}
+              <button
+                className="btn btn-primary"
+                onClick={() => openOrderPreview()}
+                disabled={selectedRequests.size === 0}
+              >
+                📋 Generate Order ({selectedRequests.size})
+              </button>
             </div>
           </div>
 

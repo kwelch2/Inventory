@@ -233,6 +233,17 @@
   background: #0052a3;
 }
 
+.btn:disabled {
+  background: #b8bec6;
+  color: #f5f5f5;
+  cursor: not-allowed;
+  opacity: 1;
+}
+
+.btn-primary:disabled:hover {
+  background: #b8bec6;
+}
+
 .btn-secondary {
   background: #ddd;
   color: #333;
@@ -507,6 +518,11 @@
   display: flex;
   gap: 1rem;
   align-items: center;
+}
+
+.order-selection-hint {
+  color: #666;
+  font-size: 0.9rem;
 }
 
 .filter-buttons {

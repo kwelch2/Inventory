@@ -79,8 +79,7 @@ export const AdminPage = () => {
   }, []);
 
   const activeRequestConstraints = useMemo<QueryConstraint[]>(() => [
-    where('status', 'in', ACTIVE_REQUEST_STATUSES),
-    orderBy('updatedAt', 'desc')
+    where('status', 'in', ACTIVE_REQUEST_STATUSES)
   ], []);
 
   const historyRequestConstraints = useMemo<QueryConstraint[]>(() => [
