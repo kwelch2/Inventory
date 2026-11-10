@@ -87,6 +87,31 @@ export interface OrderRequest {
   requesterEmail?: string;
 }
 
+export const OXYGEN_STATUS_VALUES = ['OK', 'Low', 'Out'] as const;
+export type OxygenStatus = typeof OXYGEN_STATUS_VALUES[number];
+
+export interface OxygenStock {
+  id: string;
+  dStatus?: OxygenStatus;
+  sStatus?: OxygenStatus;
+  updatedAt?: FirebaseDateLike;
+}
+
+export const STATION_NEED_STATUS_VALUES = ['Needed', 'Purchased', 'Stocked', 'Cancelled'] as const;
+export type StationNeedStatus = typeof STATION_NEED_STATUS_VALUES[number];
+
+export interface StationNeed {
+  id: string;
+  item: string;
+  quantity?: number;
+  unit?: string;
+  store?: 'Costco' | 'Office Depot' | 'Other';
+  note?: string;
+  status: StationNeedStatus;
+  createdAt: FirebaseDateLike;
+  updatedAt: FirebaseDateLike;
+}
+
 export interface Category {
   id: string;
   name: string;

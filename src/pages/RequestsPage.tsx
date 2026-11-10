@@ -3,6 +3,7 @@ import { doc, updateDoc, addDoc, collection, serverTimestamp, where, orderBy, li
 import { db } from '../config/firebase';
 import { useInventoryData } from '../hooks/useInventoryData';
 import { useFirestoreCollection } from '../hooks/useFirestoreCollection';
+import { RequestSummaryPanels } from '../components/RequestSummaryPanels';
 import type { OrderRequest } from '../types';
 import { getItemName, getSearchVariations, parseFirebaseDate } from '../utils/helpers';
 import { DataStatus } from '../components/DataStatus';
@@ -509,20 +510,7 @@ export const RequestsPage = () => {
 
       <DataStatus loading={loading} error={dataError} fromCache={dataFromCache} onRetry={retryData} />
 
-      <div className="stats-grid">
-        <div className="stat-card">
-          <span className="stat-value">{stats.openCount}</span>
-          <span className="stat-label">Open Requests</span>
-        </div>
-        <div className="stat-card">
-          <span className="stat-value">{stats.orderedCount}</span>
-          <span className="stat-label">Ordered</span>
-        </div>
-        <div className="stat-card">
-          <span className="stat-value">{stats.backorderedCount}</span>
-          <span className="stat-label">Backordered</span>
-        </div>
-      </div>
+      <RequestSummaryPanels requestCounts={stats} />
 
       <div className="controls-section">
         <div className="filter-buttons">

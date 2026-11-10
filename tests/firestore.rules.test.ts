@@ -8,6 +8,7 @@ import {
 } from '@firebase/rules-unit-testing';
 import {
   collection,
+  deleteField,
   deleteDoc,
   doc,
   getDoc,
@@ -39,6 +40,17 @@ const publicInventory = () => ({
   quantity: 1,
   status: '',
   crewStatus: '',
+  createdAt: serverTimestamp(),
+  updatedAt: serverTimestamp()
+});
+
+const publicStationNeed = () => ({
+  item: 'coffee',
+  quantity: 2,
+  unit: 'bags',
+  store: 'Costco',
+  note: '',
+  status: 'Needed',
   createdAt: serverTimestamp(),
   updatedAt: serverTimestamp()
 });
@@ -160,6 +172,76 @@ describe('intentional public access', () => {
     await assertFails(updateDoc(ref, { quantity: 'many', updatedAt: serverTimestamp() }));
     await assertFails(updateDoc(ref, { crewStatus: 'x'.repeat(2001), updatedAt: serverTimestamp() }));
   });
+
+  it('allows only validated public oxygen status updates on the shared record', async () => {
+    const db = testEnvironment.unauthenticatedContext().firestore();
+    const sharedRef = doc(db, 'oxygenStock/shared');
+
+    await assertSucceeds(setDoc(sharedRef, { dStatus: 'Low', updatedAt: serverTimestamp() }));
+    await assertSucceeds(updateDoc(sharedRef, { sStatus: 'Out', updatedAt: serverTimestamp() }));
+    await assertSucceeds(getDocs(collection(db, 'oxygenStock')));
+    await assertFails(setDoc(doc(db, 'oxygenStock/empty'), { updatedAt: serverTimestamp() }));
+    await assertFails(setDoc(doc(db, 'oxygenStock/other'), { dStatus: 'OK', updatedAt: serverTimestamp() }));
+    await assertFails(updateDoc(sharedRef, { dStatus: 'Unknown', updatedAt: serverTimestamp() }));
+    await assertFails(updateDoc(sharedRef, { isAdmin: true, updatedAt: serverTimestamp() }));
+    await assertFails(deleteDoc(sharedRef));
+  });
+
+  it('validates station need creation, editable details, history, and status transitions', async () => {
+    const db = testEnvironment.unauthenticatedContext().firestore();
+    const neededRef = doc(db, 'stationNeeds/need-1');
+    await assertSucceeds(setDoc(neededRef, publicStationNeed()));
+    await assertSucceeds(updateDoc(neededRef, {
+      item: 'coffee', quantity: 3, store: 'Office Depot', updatedAt: serverTimestamp()
+    }));
+    await assertSucceeds(updateDoc(neededRef, {
+      quantity: deleteField(), unit: deleteField(), note: deleteField(), updatedAt: serverTimestamp()
+    }));
+    await assertSucceeds(updateDoc(neededRef, { status: 'Purchased', updatedAt: serverTimestamp() }));
+    await assertSucceeds(updateDoc(neededRef, { status: 'Stocked', updatedAt: serverTimestamp() }));
+    await assertFails(updateDoc(neededRef, { status: 'Needed', updatedAt: serverTimestamp() }));
+    await assertFails(updateDoc(neededRef, { note: 'Cannot edit history', updatedAt: serverTimestamp() }));
+    await assertFails(deleteDoc(neededRef));
+
+    await assertFails(setDoc(doc(db, 'stationNeeds/invalid-status'), {
+      ...publicStationNeed(), status: 'Stocked'
+    }));
+    await assertFails(setDoc(doc(db, 'stationNeeds/invalid-store'), {
+      ...publicStationNeed(), store: 'Unlisted Store'
+    }));
+    await assertFails(setDoc(doc(db, 'stationNeeds/invalid-quantity'), {
+      ...publicStationNeed(), quantity: 0
+    }));
+    await assertFails(setDoc(doc(db, 'stationNeeds/blank-item'), {
+      ...publicStationNeed(), item: '   '
+    }));
+    await assertFails(setDoc(doc(db, 'stationNeeds/polluted'), {
+      ...publicStationNeed(), medicalRequest: true
+    }));
+    await assertFails(setDoc(doc(db, 'stationNeeds/fractional'), {
+      ...publicStationNeed(), quantity: 1.5
+    }));
+    await assertSucceeds(setDoc(doc(db, 'stationNeeds/no-store'), {
+      item: 'hand soap', status: 'Needed', createdAt: serverTimestamp(), updatedAt: serverTimestamp()
+    }));
+    await assertSucceeds(setDoc(doc(db, 'stationNeeds/needed-2'), publicStationNeed()));
+    await assertFails(updateDoc(doc(db, 'stationNeeds/needed-2'), {
+      status: 'Stocked', updatedAt: serverTimestamp()
+    }));
+    await assertSucceeds(setDoc(doc(db, 'stationNeeds/needed-3'), publicStationNeed()));
+    await assertSucceeds(updateDoc(doc(db, 'stationNeeds/needed-3'), {
+      status: 'Cancelled', updatedAt: serverTimestamp()
+    }));
+    await assertSucceeds(setDoc(doc(db, 'stationNeeds/purchased-1'), {
+      ...publicStationNeed(), status: 'Needed'
+    }));
+    await assertSucceeds(updateDoc(doc(db, 'stationNeeds/purchased-1'), {
+      status: 'Purchased', updatedAt: serverTimestamp()
+    }));
+    await assertSucceeds(updateDoc(doc(db, 'stationNeeds/purchased-1'), {
+      status: 'Cancelled', updatedAt: serverTimestamp()
+    }));
+  });
 });
 
 describe('admin and private access', () => {
@@ -189,6 +271,20 @@ describe('admin and private access', () => {
 
     await assertFails(setDoc(doc(unverified, 'categories/new'), { name: 'Restricted' }));
     await assertFails(setDoc(doc(outsider, 'categories/new'), { name: 'Restricted' }));
+  });
+
+  it('lets only verified staff manage station quick-pick items', async () => {
+    const staff = testEnvironment.authenticatedContext('staff-9', {
+      email: 'staff@gemfireems.org', email_verified: true
+    }).firestore();
+    const publicDb = testEnvironment.unauthenticatedContext().firestore();
+
+    await assertSucceeds(setDoc(doc(staff, 'stationPresetItems/coffee'), { name: 'coffee' }));
+    await assertSucceeds(getDoc(doc(publicDb, 'stationPresetItems/coffee')));
+    await assertFails(setDoc(doc(publicDb, 'stationPresetItems/tea'), { name: 'tea' }));
+    await assertFails(setDoc(doc(staff, 'stationPresetItems/bad'), { name: '' }));
+    await assertFails(deleteDoc(doc(publicDb, 'stationPresetItems/coffee')));
+    await assertSucceeds(deleteDoc(doc(staff, 'stationPresetItems/coffee')));
   });
 
   it('keeps user profiles owner-only and prevents role escalation', async () => {

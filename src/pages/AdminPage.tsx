@@ -12,14 +12,16 @@ import { OrdersTab } from '../components/admin/OrdersTab';
 import { CatalogTab } from '../components/admin/CatalogTab';
 import { SettingsTab } from '../components/admin/SettingsTab';
 import { FleetNeedsTab } from '../components/admin/FleetNeedsTab';
+import { StationNeedsTab } from '../components/admin/StationNeedsTab';
 import './AdminPage.css';
 
-type AdminTab = 'orders' | 'fleet' | 'catalog' | 'settings';
+type AdminTab = 'orders' | 'fleet' | 'station' | 'catalog' | 'settings';
 type OrderView = 'item' | 'vendor';
 
 const ADMIN_TAB_COLLECTIONS: Record<AdminTab, readonly InventoryCollectionName[]> = {
   orders: ['catalog', 'requests', 'vendors', 'pricing', 'units'],
   fleet: ['catalog', 'inventory', 'units'],
+  station: [],
   catalog: ['catalog', 'vendors', 'categories', 'pricing', 'inventory', 'units', 'compartments'],
   settings: ['catalog', 'vendors', 'categories', 'units', 'compartments']
 };
@@ -2238,6 +2240,9 @@ export const AdminPage = () => {
         <button className={`tab-btn ${activeTab === 'fleet' ? 'active' : ''}`} onClick={() => setActiveTab('fleet')}>
           🚑 Fleet Needs
         </button>
+        <button className={`tab-btn ${activeTab === 'station' ? 'active' : ''}`} onClick={() => setActiveTab('station')}>
+          🛒 Station Needs
+        </button>
         <button className={`tab-btn ${activeTab === 'catalog' ? 'active' : ''}`} onClick={() => setActiveTab('catalog')}>
           📋 Catalog & Pricing
         </button>
@@ -2318,6 +2323,9 @@ export const AdminPage = () => {
               onOpenLabelPrint={handleOpenLabelPrint}
             />
           )}
+
+          {/* ===================== STATION NEEDS TAB ===================== */}
+          {activeTab === 'station' && <StationNeedsTab />}
 
           {/* ===================== SETTINGS TAB ===================== */}
           {activeTab === 'settings' && (

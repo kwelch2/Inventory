@@ -285,6 +285,52 @@ service cloud.firestore {
       return isValidInventory(data) && (statusEdit || detailEdit);
     }
 
+    function validOxygenStatus(data, field) {
+      return !(field in data) || data[field] in ['OK', 'Low', 'Out'];
+    }
+
+    function isValidOxygenStock(data) {
+      return data.keys().hasOnly(['dStatus', 'sStatus', 'updatedAt']) &&
+        data.keys().hasAll(['updatedAt']) && data.updatedAt is timestamp &&
+        data.updatedAt == request.time &&
+        (data.keys().hasAny(['dStatus', 'sStatus'])) &&
+        validOxygenStatus(data, 'dStatus') && validOxygenStatus(data, 'sStatus');
+    }
+
+    function isValidStationNeed(data) {
+      return data.keys().hasOnly([
+          'item', 'quantity', 'unit', 'store', 'note', 'status', 'createdAt', 'updatedAt'
+        ]) && data.keys().hasAll(['item', 'status', 'createdAt', 'updatedAt']) &&
+        data.item is string && data.item.size() > 0 && data.item.size() <= 200 &&
+        data.item.matches('.*\\S.*') &&
+        optionalNumber(data, 'quantity', 0, 100000) &&
+        (!('quantity' in data) || (data.quantity is int && data.quantity > 0)) &&
+        optionalString(data, 'unit', 50) &&
+        (!('store' in data) || data.store in ['Costco', 'Office Depot', 'Other']) &&
+        optionalString(data, 'note', 1000) &&
+        data.status in ['Needed', 'Purchased', 'Stocked', 'Cancelled'] &&
+        data.createdAt is timestamp && data.updatedAt is timestamp;
+    }
+
+    function canTransitionStationNeed(currentStatus, nextStatus) {
+      return (currentStatus == 'Needed' && nextStatus in ['Purchased', 'Cancelled']) ||
+        (currentStatus == 'Purchased' && nextStatus in ['Stocked', 'Cancelled']);
+    }
+
+    function isValidPublicStationNeedUpdate(data) {
+      let changed = data.diff(resource.data).affectedKeys();
+      let detailsEdit = resource.data.status in ['Needed', 'Purchased'] &&
+        data.status == resource.data.status &&
+        changed.hasOnly(['item', 'quantity', 'unit', 'store', 'note', 'updatedAt']) &&
+        changed.hasAny(['item', 'quantity', 'unit', 'store', 'note']) &&
+        data.updatedAt == request.time;
+      let statusEdit = changed.hasOnly(['status', 'updatedAt']) &&
+        changed.hasAll(['status', 'updatedAt']) &&
+        canTransitionStationNeed(resource.data.status, data.status) &&
+        data.updatedAt == request.time;
+      return isValidStationNeed(data) && (detailsEdit || statusEdit);
+    }
+
     function isValidUser(data) {
       return data.keys().hasOnly(['email', 'displayName', 'photoURL', 'role', 'createdAt', 'updatedAt']) &&
         data.keys().hasAll(['email']) && data.email is string && data.email.size() <= 254 &&
@@ -339,6 +385,26 @@ service cloud.firestore {
       allow update: if isValidPublicRequestUpdate(request.resource.data) ||
         (isStaff() && isValidRequest(request.resource.data));
       allow delete: if isStaff();
+    }
+    match /oxygenStock/{docId} {
+      allow read: if true;
+      allow create: if docId == 'shared' && isValidOxygenStock(request.resource.data);
+      allow update: if docId == 'shared' && isValidOxygenStock(request.resource.data);
+      allow delete: if false;
+    }
+    match /stationPresetItems/{docId} {
+      allow read: if true;
+      allow create, update: if isStaff() && isValidNamedSetting(request.resource.data);
+      allow delete: if isStaff();
+    }
+    match /stationNeeds/{docId} {
+      allow read: if true;
+      allow create: if isValidStationNeed(request.resource.data) &&
+        request.resource.data.status == 'Needed' &&
+        request.resource.data.createdAt == request.time &&
+        request.resource.data.updatedAt == request.time;
+      allow update: if isValidPublicStationNeedUpdate(request.resource.data);
+      allow delete: if false;
     }
     match /users/{userId} {
       allow read: if isOwner(userId);

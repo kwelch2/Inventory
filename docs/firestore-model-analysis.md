@@ -21,6 +21,8 @@ accounts whose email ends in `@gemfireems.org`.
 | `vendorPricing` | Read | CRUD | catalog/vendor links, unit price, order/status strings, optional legacy fields and timestamps |
 | `inventory` | Read, create, restricted update | CRUD | item identity, unit, compartment, timestamp expiry, bounded quantity, status/note and timestamps |
 | `requests` | Read, create, restricted update | CRUD | item identity, bounded quantity/unit/note, workflow status, timestamps and optional vendor/admin metadata |
+| `oxygenStock` | Read, update shared record | Shared status update only | `oxygenStock/shared` contains optional D/S statuses (`OK`, `Low`, `Out`) and an update timestamp; no default status is seeded |
+| `stationNeeds` | Read, create, restricted update | Shared list edits only | item, optional quantity/unit/note, required store, status (`Needed`, `Purchased`, `Stocked`, `Cancelled`) and timestamps |
 | `users/{uid}` | None | Owner read/create/update only | email bound to Auth token, optional display name/photo; role cannot be escalated |
 | `orders` | None | Read only | Currently unused; writes remain denied until a concrete schema and workflow exist |
 
@@ -37,6 +39,12 @@ writes use the current schema.
   request to Received.
 - Inventory: list/read, create an expiry item, edit unit/compartment/quantity/
   crew note/expiry, and change status to Pending, OK, or Replaced.
+- Oxygen: list/read and update only the shared D/S status fields with one of
+  `OK`, `Low`, or `Out`; no deletion or other fields.
+- Station needs: list/read, create a `Needed` request, edit active request
+  details, and transition `Needed` to `Purchased` or `Cancelled`, then
+  `Purchased` to `Stocked` or `Cancelled`. Stocked and cancelled records are
+  retained as history and cannot be edited or deleted by the public page.
 - Reference data: list/read catalog, units, compartments, categories, vendors,
   and vendor pricing.
 
