@@ -63,45 +63,56 @@ service cloud.firestore {
     }
 
     function stringList(values, maxSize, maxItemLength) {
-      return values is list && values.size() <= maxSize &&
-        (values.size() < 1 || (values[0] is string && values[0].size() <= maxItemLength)) &&
-        (values.size() < 2 || (values[1] is string && values[1].size() <= maxItemLength)) &&
-        (values.size() < 3 || (values[2] is string && values[2].size() <= maxItemLength)) &&
-        (values.size() < 4 || (values[3] is string && values[3].size() <= maxItemLength)) &&
-        (values.size() < 5 || (values[4] is string && values[4].size() <= maxItemLength)) &&
-        (values.size() < 6 || (values[5] is string && values[5].size() <= maxItemLength)) &&
-        (values.size() < 7 || (values[6] is string && values[6].size() <= maxItemLength)) &&
-        (values.size() < 8 || (values[7] is string && values[7].size() <= maxItemLength)) &&
-        (values.size() < 9 || (values[8] is string && values[8].size() <= maxItemLength)) &&
-        (values.size() < 10 || (values[9] is string && values[9].size() <= maxItemLength));
+      let list = values;
+      let count = list.size();
+      return list is list && count <= maxSize &&
+        (count == 0 || (
+          (count < 1 || (list[0] is string && list[0].size() <= maxItemLength)) &&
+          (count < 2 || (list[1] is string && list[1].size() <= maxItemLength)) &&
+          (count < 3 || (list[2] is string && list[2].size() <= maxItemLength)) &&
+          (count <= 3 || ((list[3] is string && list[3].size() <= maxItemLength) &&
+          (count < 5 || (list[4] is string && list[4].size() <= maxItemLength)) &&
+          (count < 6 || (list[5] is string && list[5].size() <= maxItemLength)) &&
+          (count < 7 || (list[6] is string && list[6].size() <= maxItemLength)) &&
+          (count < 8 || (list[7] is string && list[7].size() <= maxItemLength)) &&
+          (count < 9 || (list[8] is string && list[8].size() <= maxItemLength)) &&
+          (count < 10 || (list[9] is string && list[9].size() <= maxItemLength))))));
     }
 
     function optionalStringList(data, field, maxSize, maxItemLength) {
       return !(field in data) || stringList(data[field], maxSize, maxItemLength);
     }
 
-    function validItemReference(ref) {
+    function validItemReference(value) {
+      let ref = value;
+      let vendorId = ref.get('vendorId', '');
+      let vendorName = ref.get('vendorName', '');
+      let description = ref.get('description', '');
       return ref is map && ref.keys().hasOnly([
           'ref', 'vendorId', 'vendorName', 'description', 'isCurrent', 'addedAt'
         ]) && ref.keys().hasAll(['ref', 'isCurrent']) &&
         ref.ref is string && ref.ref.size() > 0 && ref.ref.size() <= 100 &&
-        ref.isCurrent is bool && optionalString(ref, 'vendorId', 100) &&
-        optionalString(ref, 'vendorName', 200) && optionalString(ref, 'description', 500) &&
+        ref.isCurrent is bool && vendorId is string && vendorId.size() <= 100 &&
+        vendorName is string && vendorName.size() <= 200 &&
+        description is string && description.size() <= 500 &&
         optionalLegacyDate(ref, 'addedAt');
     }
 
     function itemReferenceList(values) {
-      return values is list && values.size() <= 10 &&
-        (values.size() < 1 || validItemReference(values[0])) &&
-        (values.size() < 2 || validItemReference(values[1])) &&
-        (values.size() < 3 || validItemReference(values[2])) &&
-        (values.size() < 4 || validItemReference(values[3])) &&
-        (values.size() < 5 || validItemReference(values[4])) &&
-        (values.size() < 6 || validItemReference(values[5])) &&
-        (values.size() < 7 || validItemReference(values[6])) &&
-        (values.size() < 8 || validItemReference(values[7])) &&
-        (values.size() < 9 || validItemReference(values[8])) &&
-        (values.size() < 10 || validItemReference(values[9]));
+      let refs = values;
+      let count = refs.size();
+      return refs is list && count <= 10 &&
+        (count == 0 || (
+          (count < 1 || validItemReference(refs[0])) &&
+          (count < 2 || validItemReference(refs[1])) &&
+          (count <= 2 || (validItemReference(refs[2]) &&
+          (count < 4 || validItemReference(refs[3])) &&
+          (count < 5 || validItemReference(refs[4])) &&
+          (count < 6 || validItemReference(refs[5])) &&
+          (count < 7 || validItemReference(refs[6])) &&
+          (count < 8 || validItemReference(refs[7])) &&
+          (count < 9 || validItemReference(refs[8])) &&
+          (count < 10 || validItemReference(refs[9]))))));
     }
 
     function isValidCatalog(data) {

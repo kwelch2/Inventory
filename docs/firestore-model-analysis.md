@@ -33,6 +33,10 @@ representations so existing documents remain editable while new anonymous
 writes use the current schema.
 Some legacy catalog records store `itemNameAlt` as a string rather than a list;
 both representations are accepted with the same per-name length limit.
+Catalog list validation short-circuits for short lists to stay within the
+Firestore rules evaluation budget for existing records. Exceptionally large
+combinations of reference lists and optional fields can still exceed that
+budget and be rejected even when each individual field is within its limit.
 
 ## Anonymous operations that must continue to work
 

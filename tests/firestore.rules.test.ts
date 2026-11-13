@@ -307,6 +307,40 @@ describe('admin and private access', () => {
     }));
   });
 
+  it('allows editing a fully populated legacy catalog record without exhausting rule evaluation', async () => {
+    const ref = doc(verifiedStaff(), 'catalog/full');
+    await seed('catalog/full', {
+      catalogId: 'legacy-id', itemName: 'Legacy item', itemRef: 'REF',
+      itemRefArray: ['REF', 'REF-2'], itemNameAlt: '', barcode: [], category: 'category',
+      unit: 'Each', uoi: 'Each', packSize: 1, parLevel: 2, minPar: 0,
+      notes: '', isActive: true, preferredVendorId: 'vendor', updatedAt: new Date()
+    });
+
+    await assertSucceeds(updateDoc(ref, {
+      itemName: 'Updated item', category: 'category', unit: 'Each',
+      packSize: 1, parLevel: 2, isActive: true, altNames: ['alias', 'alias 2'],
+      itemReferences: [
+        { ref: 'REF', isCurrent: true, addedAt: new Date() },
+        { ref: 'REF-2', isCurrent: false, vendorName: 'Vendor', addedAt: new Date() }
+      ],
+      updatedAt: serverTimestamp()
+    }));
+  });
+
+  it('validates catalog aliases and references, including the last entry', async () => {
+    const ref = doc(verifiedStaff(), 'catalog/maximum-lists');
+    const names = Array(10).fill('alias');
+    const references = Array.from({ length: 2 }, (_, index) => ({
+      ref: `REF-${index}`, isCurrent: index === 0
+    }));
+    await assertSucceeds(setDoc(ref, { itemName: 'Maximum lists', itemReferences: references }));
+    await assertSucceeds(updateDoc(ref, { itemReferences: [], barcodes: names }));
+    await assertFails(updateDoc(ref, { barcodes: [...names.slice(0, 9), 123] }));
+    await assertFails(updateDoc(ref, {
+      itemReferences: [...references.slice(0, 1), { ref: 'REF', isCurrent: 'yes' }]
+    }));
+  });
+
   it('allows a verified domain account to manage admin collections and requests', async () => {
     const db = verifiedStaff();
     await assertSucceeds(setDoc(doc(db, 'catalog/new'), {
