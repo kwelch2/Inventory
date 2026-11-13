@@ -15,9 +15,11 @@ import {
   getDocs,
   serverTimestamp,
   setDoc,
+  Timestamp,
   updateDoc
 } from 'firebase/firestore';
-import { afterAll, afterEach, beforeAll, describe, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { removeUndefinedFields } from '../src/utils/helpers';
 
 const PROJECT_ID = 'demo-inventory';
 let testEnvironment: RulesTestEnvironment;
@@ -248,6 +250,62 @@ describe('admin and private access', () => {
   const verifiedStaff = () => testEnvironment.authenticatedContext('staff-1', {
     email: 'staff@gemfireems.org', email_verified: true
   }).firestore();
+
+  it('allows the catalog and pricing form payloads for verified staff', async () => {
+    const db = verifiedStaff();
+    const catalogRef = doc(db, 'catalog/form-item');
+    const pricingRef = doc(db, 'vendorPricing/form-price');
+    const catalogData = removeUndefinedFields({
+      itemName: 'Trauma Dressing',
+      category: '',
+      unit: 'Each',
+      packSize: 1,
+      parLevel: 3,
+      isActive: true,
+      altNames: ['Dressing'],
+      itemReferences: [{ ref: 'TD-1', isCurrent: true, addedAt: new Date() }],
+      updatedAt: serverTimestamp()
+    });
+    const pricingData = {
+      catalogId: 'form-item',
+      vendorId: 'vendor-1',
+      unitPrice: 3.5,
+      vendorOrderNumber: 'TD-1',
+      vendorStatus: 'In Stock',
+      updatedAt: serverTimestamp()
+    };
+
+    await assertSucceeds(setDoc(catalogRef, { ...catalogData, createdAt: serverTimestamp() }));
+    await assertSucceeds(updateDoc(catalogRef, { ...catalogData, itemName: 'Updated Dressing' }));
+    const savedCatalog = await getDoc(catalogRef);
+    expect(savedCatalog.data()?.updatedAt).toBeInstanceOf(Timestamp);
+    expect(savedCatalog.data()?.itemReferences[0].addedAt).toBeInstanceOf(Timestamp);
+    await assertSucceeds(setDoc(pricingRef, { ...pricingData, createdAt: serverTimestamp() }));
+    await assertSucceeds(updateDoc(pricingRef, { ...pricingData, unitPrice: 4 }));
+
+    const publicDb = testEnvironment.unauthenticatedContext().firestore();
+    await assertFails(setDoc(doc(publicDb, 'catalog/forbidden'), { ...catalogData, createdAt: serverTimestamp() }));
+    await assertFails(setDoc(doc(publicDb, 'vendorPricing/forbidden'), { ...pricingData, createdAt: serverTimestamp() }));
+    await assertFails(updateDoc(doc(publicDb, 'catalog/form-item'), { itemName: 'Forbidden' }));
+    await assertFails(updateDoc(doc(publicDb, 'vendorPricing/form-price'), { unitPrice: 2 }));
+  });
+
+  it('allows bounded legacy catalog aliases when editing existing items', async () => {
+    await seed('catalog/legacy-alias', { itemName: 'Legacy item', itemNameAlt: '' });
+    const ref = doc(verifiedStaff(), 'catalog/legacy-alias');
+
+    await assertSucceeds(updateDoc(ref, { itemName: 'Updated item', updatedAt: serverTimestamp() }));
+    await assertSucceeds(updateDoc(ref, { itemNameAlt: 'Alternative' }));
+    await assertSucceeds(updateDoc(ref, { itemNameAlt: 'x'.repeat(200) }));
+    await assertSucceeds(updateDoc(ref, { itemNameAlt: ['Alternative'] }));
+    await assertSucceeds(updateDoc(ref, { itemNameAlt: Array(10).fill('Alternative') }));
+    await assertFails(updateDoc(ref, { itemNameAlt: 'x'.repeat(201) }));
+    await assertFails(updateDoc(ref, { itemNameAlt: Array(11).fill('Alternative') }));
+    await assertFails(updateDoc(ref, { itemNameAlt: 123 }));
+    await assertFails(updateDoc(doc(testEnvironment.unauthenticatedContext().firestore(), 'catalog/legacy-alias'), {
+      itemName: 'Unauthorized'
+    }));
+  });
 
   it('allows a verified domain account to manage admin collections and requests', async () => {
     const db = verifiedStaff();

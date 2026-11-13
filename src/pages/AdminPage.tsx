@@ -1835,7 +1835,9 @@ export const AdminPage = () => {
       setEditingCatalogItem(null);
     } catch (error) {
       console.error('Error saving catalog item:', error);
-      alert('Failed to save item');
+      alert(error instanceof Error && 'code' in error && error.code === 'permission-denied'
+        ? 'Unable to save the item. Firestore rejected the write. Check that you are signed in with a verified @gemfireems.org account and that the item meets the configured data rules.'
+        : 'Failed to save item');
     }
   };
 
@@ -1931,7 +1933,9 @@ export const AdminPage = () => {
       setEditingPrice(null);
     } catch (error) {
       console.error('Error saving pricing:', error);
-      alert('Failed to save pricing');
+      alert(error instanceof Error && 'code' in error && error.code === 'permission-denied'
+        ? 'Unable to save pricing. Firestore rejected the write. Check that you are signed in with a verified @gemfireems.org account and that the pricing record meets the configured data rules.'
+        : 'Failed to save pricing');
     }
   };
 

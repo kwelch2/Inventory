@@ -22,7 +22,8 @@ export function removeUndefinedFields<T>(value: T): T {
       .filter((entry) => entry !== undefined) as T;
   }
 
-  if (value && typeof value === 'object' && !(value instanceof Date)) {
+  if (value && typeof value === 'object' &&
+      (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null)) {
     return Object.fromEntries(
       Object.entries(value as Record<string, unknown>)
         .filter(([, entry]) => entry !== undefined)

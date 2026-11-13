@@ -115,7 +115,8 @@ service cloud.firestore {
         optionalString(data, 'catalogId', 100) && optionalString(data, 'itemRef', 100) &&
         optionalStringList(data, 'itemRefArray', 10, 100) &&
         (!('itemReferences' in data) || itemReferenceList(data.itemReferences)) &&
-        optionalStringList(data, 'itemNameAlt', 10, 200) && optionalStringList(data, 'altNames', 10, 200) &&
+        (optionalString(data, 'itemNameAlt', 200) || optionalStringList(data, 'itemNameAlt', 10, 200)) &&
+        optionalStringList(data, 'altNames', 10, 200) &&
         optionalStringList(data, 'barcode', 10, 100) && optionalStringList(data, 'barcodes', 10, 100) &&
         optionalString(data, 'preferredVendorId', 100) && optionalString(data, 'category', 100) &&
         optionalString(data, 'unit', 50) && optionalString(data, 'uoi', 50) &&

@@ -123,6 +123,12 @@ and inventory writes are limited to the fields, types, sizes, and state transiti
 anonymous deletion and admin-managed reference-data writes are denied. Admin writes require a verified
 `@gemfireems.org` Firebase Authentication account.
 
+If catalog or vendor-pricing saves fail with `permission-denied`, confirm the signed-in account is
+verified and that the deployed rules match this repository. The rules validate the entire resulting
+document on updates, including retained legacy fields, so an existing record with an unsupported
+field or value can also be rejected. Check the affected record against the rules before changing data
+or permissions; a generic permission error does not identify which rule failed.
+
 Validate locally before deployment:
 
 ```bash

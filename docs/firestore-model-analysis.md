@@ -31,6 +31,8 @@ vendor, 6 category, 288 pricing, 676 inventory, 9 unit, and 8 compartment
 documents. Validators retain observed legacy aliases and legacy number/date
 representations so existing documents remain editable while new anonymous
 writes use the current schema.
+Some legacy catalog records store `itemNameAlt` as a string rather than a list;
+both representations are accepted with the same per-name length limit.
 
 ## Anonymous operations that must continue to work
 
